@@ -1,0 +1,558 @@
+.container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  padding: 20px 32px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.logo {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  gap: 0;
+}
+
+/* 사이드바 */
+.sidebar {
+  width: 360px;
+  min-width: 360px;
+  border-right: 1px solid var(--border);
+  padding: 24px;
+  overflow-y: auto;
+  max-height: calc(100vh - 72px);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* 프리셋 그리드 */
+.presetGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.presetCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  transition: all 0.15s;
+}
+
+.presetCard:hover {
+  background: var(--surface-hover);
+}
+
+.presetSelected {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+}
+
+/* 프리셋 썸네일: 1장일 때 */
+.presetThumbSingle {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.presetThumbSingle img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 프리셋 썸네일: 2~4장 그리드 */
+.presetThumbGrid {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--border);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 1px;
+}
+
+.presetThumbGrid img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.addIcon {
+  font-size: 28px;
+  color: var(--text-dim);
+  line-height: 1;
+}
+
+.presetName {
+  font-size: 11px;
+  color: var(--text);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* 모드 버튼 */
+.modeButtons {
+  display: flex;
+  gap: 8px;
+}
+
+.modeBtn {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 14px;
+  transition: all 0.15s;
+}
+
+.modeBtn:hover {
+  background: var(--surface-hover);
+}
+
+.modeBtnActive {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+/* 셀렉트 */
+.select {
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+
+.select:focus {
+  border-color: var(--accent);
+}
+
+/* 파일 입력 */
+.fileInput {
+  display: none;
+}
+
+.uploadBtn {
+  padding: 10px;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 14px;
+  transition: all 0.15s;
+}
+
+.uploadBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.uploadPreview {
+  position: relative;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.uploadPreview img {
+  width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+  background: var(--surface);
+  border-radius: var(--radius);
+}
+
+.removeBtn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 10px;
+  background: var(--danger);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 12px;
+}
+
+/* 텍스트영역 */
+.textarea {
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 14px;
+  resize: vertical;
+  outline: none;
+  line-height: 1.5;
+}
+
+.textarea:focus {
+  border-color: var(--accent);
+}
+
+/* 생성 버튼 */
+.generateBtn {
+  padding: 14px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.generateBtn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.generateBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 13px;
+  padding: 8px;
+  background: rgba(231, 76, 60, 0.1);
+  border-radius: 8px;
+}
+
+.emptyText {
+  color: var(--text-dim);
+  font-size: 14px;
+  text-align: center;
+  padding: 24px;
+}
+
+/* 우측 컨텐츠 */
+.content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  max-height: calc(100vh - 72px);
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* 결과 그리드 */
+.resultGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.resultCard {
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.resultCard img {
+  width: 100%;
+  display: block;
+}
+
+/* 히스토리 */
+.historyList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.historyItem {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.historyMeta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.historyMode {
+  padding: 2px 8px;
+  background: var(--accent);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  text-transform: uppercase;
+}
+
+.historyPreset {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.historyDate {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-left: auto;
+}
+
+.historyPrompt {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.historyImages {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.historyThumb {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+/* ===== 모달 ===== */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  width: 440px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.modalTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.modalField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modalLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.modalInput {
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+
+.modalInput:focus {
+  border-color: var(--accent);
+}
+
+/* 업로드 그리드 (모달 안) */
+.uploadGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.uploadGridItem {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.uploadGridItem img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.uploadGridRemove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--danger);
+  border: none;
+  color: white;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.uploadGridAdd {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  border: 2px dashed var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 24px;
+  transition: all 0.15s;
+}
+
+.uploadGridAdd:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.uploadGridAddText {
+  font-size: 11px;
+}
+
+/* 모달 버튼 */
+.modalActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.modalCancel {
+  padding: 10px 20px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+.modalCancel:hover {
+  background: var(--surface-hover);
+}
+
+.modalConfirm {
+  padding: 10px 24px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.modalConfirm:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.modalConfirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+  .main {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    min-width: 100%;
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .content {
+    max-height: none;
+  }
+
+  .presetGrid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .resultGrid {
+    grid-template-columns: 1fr;
+  }
+}

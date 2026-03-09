@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model CharacterPreset {
+  id        String   @id @default(cuid())
+  alias     String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  images             PresetImage[]
+  generationRequests GenerationRequest[]
+}
+
+model PresetImage {
+  id        String  @id @default(cuid())
+  presetId  String
+  filePath  String?
+  imageData String? // base64 (업로드된 이미지)
+  mimeType  String  @default("image/png")
+  order     Int     @default(0)
+
+  preset CharacterPreset @relation(fields: [presetId], references: [id], onDelete: Cascade)
+}
+
+model GenerationRequest {
+  id        String   @id @default(cuid())
+  presetId  String
+  mode      String   // "text" | "sketch" | "edit"
+  prompt    String
+  background String?
+  createdAt DateTime @default(now())
+
+  preset          CharacterPreset  @relation(fields: [presetId], references: [id])
+  generatedImages GeneratedImage[]
+}
+
+model GeneratedImage {
+  id        String   @id @default(cuid())
+  requestId String
+  imageData String   // base64 encoded image
+  mimeType  String   @default("image/png")
+  createdAt DateTime @default(now())
+
+  request GenerationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+}
