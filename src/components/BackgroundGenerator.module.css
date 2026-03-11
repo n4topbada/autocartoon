@@ -1,0 +1,193 @@
+.container {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+  max-height: calc(100vh - 72px);
+}
+
+.inner {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.topBar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.addBtn {
+  padding: 8px 16px;
+  background: #4f46e5;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.addBtn:hover {
+  background: #4338ca;
+}
+
+.clearBtn {
+  padding: 8px 16px;
+  background: #4b5563;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.clearBtn:hover {
+  background: #dc2626;
+}
+
+.cardList {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--text-dim);
+}
+
+.emptyIcon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.emptyTitle {
+  font-size: 20px;
+  font-weight: 600;
+  color: #d1d5db;
+  margin-bottom: 8px;
+}
+
+.emptyDesc {
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+/* 배경 저장 모달 */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 16px;
+  padding: 28px;
+  width: 440px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.modalTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: #f3f4f6;
+  text-align: center;
+}
+
+.modalPreview {
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #111827;
+}
+
+.modalPreview img {
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+}
+
+.modalField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modalLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: #9ca3af;
+}
+
+.modalInput {
+  padding: 10px 14px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 8px;
+  color: #f3f4f6;
+  font-size: 14px;
+  outline: none;
+}
+
+.modalInput:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+}
+
+.modalActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.modalCancel {
+  padding: 10px 20px;
+  background: transparent;
+  border: 1px solid #4b5563;
+  border-radius: 8px;
+  color: #9ca3af;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.modalCancel:hover {
+  background: #374151;
+}
+
+.modalConfirm {
+  padding: 10px 24px;
+  background: #059669;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.modalConfirm:hover:not(:disabled) {
+  background: #047857;
+}
+
+.modalConfirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

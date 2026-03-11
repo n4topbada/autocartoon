@@ -29,15 +29,27 @@ model PresetImage {
   preset CharacterPreset @relation(fields: [presetId], references: [id], onDelete: Cascade)
 }
 
-model GenerationRequest {
+model SavedBackground {
   id        String   @id @default(cuid())
-  presetId  String
-  mode      String   // "text" | "sketch" | "edit"
-  prompt    String
-  background String?
+  name      String
+  imageData String   // base64 encoded image
+  mimeType  String   @default("image/png")
   createdAt DateTime @default(now())
 
+  generationRequests GenerationRequest[]
+}
+
+model GenerationRequest {
+  id                String   @id @default(cuid())
+  presetId          String
+  mode              String   // "text" | "sketch" | "edit"
+  prompt            String
+  background        String?  // 텍스트 배경 이름
+  backgroundImageId String?  // 저장된 배경 이미지 FK
+  createdAt         DateTime @default(now())
+
   preset          CharacterPreset  @relation(fields: [presetId], references: [id])
+  backgroundImage SavedBackground? @relation(fields: [backgroundImageId], references: [id])
   generatedImages GeneratedImage[]
 }
 

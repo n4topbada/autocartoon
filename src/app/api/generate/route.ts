@@ -4,11 +4,12 @@ import { generate, type GenerationMode } from "@/lib/generation-service";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { presetId, mode, prompt, background, inputImage } = body as {
+    const { presetId, mode, prompt, background, backgroundImageId, inputImage } = body as {
       presetId: string;
       mode: GenerationMode;
       prompt: string;
       background?: string;
+      backgroundImageId?: string;
       inputImage?: { base64: string; mimeType: string };
     };
 
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest) {
       mode,
       prompt,
       background,
+      backgroundImageId,
       inputImage,
     });
 

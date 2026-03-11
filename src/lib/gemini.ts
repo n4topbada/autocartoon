@@ -52,6 +52,72 @@ async function callGemini(
   return result;
 }
 
+// --- Background generation (non-streaming) ---
+
+export interface GeminiBackgroundRequest {
+  prompt: string;
+  inputImage: { base64: string; mimeType: string };
+}
+
+async function callGeminiSync(
+  genai: GoogleGenAI,
+  contents: Content[],
+  config: Record<string, unknown>
+): Promise<GeminiResult> {
+  const response = await genai.models.generateContent({
+    model: "gemini-3.1-flash-image-preview",
+    contents,
+    config,
+  });
+
+  const result: GeminiResult = { images: [] };
+  const parts = response.candidates?.[0]?.content?.parts || [];
+  for (const part of parts) {
+    if (part.text) {
+      result.text = (result.text || "") + part.text;
+    }
+    if (part.inlineData) {
+      result.images.push({
+        base64: part.inlineData.data!,
+        mimeType: part.inlineData.mimeType!,
+      });
+    }
+  }
+
+  return result;
+}
+
+export async function generateContentForBackground(
+  req: GeminiBackgroundRequest
+): Promise<GeminiResult> {
+  const parts: Part[] = [
+    { text: req.prompt },
+    {
+      inlineData: {
+        data: req.inputImage.base64,
+        mimeType: req.inputImage.mimeType,
+      },
+    },
+  ];
+  const contents: Content[] = [{ role: "user", parts }];
+  const config: Record<string, unknown> = {
+    responseModalities: ["IMAGE", "TEXT"],
+  };
+
+  try {
+    return await callGeminiSync(genaiPrimary, contents, config);
+  } catch (err) {
+    console.warn(
+      "[Gemini] Background - Primary key failed, trying fallback...",
+      (err as Error).message
+    );
+    if (!genaieFallback) throw err;
+    return await callGeminiSync(genaieFallback, contents, config);
+  }
+}
+
+// --- Character generation (streaming) ---
+
 export async function generateContent(
   req: GeminiRequest
 ): Promise<GeminiResult> {

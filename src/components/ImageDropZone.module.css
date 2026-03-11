@@ -1,0 +1,72 @@
+.dropZone {
+  position: relative;
+  min-height: 200px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: #111827;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  overflow: hidden;
+}
+
+.dropZone:hover {
+  border-color: var(--accent);
+}
+
+.dropZone:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(108, 92, 231, 0.3);
+}
+
+.dragOver {
+  border-color: var(--accent);
+  background: rgba(108, 92, 231, 0.08);
+}
+
+.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.placeholder {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 16px;
+}
+
+.placeholderIcon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 8px;
+  color: #6b7280;
+}
+
+.placeholderText {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.preview {
+  max-height: 256px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.label {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: white;
+}
+
+.fileInput {
+  display: none;
+}

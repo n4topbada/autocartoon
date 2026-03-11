@@ -6,6 +6,9 @@ import {
   buildTextPrompt,
   buildSketchPrompt,
   buildEditPrompt,
+  buildTextWithBgImagePrompt,
+  buildSketchWithBgImagePrompt,
+  buildEditWithBgImagePrompt,
 } from "./prompts";
 
 export type GenerationMode = "text" | "sketch" | "edit";
@@ -15,6 +18,7 @@ export interface GenerateInput {
   mode: GenerationMode;
   prompt: string;
   background?: string;
+  backgroundImageId?: string;
   /** base64 이미지 (sketch/edit 모드) */
   inputImage?: { base64: string; mimeType: string };
 }
@@ -57,12 +61,27 @@ export async function generate(input: GenerateInput) {
   // 2. 참조 이미지 로드
   const referenceImages = loadPresetImages(preset.images);
 
-  // sketch/edit 모드: 사용자 입력 이미지 추가
+  // 3. 배경 이미지 로드 (이미지 모드)
+  let bgImageName: string | undefined;
+  if (input.backgroundImageId) {
+    const bgRecord = await prisma.savedBackground.findUnique({
+      where: { id: input.backgroundImageId },
+    });
+    if (bgRecord) {
+      referenceImages.push({
+        base64: bgRecord.imageData,
+        mimeType: bgRecord.mimeType,
+      });
+      bgImageName = bgRecord.name;
+    }
+  }
+
+  // sketch/edit 모드: 사용자 입력 이미지 추가 (배경 뒤에)
   if (input.inputImage && (input.mode === "sketch" || input.mode === "edit")) {
     referenceImages.push(input.inputImage);
   }
 
-  // 3. 프롬프트 구성
+  // 4. 프롬프트 구성
   const ctx = {
     characterName: preset.name,
     background: input.background,
@@ -70,15 +89,17 @@ export async function generate(input: GenerateInput) {
   };
 
   let prompt: string;
+  const useBgImage = !!bgImageName;
+
   switch (input.mode) {
     case "text":
-      prompt = buildTextPrompt(ctx);
+      prompt = useBgImage ? buildTextWithBgImagePrompt(ctx) : buildTextPrompt(ctx);
       break;
     case "sketch":
-      prompt = buildSketchPrompt(ctx);
+      prompt = useBgImage ? buildSketchWithBgImagePrompt(ctx) : buildSketchPrompt(ctx);
       break;
     case "edit":
-      prompt = buildEditPrompt(ctx);
+      prompt = useBgImage ? buildEditWithBgImagePrompt(ctx) : buildEditPrompt(ctx);
       break;
   }
 
@@ -89,13 +110,14 @@ export async function generate(input: GenerateInput) {
     modalities: ["IMAGE", "TEXT"],
   });
 
-  // 5. 결과 저장
+  // 6. 결과 저장
   const genRequest = await prisma.generationRequest.create({
     data: {
       presetId: input.presetId,
       mode: input.mode,
       prompt: input.prompt,
       background: input.background,
+      backgroundImageId: input.backgroundImageId,
     },
   });
 

@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import styles from "./page.module.css";
+import BackgroundGenerator from "@/components/BackgroundGenerator";
+
+type Tab = "character" | "background";
 
 interface PresetImageData {
   id: string;
@@ -26,9 +29,16 @@ interface HistoryItem {
   mode: string;
   prompt: string;
   background: string | null;
+  backgroundImageName: string | null;
   presetName: string;
   createdAt: string;
   images: GeneratedImageData[];
+}
+
+interface SavedBg {
+  id: string;
+  name: string;
+  dataUrl: string;
 }
 
 const BACKGROUNDS = [
@@ -53,6 +63,7 @@ interface UploadingImage {
 }
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<Tab>("character");
   const [presets, setPresets] = useState<Preset[]>([]);
   const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null);
   const [mode, setMode] = useState<Mode>("text");
@@ -76,6 +87,10 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const charFileRef = useRef<HTMLInputElement>(null);
 
+  // 저장된 배경 이미지
+  const [savedBackgrounds, setSavedBackgrounds] = useState<SavedBg[]>([]);
+  const [selectedBgImageId, setSelectedBgImageId] = useState<string | null>(null);
+
   // 프리셋 목록 로드
   const loadPresets = useCallback(() => {
     fetch("/api/presets")
@@ -84,9 +99,24 @@ export default function Home() {
       .catch(() => setPresets([]));
   }, []);
 
+  // 저장된 배경 로드
+  const loadSavedBackgrounds = useCallback(() => {
+    fetch("/api/backgrounds")
+      .then((r) => r.json())
+      .then((data: SavedBg[]) => setSavedBackgrounds(data))
+      .catch(() => setSavedBackgrounds([]));
+  }, []);
+
   useEffect(() => {
     loadPresets();
   }, [loadPresets]);
+
+  // 탭 전환 시 배경 목록 리로드
+  useEffect(() => {
+    if (activeTab === "character") {
+      loadSavedBackgrounds();
+    }
+  }, [activeTab, loadSavedBackgrounds]);
 
   // 히스토리 로드
   const loadHistory = useCallback(() => {
@@ -180,6 +210,28 @@ export default function Home() {
     }
   };
 
+  // 배경 드롭다운 변경 → 이미지 선택 해제
+  const handleBgDropdown = (value: string) => {
+    setBackground(value);
+    if (value !== "없음") setSelectedBgImageId(null);
+  };
+
+  // 배경 이미지 선택 → 드롭다운 초기화
+  const handleBgImageSelect = (id: string) => {
+    if (selectedBgImageId === id) {
+      setSelectedBgImageId(null);
+    } else {
+      setSelectedBgImageId(id);
+      setBackground("없음");
+    }
+  };
+
+  const handleDeleteBg = async (id: string) => {
+    await fetch(`/api/backgrounds/${id}`, { method: "DELETE" });
+    if (selectedBgImageId === id) setSelectedBgImageId(null);
+    loadSavedBackgrounds();
+  };
+
   // 생성 요청
   const handleGenerate = async () => {
     if (!selectedPreset || !prompt.trim()) return;
@@ -193,7 +245,11 @@ export default function Home() {
         mode,
         prompt: prompt.trim(),
       };
-      if (background !== "없음") body.background = background;
+      if (selectedBgImageId) {
+        body.backgroundImageId = selectedBgImageId;
+      } else if (background !== "없음") {
+        body.background = background;
+      }
       if (inputImage && mode !== "text") {
         body.inputImage = {
           base64: inputImage.base64,
@@ -224,10 +280,27 @@ export default function Home() {
       {/* 헤더 */}
       <header className={styles.header}>
         <h1 className={styles.logo}>AutoCartoon</h1>
-        <p className={styles.subtitle}>웹툰 캐릭터 이미지 생성</p>
+        <nav className={styles.tabNav}>
+          <button
+            className={`${styles.tab} ${activeTab === "character" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("character")}
+          >
+            캐릭터 생성
+          </button>
+          <button
+            className={`${styles.tab} ${activeTab === "background" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("background")}
+          >
+            배경 생성
+          </button>
+        </nav>
       </header>
 
       <main className={styles.main}>
+        {activeTab === "background" ? (
+          <BackgroundGenerator />
+        ) : (
+        <>
         {/* 좌측 패널 */}
         <aside className={styles.sidebar}>
           {/* 캐릭터 선택 */}
@@ -298,7 +371,7 @@ export default function Home() {
             <select
               className={styles.select}
               value={background}
-              onChange={(e) => setBackground(e.target.value)}
+              onChange={(e) => handleBgDropdown(e.target.value)}
             >
               {BACKGROUNDS.map((bg) => (
                 <option key={bg} value={bg}>
@@ -306,6 +379,33 @@ export default function Home() {
                 </option>
               ))}
             </select>
+
+            {/* 저장된 배경 이미지 */}
+            {savedBackgrounds.length > 0 && (
+              <>
+                <span className={styles.bgSectionLabel}>저장된 배경</span>
+                <div className={styles.bgThumbnailStrip}>
+                  {savedBackgrounds.map((bg) => (
+                    <button
+                      key={bg.id}
+                      className={`${styles.bgThumb} ${selectedBgImageId === bg.id ? styles.bgThumbSelected : ""}`}
+                      onClick={() => handleBgImageSelect(bg.id)}
+                      title={bg.name}
+                    >
+                      <img src={bg.dataUrl} alt={bg.name} />
+                      <span className={styles.bgThumbName}>{bg.name}</span>
+                      <button
+                        className={styles.bgThumbDelete}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteBg(bg.id); }}
+                        title="삭제"
+                      >
+                        ×
+                      </button>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </section>
 
           {/* 이미지 업로드 (sketch/edit) */}
@@ -406,6 +506,12 @@ export default function Home() {
                         {new Date(item.createdAt).toLocaleString("ko-KR")}
                       </span>
                     </div>
+                    {item.backgroundImageName && (
+                      <span className={styles.historyBg}>[이미지] {item.backgroundImageName}</span>
+                    )}
+                    {item.background && !item.backgroundImageName && (
+                      <span className={styles.historyBg}>{item.background}</span>
+                    )}
                     <p className={styles.historyPrompt}>{item.prompt}</p>
                     <div className={styles.historyImages}>
                       {item.images.map((img) => (
@@ -423,6 +529,8 @@ export default function Home() {
             )}
           </section>
         </div>
+        </>
+        )}
       </main>
 
       {/* 캐릭터 업로드 모달 */}

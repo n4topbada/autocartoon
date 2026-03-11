@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     where,
     include: {
       preset: { select: { name: true, alias: true } },
+      backgroundImage: { select: { name: true } },
       generatedImages: {
         select: { id: true, mimeType: true, imageData: true },
       },
@@ -25,6 +26,7 @@ export async function GET(req: NextRequest) {
     mode: r.mode,
     prompt: r.prompt,
     background: r.background,
+    backgroundImageName: r.backgroundImage?.name || null,
     presetName: r.preset.name,
     createdAt: r.createdAt.toISOString(),
     images: r.generatedImages.map((img) => ({

@@ -23,6 +23,35 @@
   color: var(--text-dim);
 }
 
+.tabNav {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.tab {
+  padding: 8px 20px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tab:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.tabActive {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
 .main {
   flex: 1;
   display: flex;
@@ -177,6 +206,94 @@
 
 .select:focus {
   border-color: var(--accent);
+}
+
+/* 저장된 배경 썸네일 */
+.bgSectionLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.bgThumbnailStrip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.bgThumb {
+  position: relative;
+  flex-shrink: 0;
+  width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.bgThumb:hover {
+  border-color: var(--text-dim);
+}
+
+.bgThumbSelected {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+}
+
+.bgThumb img {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.bgThumbName {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 64px;
+}
+
+.bgThumbDelete {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--danger);
+  border: none;
+  color: white;
+  font-size: 12px;
+  line-height: 1;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.bgThumb:hover .bgThumbDelete {
+  display: flex;
+}
+
+/* 히스토리 배경 태그 */
+.historyBg {
+  font-size: 12px;
+  color: #34d399;
+  padding: 1px 6px;
+  background: rgba(52, 211, 153, 0.1);
+  border-radius: 4px;
 }
 
 /* 파일 입력 */

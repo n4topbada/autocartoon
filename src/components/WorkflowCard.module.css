@@ -1,0 +1,355 @@
+.card {
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: var(--radius);
+  padding: 24px;
+  animation: zoomIn 0.3s ease-out;
+}
+
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.cardTitle {
+  font-size: 18px;
+  font-weight: 600;
+  color: #d1d5db;
+}
+
+.deleteBtn {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px;
+  transition: color 0.15s;
+}
+
+.deleteBtn:hover {
+  color: var(--danger);
+}
+
+/* 3-column step layout */
+.stepsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+@media (max-width: 1024px) {
+  .stepsGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+}
+
+.stepTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: #d1d5db;
+  margin-bottom: 12px;
+}
+
+.stepContent {
+  flex: 1;
+}
+
+.stepControls {
+  margin-top: 16px;
+}
+
+/* Prompt inputs */
+.promptInput {
+  width: 100%;
+  padding: 8px 12px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.promptInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(108, 92, 231, 0.3);
+}
+
+/* Count selector row */
+.controlRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.counterGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.counterBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #4b5563;
+  border: none;
+  color: white;
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.counterBtn:hover:not(:disabled) {
+  background: #6b7280;
+}
+
+.counterBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.counterInput {
+  width: 56px;
+  text-align: center;
+  padding: 8px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.counterInput::-webkit-outer-spin-button,
+.counterInput::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Step action buttons */
+.actionBtn {
+  flex: 1;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.actionBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cleanupBtn {
+  background: #4f46e5;
+}
+
+.cleanupBtn:hover:not(:disabled) {
+  background: #4338ca;
+}
+
+.stylizeBtn {
+  background: #0d9488;
+}
+
+.stylizeBtn:hover:not(:disabled) {
+  background: #0f766e;
+}
+
+.angleBtn {
+  background: #d97706;
+}
+
+.angleBtn:hover:not(:disabled) {
+  background: #b45309;
+}
+
+/* Loader spinner */
+.loader {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.galleryLoader {
+  width: 40px;
+  height: 40px;
+  border-width: 4px;
+  margin: 24px auto;
+}
+
+/* Gallery */
+.gallery {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  min-height: 50px;
+}
+
+@media (min-width: 640px) and (max-width: 1024px) {
+  .gallery {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.galleryItem {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.galleryItem img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.galleryItemSelected {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.galleryOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  opacity: 0;
+  transition: opacity 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  gap: 6px;
+}
+
+.galleryItem:hover .galleryOverlay {
+  opacity: 1;
+}
+
+.galleryOverlayBtn {
+  width: 100%;
+  padding: 6px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  color: white;
+  text-align: center;
+  text-decoration: none;
+  display: block;
+}
+
+.previewBtn {
+  background: #4b5563;
+}
+
+.previewBtn:hover {
+  background: #6b7280;
+}
+
+.selectBtn {
+  background: #4f46e5;
+}
+
+.selectBtn:hover {
+  background: #4338ca;
+}
+
+.downloadBtn {
+  background: #374151;
+}
+
+.downloadBtn:hover {
+  background: #4b5563;
+}
+
+.saveBtn {
+  background: #059669;
+}
+
+.saveBtn:hover {
+  background: #047857;
+}
+
+.galleryError {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: #f87171;
+  padding: 16px;
+  font-size: 13px;
+}
+
+/* Angle options */
+.angleOptions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.angleOptionBtn {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: #374151;
+  border: 1px solid #4b5563;
+  color: #d1d5db;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.angleOptionBtn:hover {
+  background: #4b5563;
+}
+
+.angleOptionActive {
+  background: #4f46e5;
+  color: white;
+  border-color: #6366f1;
+}
