@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
       preset: { select: { name: true, alias: true } },
       backgroundImage: { select: { name: true } },
       generatedImages: {
-        select: { id: true, mimeType: true, imageData: true },
+        select: { id: true, mimeType: true, blobUrl: true },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     images: r.generatedImages.map((img) => ({
       id: img.id,
       mimeType: img.mimeType,
-      dataUrl: `data:${img.mimeType};base64,${img.imageData}`,
+      dataUrl: img.blobUrl,
     })),
   }));
 

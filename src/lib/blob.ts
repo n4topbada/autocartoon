@@ -1,0 +1,56 @@
+import { put, del } from "@vercel/blob";
+
+const MIME_TO_EXT: Record<string, string> = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/webp": ".webp",
+  "image/gif": ".gif",
+};
+
+/**
+ * base64 이미지를 Vercel Blob에 업로드하고 URL을 반환
+ */
+export async function uploadBase64ToBlob(
+  base64: string,
+  mimeType: string,
+  folder: string = "images"
+): Promise<string> {
+  const ext = MIME_TO_EXT[mimeType] || ".png";
+  const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+  const buffer = Buffer.from(base64, "base64");
+
+  const blob = await put(filename, buffer, {
+    access: "public",
+    contentType: mimeType,
+  });
+
+  return blob.url;
+}
+
+/**
+ * Vercel Blob URL에서 이미지를 fetch하여 base64로 변환
+ * (Gemini API 호출 시 사용)
+ */
+export async function fetchBlobAsBase64(
+  blobUrl: string
+): Promise<{ base64: string; mimeType: string }> {
+  const res = await fetch(blobUrl);
+  if (!res.ok) throw new Error(`Failed to fetch blob: ${blobUrl}`);
+  const buffer = Buffer.from(await res.arrayBuffer());
+  const mimeType = res.headers.get("content-type") || "image/png";
+  return {
+    base64: buffer.toString("base64"),
+    mimeType,
+  };
+}
+
+/**
+ * Vercel Blob 삭제
+ */
+export async function deleteBlob(blobUrl: string): Promise<void> {
+  try {
+    await del(blobUrl);
+  } catch (err) {
+    console.error("Blob delete error:", err);
+  }
+}

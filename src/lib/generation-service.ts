@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { generateContent } from "./gemini";
+import { fetchBlobAsBase64, uploadBase64ToBlob } from "./blob";
 import {
   buildTextPrompt,
   buildSketchPrompt,
@@ -22,16 +23,18 @@ export interface GenerateInput {
   inputImage?: { base64: string; mimeType: string };
 }
 
-function loadPresetImages(
-  images: { filePath: string | null; imageData: string | null; mimeType: string }[]
-): { base64: string; mimeType: string }[] {
-  return images.map((img) => {
-    // DB에 base64로 저장된 업로드 이미지
-    if (img.imageData) {
-      return { base64: img.imageData, mimeType: img.mimeType };
-    }
-    throw new Error("PresetImage에 imageData가 없습니다. 웹 UI에서 이미지를 업로드해주세요.");
-  });
+/**
+ * Blob URL에서 이미지를 fetch하여 base64로 변환 (Gemini API용)
+ */
+async function loadPresetImages(
+  images: { blobUrl: string; mimeType: string }[]
+): Promise<{ base64: string; mimeType: string }[]> {
+  return Promise.all(
+    images.map(async (img) => {
+      const data = await fetchBlobAsBase64(img.blobUrl);
+      return { base64: data.base64, mimeType: img.mimeType };
+    })
+  );
 }
 
 export async function generate(input: GenerateInput) {
@@ -41,8 +44,8 @@ export async function generate(input: GenerateInput) {
     include: { images: { orderBy: { order: "asc" } } },
   });
 
-  // 2. 참조 이미지 로드
-  const referenceImages = loadPresetImages(preset.images);
+  // 2. 참조 이미지 로드 (Blob → base64)
+  const referenceImages = await loadPresetImages(preset.images);
 
   // 3. 배경 이미지 로드 (이미지 모드)
   let bgImageName: string | undefined;
@@ -51,8 +54,9 @@ export async function generate(input: GenerateInput) {
       where: { id: input.backgroundImageId },
     });
     if (bgRecord) {
+      const bgData = await fetchBlobAsBase64(bgRecord.blobUrl);
       referenceImages.push({
-        base64: bgRecord.imageData,
+        base64: bgData.base64,
         mimeType: bgRecord.mimeType,
       });
       bgImageName = bgRecord.name;
@@ -86,14 +90,14 @@ export async function generate(input: GenerateInput) {
       break;
   }
 
-  // 4. Gemini 호출
+  // 5. Gemini 호출
   const result = await generateContent({
     prompt,
     referenceImages,
     modalities: ["IMAGE", "TEXT"],
   });
 
-  // 6. 결과 저장
+  // 6. 결과를 Blob에 업로드 후 DB 저장
   const genRequest = await prisma.generationRequest.create({
     data: {
       presetId: input.presetId,
@@ -107,14 +111,15 @@ export async function generate(input: GenerateInput) {
 
   const savedImages = [];
   for (const img of result.images) {
+    const blobUrl = await uploadBase64ToBlob(img.base64, img.mimeType, "generated");
     const saved = await prisma.generatedImage.create({
       data: {
         requestId: genRequest.id,
-        imageData: img.base64,
+        blobUrl,
         mimeType: img.mimeType,
       },
     });
-    savedImages.push(saved);
+    savedImages.push({ ...saved, blobUrl });
   }
 
   return {
@@ -123,7 +128,7 @@ export async function generate(input: GenerateInput) {
     images: savedImages.map((img) => ({
       id: img.id,
       mimeType: img.mimeType,
-      dataUrl: `data:${img.mimeType};base64,${img.imageData}`,
+      dataUrl: img.blobUrl,
     })),
   };
 }

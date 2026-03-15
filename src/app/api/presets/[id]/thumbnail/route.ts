@@ -16,20 +16,10 @@ export async function GET(
         orderBy: { order: "asc" },
       });
 
-  if (!image) {
+  if (!image?.blobUrl) {
     return new NextResponse("Not found", { status: 404 });
   }
 
-  // DB에 base64로 저장된 업로드 이미지
-  if (image.imageData) {
-    const buffer = Buffer.from(image.imageData, "base64");
-    return new NextResponse(buffer, {
-      headers: {
-        "Content-Type": image.mimeType,
-        "Cache-Control": "public, max-age=3600",
-      },
-    });
-  }
-
-  return new NextResponse("No image data", { status: 404 });
+  // Blob URL로 리다이렉트
+  return NextResponse.redirect(image.blobUrl);
 }

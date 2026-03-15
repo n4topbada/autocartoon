@@ -21,12 +21,11 @@ model CharacterPreset {
 }
 
 model PresetImage {
-  id        String  @id @default(cuid())
-  presetId  String
-  filePath  String?
-  imageData String? // base64 (업로드된 이미지)
-  mimeType  String  @default("image/png")
-  order     Int     @default(0)
+  id       String @id @default(cuid())
+  presetId String
+  blobUrl  String // Vercel Blob URL
+  mimeType String @default("image/png")
+  order    Int    @default(0)
 
   preset CharacterPreset @relation(fields: [presetId], references: [id], onDelete: Cascade)
 }
@@ -34,7 +33,7 @@ model PresetImage {
 model SavedBackground {
   id        String   @id @default(cuid())
   name      String
-  imageData String   // base64 encoded image
+  blobUrl   String   // Vercel Blob URL
   mimeType  String   @default("image/png")
   userId    String?
   createdAt DateTime @default(now())
@@ -83,7 +82,7 @@ model User {
 model GeneratedImage {
   id        String   @id @default(cuid())
   requestId String
-  imageData String   // base64 encoded image
+  blobUrl   String   // Vercel Blob URL
   mimeType  String   @default("image/png")
   createdAt DateTime @default(now())
 

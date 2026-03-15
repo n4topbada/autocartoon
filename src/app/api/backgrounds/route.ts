@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, AuthError } from "@/lib/auth";
+import { uploadBase64ToBlob } from "@/lib/blob";
 
 export async function GET(req: NextRequest) {
   try {
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
         id: bg.id,
         name: bg.name,
         mimeType: bg.mimeType,
-        dataUrl: `data:${bg.mimeType};base64,${bg.imageData}`,
+        dataUrl: bg.blobUrl,
         createdAt: bg.createdAt.toISOString(),
       }))
     );
@@ -50,11 +51,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const mime = mimeType || "image/png";
+    const blobUrl = await uploadBase64ToBlob(imageData, mime, "backgrounds");
+
     const bg = await prisma.savedBackground.create({
       data: {
         name: name.trim(),
-        imageData,
-        mimeType: mimeType || "image/png",
+        blobUrl,
+        mimeType: mime,
         userId: session.userId,
       },
     });
@@ -63,7 +67,7 @@ export async function POST(req: NextRequest) {
       id: bg.id,
       name: bg.name,
       mimeType: bg.mimeType,
-      dataUrl: `data:${bg.mimeType};base64,${bg.imageData}`,
+      dataUrl: bg.blobUrl,
       createdAt: bg.createdAt.toISOString(),
     });
   } catch (error) {

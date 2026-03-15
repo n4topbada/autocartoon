@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, AuthError } from "@/lib/auth";
+import { uploadBase64ToBlob } from "@/lib/blob";
 
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth();
     const { searchParams } = new URL(req.url);
 
-    // 관리자는 ?userId= 로 다른 유저 데이터 조회 가능
     let targetUserId = session.userId;
     if (session.role === "admin" && searchParams.get("userId")) {
       targetUserId = searchParams.get("userId")!;
@@ -27,9 +27,7 @@ export async function GET(req: NextRequest) {
       name: p.name,
       images: p.images.map((img) => ({
         id: img.id,
-        dataUrl: img.imageData
-          ? `data:${img.mimeType};base64,${img.imageData}`
-          : `/api/presets/${p.id}/thumbnail?imgId=${img.id}`,
+        dataUrl: img.blobUrl,
       })),
     }));
 
@@ -70,6 +68,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Blob에 업로드
+    const blobUrls = await Promise.all(
+      images.map((img) => uploadBase64ToBlob(img.base64, img.mimeType, "presets"))
+    );
+
     const alias = `${name.trim()}_${Date.now()}`;
 
     const preset = await prisma.characterPreset.create({
@@ -79,7 +82,7 @@ export async function POST(req: NextRequest) {
         userId: session.userId,
         images: {
           create: images.map((img, i) => ({
-            imageData: img.base64,
+            blobUrl: blobUrls[i],
             mimeType: img.mimeType,
             order: i,
           })),
@@ -96,7 +99,7 @@ export async function POST(req: NextRequest) {
       name: preset.name,
       images: preset.images.map((img) => ({
         id: img.id,
-        dataUrl: `data:${img.mimeType};base64,${img.imageData}`,
+        dataUrl: img.blobUrl,
       })),
     });
   } catch (error) {
