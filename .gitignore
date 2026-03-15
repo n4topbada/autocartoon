@@ -6,4 +6,7 @@ out/
 *.db-journal
 prisma/dev.db
 
+*.zip
+tsconfig.tsbuildinfo
+.claude/
 .vercel
