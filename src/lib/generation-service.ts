@@ -13,6 +13,7 @@ export type GenerationMode = "text" | "sketch" | "edit";
 
 export interface GenerateInput {
   presetId: string;
+  userId: string;
   mode: GenerationMode;
   prompt: string;
   background?: string;
@@ -96,6 +97,7 @@ export async function generate(input: GenerateInput) {
   const genRequest = await prisma.generationRequest.create({
     data: {
       presetId: input.presetId,
+      userId: input.userId,
       mode: input.mode,
       prompt: input.prompt,
       background: input.background,

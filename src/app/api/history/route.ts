@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, AuthError } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  try {
+  const session = await requireAuth();
   const { searchParams } = new URL(req.url);
   const presetId = searchParams.get("presetId");
   const limit = Math.min(Number(searchParams.get("limit") || "20"), 100);
 
-  const where = presetId ? { presetId } : {};
+  // 관리자는 ?userId= 로 다른 유저 데이터 조회 가능
+  let targetUserId = session.userId;
+  if (session.role === "admin" && searchParams.get("userId")) {
+    targetUserId = searchParams.get("userId")!;
+  }
+
+  const where: Record<string, unknown> = { userId: targetUserId };
+  if (presetId) where.presetId = presetId;
 
   const requests = await prisma.generationRequest.findMany({
     where,
@@ -37,4 +47,10 @@ export async function GET(req: NextRequest) {
   }));
 
   return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: "히스토리 조회 실패" }, { status: 500 });
+  }
 }

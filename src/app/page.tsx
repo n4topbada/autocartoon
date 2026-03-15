@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import styles from "./page.module.css";
 import BackgroundGenerator from "@/components/BackgroundGenerator";
 import UserAvatar from "@/components/UserAvatar";
+import { useAuth } from "@/components/AuthProvider";
 
 type Tab = "character" | "background";
 
@@ -63,7 +64,14 @@ interface UploadingImage {
   preview: string;
 }
 
+interface UserOption {
+  id: string;
+  email: string;
+  name: string | null;
+}
+
 export default function Home() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("character");
   const [presets, setPresets] = useState<Preset[]>([]);
   const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null);
@@ -92,21 +100,41 @@ export default function Home() {
   const [savedBackgrounds, setSavedBackgrounds] = useState<SavedBg[]>([]);
   const [selectedBgImageId, setSelectedBgImageId] = useState<string | null>(null);
 
+  // 관리자: 유저 선택
+  const [allUsers, setAllUsers] = useState<UserOption[]>([]);
+  const [viewingUserId, setViewingUserId] = useState<string | null>(null);
+  const isAdmin = user?.role === "admin";
+
+  // 관리자: 유저 목록 로드
+  useEffect(() => {
+    if (isAdmin) {
+      fetch("/api/admin/users")
+        .then((r) => r.json())
+        .then((data: UserOption[]) => setAllUsers(data))
+        .catch(() => setAllUsers([]));
+    }
+  }, [isAdmin]);
+
+  // API 호출 시 userId 파라미터 생성
+  const userParam = isAdmin && viewingUserId ? `userId=${viewingUserId}` : "";
+
   // 프리셋 목록 로드
   const loadPresets = useCallback(() => {
-    fetch("/api/presets")
+    const q = userParam ? `?${userParam}` : "";
+    fetch(`/api/presets${q}`)
       .then((r) => r.json())
-      .then(setPresets)
+      .then((data) => { if (Array.isArray(data)) setPresets(data); })
       .catch(() => setPresets([]));
-  }, []);
+  }, [userParam]);
 
   // 저장된 배경 로드
   const loadSavedBackgrounds = useCallback(() => {
-    fetch("/api/backgrounds")
+    const q = userParam ? `?${userParam}` : "";
+    fetch(`/api/backgrounds${q}`)
       .then((r) => r.json())
-      .then((data: SavedBg[]) => setSavedBackgrounds(data))
+      .then((data) => { if (Array.isArray(data)) setSavedBackgrounds(data); })
       .catch(() => setSavedBackgrounds([]));
-  }, []);
+  }, [userParam]);
 
   useEffect(() => {
     loadPresets();
@@ -121,16 +149,26 @@ export default function Home() {
 
   // 히스토리 로드
   const loadHistory = useCallback(() => {
-    const params = selectedPreset ? `?presetId=${selectedPreset.id}` : "";
-    fetch(`/api/history${params}`)
+    const params = new URLSearchParams();
+    if (selectedPreset) params.set("presetId", selectedPreset.id);
+    if (isAdmin && viewingUserId) params.set("userId", viewingUserId);
+    const q = params.toString() ? `?${params.toString()}` : "";
+    fetch(`/api/history${q}`)
       .then((r) => r.json())
-      .then(setHistory)
+      .then((data) => { if (Array.isArray(data)) setHistory(data); })
       .catch(() => setHistory([]));
-  }, [selectedPreset]);
+  }, [selectedPreset, isAdmin, viewingUserId]);
 
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
+
+  // 관리자: 유저 전환 시 선택된 프리셋 초기화
+  const handleUserSwitch = (userId: string) => {
+    setViewingUserId(userId === user?.id ? null : userId);
+    setSelectedPreset(null);
+    setResult(null);
+  };
 
   // 파일 업로드 처리 (sketch/edit용)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -488,9 +526,24 @@ export default function Home() {
             </section>
           )}
 
-          {/* 히스토리 */}
+          {/* My Library */}
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>생성 히스토리</h2>
+            <div className={styles.libraryHeader}>
+              <h2 className={styles.sectionTitle}>My Library</h2>
+              {isAdmin && allUsers.length > 0 && (
+                <select
+                  className={styles.userSelect}
+                  value={viewingUserId || user?.id || ""}
+                  onChange={(e) => handleUserSwitch(e.target.value)}
+                >
+                  {allUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name || u.email.split("@")[0]} ({u.email})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
             {history.length === 0 ? (
               <p className={styles.emptyText}>
                 아직 생성된 이미지가 없습니다.

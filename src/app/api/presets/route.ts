@@ -2,32 +2,49 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, AuthError } from "@/lib/auth";
 
-export async function GET() {
-  const presets = await prisma.characterPreset.findMany({
-    include: {
-      images: { orderBy: { order: "asc" }, take: 4 },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+export async function GET(req: NextRequest) {
+  try {
+    const session = await requireAuth();
+    const { searchParams } = new URL(req.url);
 
-  const result = presets.map((p) => ({
-    id: p.id,
-    alias: p.alias,
-    name: p.name,
-    images: p.images.map((img) => ({
-      id: img.id,
-      dataUrl: img.imageData
-        ? `data:${img.mimeType};base64,${img.imageData}`
-        : `/api/presets/${p.id}/thumbnail?imgId=${img.id}`,
-    })),
-  }));
+    // 관리자는 ?userId= 로 다른 유저 데이터 조회 가능
+    let targetUserId = session.userId;
+    if (session.role === "admin" && searchParams.get("userId")) {
+      targetUserId = searchParams.get("userId")!;
+    }
 
-  return NextResponse.json(result);
+    const presets = await prisma.characterPreset.findMany({
+      where: { userId: targetUserId },
+      include: {
+        images: { orderBy: { order: "asc" }, take: 4 },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const result = presets.map((p) => ({
+      id: p.id,
+      alias: p.alias,
+      name: p.name,
+      images: p.images.map((img) => ({
+        id: img.id,
+        dataUrl: img.imageData
+          ? `data:${img.mimeType};base64,${img.imageData}`
+          : `/api/presets/${p.id}/thumbnail?imgId=${img.id}`,
+      })),
+    }));
+
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: "프리셋 조회 실패" }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth();
+    const session = await requireAuth();
     const body = await req.json();
     const { name, images } = body as {
       name: string;
@@ -59,6 +76,7 @@ export async function POST(req: NextRequest) {
       data: {
         alias,
         name: name.trim(),
+        userId: session.userId,
         images: {
           create: images.map((img, i) => ({
             imageData: img.base64,

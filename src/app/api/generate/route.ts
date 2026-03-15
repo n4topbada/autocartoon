@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
 
     const result = await generate({
       presetId,
+      userId: session.userId,
       mode,
       prompt,
       background,

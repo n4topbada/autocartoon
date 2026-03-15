@@ -2,25 +2,41 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, AuthError } from "@/lib/auth";
 
-export async function GET() {
-  const backgrounds = await prisma.savedBackground.findMany({
-    orderBy: { createdAt: "desc" },
-  });
+export async function GET(req: NextRequest) {
+  try {
+    const session = await requireAuth();
+    const { searchParams } = new URL(req.url);
 
-  return NextResponse.json(
-    backgrounds.map((bg) => ({
-      id: bg.id,
-      name: bg.name,
-      mimeType: bg.mimeType,
-      dataUrl: `data:${bg.mimeType};base64,${bg.imageData}`,
-      createdAt: bg.createdAt.toISOString(),
-    }))
-  );
+    let targetUserId = session.userId;
+    if (session.role === "admin" && searchParams.get("userId")) {
+      targetUserId = searchParams.get("userId")!;
+    }
+
+    const backgrounds = await prisma.savedBackground.findMany({
+      where: { userId: targetUserId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json(
+      backgrounds.map((bg) => ({
+        id: bg.id,
+        name: bg.name,
+        mimeType: bg.mimeType,
+        dataUrl: `data:${bg.mimeType};base64,${bg.imageData}`,
+        createdAt: bg.createdAt.toISOString(),
+      }))
+    );
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: "배경 조회 실패" }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth();
+    const session = await requireAuth();
     const { name, imageData, mimeType } = (await req.json()) as {
       name: string;
       imageData: string;
@@ -39,6 +55,7 @@ export async function POST(req: NextRequest) {
         name: name.trim(),
         imageData,
         mimeType: mimeType || "image/png",
+        userId: session.userId,
       },
     });
 

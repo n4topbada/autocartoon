@@ -11,9 +11,11 @@ model CharacterPreset {
   id        String   @id @default(cuid())
   alias     String   @unique
   name      String
+  userId    String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  user               User?              @relation(fields: [userId], references: [id])
   images             PresetImage[]
   generationRequests GenerationRequest[]
 }
@@ -34,20 +36,24 @@ model SavedBackground {
   name      String
   imageData String   // base64 encoded image
   mimeType  String   @default("image/png")
+  userId    String?
   createdAt DateTime @default(now())
 
+  user               User?              @relation(fields: [userId], references: [id])
   generationRequests GenerationRequest[]
 }
 
 model GenerationRequest {
   id                String   @id @default(cuid())
   presetId          String
+  userId            String?
   mode              String   // "text" | "sketch" | "edit"
   prompt            String
   background        String?  // 텍스트 배경 이름
   backgroundImageId String?  // 저장된 배경 이미지 FK
   createdAt         DateTime @default(now())
 
+  user            User?            @relation(fields: [userId], references: [id])
   preset          CharacterPreset  @relation(fields: [presetId], references: [id])
   backgroundImage SavedBackground? @relation(fields: [backgroundImageId], references: [id])
   generatedImages GeneratedImage[]
@@ -68,6 +74,10 @@ model User {
   verifyTokenExp    DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+
+  presets            CharacterPreset[]
+  backgrounds        SavedBackground[]
+  generationRequests GenerationRequest[]
 }
 
 model GeneratedImage {

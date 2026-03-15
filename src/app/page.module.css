@@ -287,6 +287,29 @@
   display: flex;
 }
 
+/* My Library 헤더 */
+.libraryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.userSelect {
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  max-width: 280px;
+}
+
+.userSelect:focus {
+  border-color: var(--accent);
+}
+
 /* 히스토리 배경 태그 */
 .historyBg {
   font-size: 12px;
