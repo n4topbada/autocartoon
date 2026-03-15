@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import fs from "fs";
-import path from "path";
 
 export async function GET(
   req: NextRequest,
@@ -33,29 +31,5 @@ export async function GET(
     });
   }
 
-  // 파일 경로 기반
-  if (!image.filePath) {
-    return new NextResponse("No image data", { status: 404 });
-  }
-
-  const absPath = path.join(process.cwd(), image.filePath);
-  if (!fs.existsSync(absPath)) {
-    return new NextResponse("File not found", { status: 404 });
-  }
-
-  const buffer = fs.readFileSync(absPath);
-  const ext = path.extname(image.filePath).toLowerCase();
-  const mimeMap: Record<string, string> = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".webp": "image/webp",
-  };
-
-  return new NextResponse(buffer, {
-    headers: {
-      "Content-Type": mimeMap[ext] || "image/png",
-      "Cache-Control": "public, max-age=3600",
-    },
-  });
+  return new NextResponse("No image data", { status: 404 });
 }

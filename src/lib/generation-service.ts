@@ -1,5 +1,3 @@
-import fs from "fs";
-import path from "path";
 import { prisma } from "./prisma";
 import { generateContent } from "./gemini";
 import {
@@ -31,23 +29,7 @@ function loadPresetImages(
     if (img.imageData) {
       return { base64: img.imageData, mimeType: img.mimeType };
     }
-    // 파일 경로 기반 (import 스크립트로 등록된 이미지)
-    if (img.filePath) {
-      const absPath = path.join(process.cwd(), img.filePath);
-      const buffer = fs.readFileSync(absPath);
-      const ext = path.extname(img.filePath).toLowerCase();
-      const mimeMap: Record<string, string> = {
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".webp": "image/webp",
-      };
-      return {
-        base64: buffer.toString("base64"),
-        mimeType: mimeMap[ext] || "image/png",
-      };
-    }
-    throw new Error("PresetImage에 imageData도 filePath도 없습니다.");
+    throw new Error("PresetImage에 imageData가 없습니다. 웹 UI에서 이미지를 업로드해주세요.");
   });
 }
 
