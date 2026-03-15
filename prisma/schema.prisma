@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -51,6 +51,23 @@ model GenerationRequest {
   preset          CharacterPreset  @relation(fields: [presetId], references: [id])
   backgroundImage SavedBackground? @relation(fields: [backgroundImageId], references: [id])
   generatedImages GeneratedImage[]
+}
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  passwordHash      String
+  name              String?
+  role              String    @default("user")
+  tier              String    @default("free")
+  credits           Int       @default(0)
+  tierUsedThisMonth Int       @default(0)
+  tierResetAt       DateTime  @default(now())
+  emailVerified     Boolean   @default(false)
+  verifyToken       String?   @unique
+  verifyTokenExp    DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }
 
 model GeneratedImage {

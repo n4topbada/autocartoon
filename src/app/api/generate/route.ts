@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generate, type GenerationMode } from "@/lib/generation-service";
+import { requireAuth, AuthError } from "@/lib/auth";
+import { checkAndDeductCredit } from "@/lib/credit-service";
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await requireAuth();
+
+    // 크레딧 차감
+    const creditResult = await checkAndDeductCredit(session.userId);
+    if (!creditResult.ok) {
+      return NextResponse.json({ error: creditResult.error }, { status: 402 });
+    }
+
     const body = await req.json();
     const { presetId, mode, prompt, background, backgroundImageId, inputImage } = body as {
       presetId: string;
@@ -38,6 +48,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Generation error:", error);
     const message =
       error instanceof Error ? error.message : "알 수 없는 오류";

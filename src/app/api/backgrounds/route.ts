@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, AuthError } from "@/lib/auth";
 
 export async function GET() {
   const backgrounds = await prisma.savedBackground.findMany({
@@ -19,6 +20,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    await requireAuth();
     const { name, imageData, mimeType } = (await req.json()) as {
       name: string;
       imageData: string;
@@ -48,6 +50,9 @@ export async function POST(req: NextRequest) {
       createdAt: bg.createdAt.toISOString(),
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Save background error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "저장 실패" },

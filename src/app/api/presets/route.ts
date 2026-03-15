@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth, AuthError } from "@/lib/auth";
 
 export async function GET() {
   const presets = await prisma.characterPreset.findMany({
@@ -26,6 +27,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    await requireAuth();
     const body = await req.json();
     const { name, images } = body as {
       name: string;
@@ -80,6 +82,9 @@ export async function POST(req: NextRequest) {
       })),
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Preset creation error:", error);
     return NextResponse.json(
       { error: "프리셋 생성 실패" },

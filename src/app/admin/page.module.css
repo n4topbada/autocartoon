@@ -1,0 +1,146 @@
+.container {
+  min-height: 100vh;
+  background: #0a0a0a;
+  padding: 24px;
+  color: #e5e7eb;
+}
+
+.loading {
+  text-align: center;
+  padding: 80px;
+  color: #6b7280;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1400px;
+  margin: 0 auto 24px;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #f3f4f6;
+}
+
+.backLink {
+  color: #818cf8;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  text-decoration: underline;
+}
+
+.tableWrap {
+  max-width: 1400px;
+  margin: 0 auto;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th {
+  background: #1f2937;
+  color: #9ca3af;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+  border-bottom: 1px solid #374151;
+}
+
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #1f2937;
+  white-space: nowrap;
+}
+
+.table tr:hover td {
+  background: #111827;
+}
+
+.email {
+  color: #93c5fd;
+}
+
+.adminBadge {
+  padding: 2px 8px;
+  background: #7c3aed;
+  color: white;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.userBadge {
+  padding: 2px 8px;
+  background: #374151;
+  color: #9ca3af;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.creditCell {
+  font-weight: 600;
+  color: #34d399;
+}
+
+.date {
+  color: #6b7280;
+}
+
+.tierSelect {
+  padding: 4px 8px;
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  color: #e5e7eb;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.creditAction {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.creditInput {
+  width: 70px;
+  padding: 4px 8px;
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  color: #e5e7eb;
+  font-size: 12px;
+}
+
+.creditBtn {
+  padding: 4px 12px;
+  background: #059669;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.creditBtn:hover:not(:disabled) {
+  background: #047857;
+}
+
+.creditBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

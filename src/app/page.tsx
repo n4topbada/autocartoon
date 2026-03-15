@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import styles from "./page.module.css";
 import BackgroundGenerator from "@/components/BackgroundGenerator";
+import UserAvatar from "@/components/UserAvatar";
 
 type Tab = "character" | "background";
 
@@ -280,7 +281,7 @@ export default function Home() {
       {/* 헤더 */}
       <header className={styles.header}>
         <h1 className={styles.logo}>AutoCartoon</h1>
-        <nav className={styles.tabNav}>
+        <nav className={styles.tabNav} style={{ flex: 1 }}>
           <button
             className={`${styles.tab} ${activeTab === "character" ? styles.tabActive : ""}`}
             onClick={() => setActiveTab("character")}
@@ -294,6 +295,7 @@ export default function Home() {
             배경 생성
           </button>
         </nav>
+        <UserAvatar />
       </header>
 
       <main className={styles.main}>
