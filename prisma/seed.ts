@@ -64,10 +64,10 @@ async function main() {
   await prisma.presetImage.deleteMany({ where: { presetId: wonyPreset.id } });
 
   const wonyImages = [
-    { file: "으쌰워니.png", mime: "image/png" },
-    { file: "타임라인 10003.png", mime: "image/png" },
-    { file: "타임라인 10004.png", mime: "image/png" },
-    { file: "타임라인 10006.png", mime: "image/png" },
+    { file: "wony-01.png", mime: "image/png" },
+    { file: "wony-02.png", mime: "image/png" },
+    { file: "wony-03.png", mime: "image/png" },
+    { file: "wony-04.png", mime: "image/png" },
   ];
 
   for (let i = 0; i < wonyImages.length; i++) {
