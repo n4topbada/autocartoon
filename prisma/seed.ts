@@ -94,6 +94,41 @@ async function main() {
   }
   console.log(`[OK] ${allUsers.length}명 유저에게 wony 자동 지급`);
 
+  // 캐릭터 프리셋: anian (1 바나나)
+  const anianPreset = await prisma.characterPreset.upsert({
+    where: { alias: "anian" },
+    update: { name: "Anian", price: 1 },
+    create: {
+      alias: "anian",
+      name: "Anian",
+      userId: null,
+      price: 1,
+    },
+  });
+
+  await prisma.presetImage.deleteMany({ where: { presetId: anianPreset.id } });
+
+  const anianImages = [
+    { file: "Anian_Normal.png", mime: "image/png" },
+    { file: "Anian_Happy_01.png", mime: "image/png" },
+    { file: "Anian_Angry_01.png", mime: "image/png" },
+    { file: "Anian_Angry_02.png", mime: "image/png" },
+    { file: "Anian_Back.png", mime: "image/png" },
+  ];
+
+  for (let i = 0; i < anianImages.length; i++) {
+    await prisma.presetImage.create({
+      data: {
+        presetId: anianPreset.id,
+        blobUrl: `/presets/anian/${anianImages[i].file}`,
+        mimeType: anianImages[i].mime,
+        order: i,
+      },
+    });
+  }
+
+  console.log(`[OK] anian 프리셋: ${anianImages.length}개 이미지 등록 (1 바나나)`);
+
   console.log("Seed completed!");
 }
 
