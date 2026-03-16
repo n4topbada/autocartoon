@@ -13,11 +13,19 @@ export async function GET(req: NextRequest) {
       targetUserId = searchParams.get("userId")!;
     }
 
+    // 유저 소유 프리셋 + 구매한 시스템 프리셋
+    const purchasedIds = (
+      await prisma.purchasedPreset.findMany({
+        where: { userId: targetUserId },
+        select: { presetId: true },
+      })
+    ).map((p) => p.presetId);
+
     const presets = await prisma.characterPreset.findMany({
       where: {
         OR: [
           { userId: targetUserId },
-          { userId: null }, // 시스템 기본 프리셋
+          { id: { in: purchasedIds } },
         ],
       },
       include: {

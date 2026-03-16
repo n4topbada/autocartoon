@@ -51,11 +51,12 @@ async function main() {
   // 기본 캐릭터 프리셋: wony
   const wonyPreset = await prisma.characterPreset.upsert({
     where: { alias: "wony" },
-    update: { name: "Wony" },
+    update: { name: "Wony", price: 0 },
     create: {
       alias: "wony",
       name: "Wony",
-      userId: null, // 시스템 기본 프리셋 (모든 유저에게 표시)
+      userId: null, // 시스템 기본 프리셋 (마켓플레이스)
+      price: 0, // 무료
     },
   });
 
@@ -81,6 +82,18 @@ async function main() {
   }
 
   console.log(`[OK] wony 기본 프리셋: ${wonyImages.length}개 이미지 등록`);
+
+  // 모든 기존 유저에게 wony 무료 프리셋 자동 구매 처리
+  const allUsers = await prisma.user.findMany({ select: { id: true } });
+  for (const u of allUsers) {
+    await prisma.purchasedPreset.upsert({
+      where: { userId_presetId: { userId: u.id, presetId: wonyPreset.id } },
+      update: {},
+      create: { userId: u.id, presetId: wonyPreset.id },
+    });
+  }
+  console.log(`[OK] ${allUsers.length}명 유저에게 wony 자동 지급`);
+
   console.log("Seed completed!");
 }
 

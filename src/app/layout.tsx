@@ -3,8 +3,8 @@ import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 
 export const metadata: Metadata = {
-  title: "AutoCartoon - 웹툰 캐릭터 이미지 생성",
-  description: "웹툰 작가용 캐릭터 이미지 생성 웹서비스",
+  title: "워니의 Autocartoon Bot",
+  description: "웹툰 캐릭터 이미지 생성 서비스 by wonyframe",
 };
 
 export default function RootLayout({

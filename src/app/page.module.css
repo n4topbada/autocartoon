@@ -13,9 +13,17 @@
 }
 
 .logo {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.logoEmoji {
+  font-size: 24px;
 }
 
 .subtitle {
@@ -39,6 +47,10 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .tab:hover {
@@ -77,12 +89,41 @@
   gap: 12px;
 }
 
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .sectionTitle {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.marketplaceBtn {
+  padding: 4px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.marketplaceBtn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
 }
 
 /* 프리셋 그리드 */
@@ -151,9 +192,7 @@
 }
 
 .addIcon {
-  font-size: 28px;
   color: var(--text-dim);
-  line-height: 1;
 }
 
 .presetName {
@@ -181,6 +220,10 @@
   color: var(--text);
   font-size: 14px;
   transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .modeBtn:hover {
@@ -332,6 +375,10 @@
   color: var(--text-dim);
   font-size: 14px;
   transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .uploadBtn:hover {
@@ -363,6 +410,9 @@
   border-radius: 6px;
   color: white;
   font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* 텍스트영역 */
@@ -392,6 +442,10 @@
   font-size: 16px;
   font-weight: 600;
   transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .generateBtn:hover:not(:disabled) {
@@ -562,14 +616,17 @@
 
 /* 즐겨찾기 필터 버튼 */
 .favFilterBtn {
-  padding: 4px 10px;
+  padding: 6px 8px;
   background: transparent;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
   transition: all 0.15s;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  color: var(--text-dim);
 }
 
 .favFilterBtn:hover {
@@ -592,10 +649,95 @@
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .deleteConfirmBtn:hover {
   opacity: 0.9;
+}
+
+/* ===== 마켓플레이스 ===== */
+.marketGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.marketCard {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.marketCardThumb {
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.marketCardThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.marketCardInfo {
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.marketCardName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.marketCardPrice {
+  font-size: 12px;
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.marketBuyBtn {
+  margin: 0 10px 10px;
+  padding: 8px;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.marketBuyBtn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.marketBuyBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.marketOwnedBtn {
+  margin: 0 10px 10px;
+  padding: 8px;
+  background: transparent;
+  border: 1px solid var(--success);
+  border-radius: 8px;
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: default;
 }
 
 /* ===== 모달 ===== */

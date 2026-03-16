@@ -79,7 +79,9 @@
 }
 
 .menuItem {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   text-align: left;
   padding: 8px 4px;
@@ -98,7 +100,9 @@
 }
 
 .logoutBtn {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   text-align: left;
   padding: 8px 4px;
@@ -113,4 +117,12 @@
 
 .logoutBtn:hover {
   background: #374151;
+}
+
+.copyright {
+  text-align: center;
+  padding: 4px 0 2px;
+  font-size: 11px;
+  color: #6b7280;
+  letter-spacing: 0.3px;
 }
