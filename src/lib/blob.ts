@@ -1,4 +1,6 @@
 import { put, del } from "@vercel/blob";
+import { readFile } from "fs/promises";
+import path from "path";
 
 const MIME_TO_EXT: Record<string, string> = {
   "image/png": ".png",
@@ -50,6 +52,20 @@ function resolveUrl(url: string): string {
 export async function fetchBlobAsBase64(
   blobUrl: string
 ): Promise<{ base64: string; mimeType: string }> {
+  // 로컬 정적 파일 (예: /presets/wony/wony-01.png) → 파일시스템에서 직접 읽기
+  if (blobUrl.startsWith("/") && !blobUrl.startsWith("//")) {
+    const filePath = path.join(process.cwd(), "public", blobUrl);
+    const buffer = await readFile(filePath);
+    const ext = path.extname(blobUrl).toLowerCase();
+    const mimeType =
+      ext === ".png" ? "image/png" :
+      ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
+      ext === ".webp" ? "image/webp" :
+      ext === ".gif" ? "image/gif" : "image/png";
+    return { base64: buffer.toString("base64"), mimeType };
+  }
+
+  // 외부 URL (Vercel Blob 등) → HTTP fetch
   const fullUrl = resolveUrl(blobUrl);
   const res = await fetch(fullUrl);
   if (!res.ok) throw new Error(`Failed to fetch blob: ${fullUrl}`);
