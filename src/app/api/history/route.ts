@@ -15,8 +15,15 @@ export async function GET(req: NextRequest) {
     targetUserId = searchParams.get("userId")!;
   }
 
+  const favoritesOnly = searchParams.get("favorites") === "true";
+
   const where: Record<string, unknown> = { userId: targetUserId };
   if (presetId) where.presetId = presetId;
+
+  // 즐겨찾기 필터: 즐겨찾기 이미지가 있는 요청만
+  if (favoritesOnly) {
+    where.generatedImages = { some: { favorite: true } };
+  }
 
   const requests = await prisma.generationRequest.findMany({
     where,
@@ -24,7 +31,8 @@ export async function GET(req: NextRequest) {
       preset: { select: { name: true, alias: true } },
       backgroundImage: { select: { name: true } },
       generatedImages: {
-        select: { id: true, mimeType: true, blobUrl: true },
+        where: favoritesOnly ? { favorite: true } : {},
+        select: { id: true, mimeType: true, blobUrl: true, favorite: true },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -43,6 +51,7 @@ export async function GET(req: NextRequest) {
       id: img.id,
       mimeType: img.mimeType,
       dataUrl: img.blobUrl,
+      favorite: img.favorite,
     })),
   }));
 

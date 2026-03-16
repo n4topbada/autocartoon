@@ -84,6 +84,7 @@ model GeneratedImage {
   requestId String
   blobUrl   String   // Vercel Blob URL
   mimeType  String   @default("image/png")
+  favorite  Boolean  @default(false)
   createdAt DateTime @default(now())
 
   request GenerationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)

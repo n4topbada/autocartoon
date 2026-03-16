@@ -48,6 +48,39 @@ async function main() {
     },
   });
 
+  // 기본 캐릭터 프리셋: wony
+  const wonyPreset = await prisma.characterPreset.upsert({
+    where: { alias: "wony" },
+    update: { name: "Wony" },
+    create: {
+      alias: "wony",
+      name: "Wony",
+      userId: null, // 시스템 기본 프리셋 (모든 유저에게 표시)
+    },
+  });
+
+  // 기존 이미지 삭제 후 재등록
+  await prisma.presetImage.deleteMany({ where: { presetId: wonyPreset.id } });
+
+  const wonyImages = [
+    { file: "으쌰워니.png", mime: "image/png" },
+    { file: "타임라인 10003.png", mime: "image/png" },
+    { file: "타임라인 10004.png", mime: "image/png" },
+    { file: "타임라인 10006.png", mime: "image/png" },
+  ];
+
+  for (let i = 0; i < wonyImages.length; i++) {
+    await prisma.presetImage.create({
+      data: {
+        presetId: wonyPreset.id,
+        blobUrl: `/presets/wony/${wonyImages[i].file}`,
+        mimeType: wonyImages[i].mime,
+        order: i,
+      },
+    });
+  }
+
+  console.log(`[OK] wony 기본 프리셋: ${wonyImages.length}개 이미지 등록`);
   console.log("Seed completed!");
 }
 

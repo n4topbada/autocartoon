@@ -24,6 +24,7 @@ interface GeneratedImageData {
   id: string;
   mimeType: string;
   dataUrl: string;
+  favorite?: boolean;
 }
 
 interface HistoryItem {
@@ -105,6 +106,10 @@ export default function Home() {
   const [viewingUserId, setViewingUserId] = useState<string | null>(null);
   const isAdmin = user?.role === "admin";
 
+  // My Library: 즐겨찾기 필터 + 삭제 확인
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
+
   // 관리자: 유저 목록 로드
   useEffect(() => {
     if (isAdmin) {
@@ -152,12 +157,13 @@ export default function Home() {
     const params = new URLSearchParams();
     if (selectedPreset) params.set("presetId", selectedPreset.id);
     if (isAdmin && viewingUserId) params.set("userId", viewingUserId);
+    if (showFavoritesOnly) params.set("favorites", "true");
     const q = params.toString() ? `?${params.toString()}` : "";
     fetch(`/api/history${q}`)
       .then((r) => r.json())
       .then((data) => { if (Array.isArray(data)) setHistory(data); })
       .catch(() => setHistory([]));
-  }, [selectedPreset, isAdmin, viewingUserId]);
+  }, [selectedPreset, isAdmin, viewingUserId, showFavoritesOnly]);
 
   useEffect(() => {
     loadHistory();
@@ -168,6 +174,42 @@ export default function Home() {
     setViewingUserId(userId === user?.id ? null : userId);
     setSelectedPreset(null);
     setResult(null);
+  };
+
+  // 즐겨찾기 토글
+  const handleToggleFavorite = async (imageId: string) => {
+    try {
+      const res = await fetch(`/api/images/${imageId}`, { method: "PATCH" });
+      if (!res.ok) return;
+      const data = await res.json();
+      // 로컬 상태 업데이트
+      setHistory((prev) =>
+        prev.map((item) => ({
+          ...item,
+          images: item.images.map((img) =>
+            img.id === imageId ? { ...img, favorite: data.favorite } : img
+          ),
+        }))
+      );
+    } catch { /* ignore */ }
+  };
+
+  // 이미지 삭제
+  const handleDeleteImage = async (imageId: string) => {
+    try {
+      const res = await fetch(`/api/images/${imageId}`, { method: "DELETE" });
+      if (!res.ok) return;
+      // 로컬 상태에서 이미지 제거
+      setHistory((prev) =>
+        prev
+          .map((item) => ({
+            ...item,
+            images: item.images.filter((img) => img.id !== imageId),
+          }))
+          .filter((item) => item.images.length > 0) // 이미지가 없는 히스토리 항목 제거
+      );
+      setDeletingImageId(null);
+    } catch { /* ignore */ }
   };
 
   // 파일 업로드 처리 (sketch/edit용)
@@ -530,6 +572,13 @@ export default function Home() {
           <section className={styles.section}>
             <div className={styles.libraryHeader}>
               <h2 className={styles.sectionTitle}>My Library</h2>
+              <button
+                className={`${styles.favFilterBtn} ${showFavoritesOnly ? styles.favFilterActive : ""}`}
+                onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+                title={showFavoritesOnly ? "전체 보기" : "즐겨찾기만"}
+              >
+                {showFavoritesOnly ? "\u2764\uFE0F" : "\u2661"}
+              </button>
               {isAdmin && allUsers.length > 0 && (
                 <select
                   className={styles.userSelect}
@@ -570,12 +619,29 @@ export default function Home() {
                     <p className={styles.historyPrompt}>{item.prompt}</p>
                     <div className={styles.historyImages}>
                       {item.images.map((img) => (
-                        <img
-                          key={img.id}
-                          src={img.dataUrl}
-                          alt="history"
-                          className={styles.historyThumb}
-                        />
+                        <div key={img.id} className={styles.imageWrapper}>
+                          <img
+                            src={img.dataUrl}
+                            alt="history"
+                            className={styles.historyThumb}
+                          />
+                          <div className={styles.imageActions}>
+                            <button
+                              className={`${styles.imageActionBtn} ${img.favorite ? styles.imageFavorited : ""}`}
+                              onClick={() => handleToggleFavorite(img.id)}
+                              title={img.favorite ? "즐겨찾기 해제" : "즐겨찾기"}
+                            >
+                              {img.favorite ? "❤️" : "🤍"}
+                            </button>
+                            <button
+                              className={`${styles.imageActionBtn} ${styles.imageDeleteBtn}`}
+                              onClick={() => setDeletingImageId(img.id)}
+                              title="삭제"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -587,6 +653,40 @@ export default function Home() {
         </>
         )}
       </main>
+
+      {/* 삭제 확인 모달 */}
+      {deletingImageId && (
+        <div
+          className={styles.modalOverlay}
+          onClick={() => setDeletingImageId(null)}
+        >
+          <div
+            className={styles.modal}
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: 360 }}
+          >
+            <h2 className={styles.modalTitle}>이미지 삭제</h2>
+            <p style={{ color: "var(--text-dim)", fontSize: 14, lineHeight: 1.5 }}>
+              이 이미지를 영구적으로 삭제하시겠습니까?<br />
+              삭제된 이미지는 복구할 수 없습니다.
+            </p>
+            <div className={styles.modalActions}>
+              <button
+                className={styles.modalCancel}
+                onClick={() => setDeletingImageId(null)}
+              >
+                취소
+              </button>
+              <button
+                className={styles.deleteConfirmBtn}
+                onClick={() => handleDeleteImage(deletingImageId)}
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 캐릭터 업로드 모달 */}
       {showUploadModal && (

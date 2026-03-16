@@ -505,12 +505,97 @@
   flex-wrap: wrap;
 }
 
+.imageWrapper {
+  position: relative;
+  width: 120px;
+  height: 120px;
+}
+
+.imageWrapper:hover .imageActions {
+  opacity: 1;
+}
+
 .historyThumb {
   width: 120px;
   height: 120px;
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid var(--border);
+}
+
+.imageActions {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.imageActionBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s;
+  padding: 0;
+}
+
+.imageActionBtn:hover {
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.imageFavorited {
+  background: rgba(220, 38, 38, 0.7);
+}
+
+.imageDeleteBtn:hover {
+  background: var(--danger);
+}
+
+/* 즐겨찾기 필터 버튼 */
+.favFilterBtn {
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.favFilterBtn:hover {
+  border-color: var(--accent);
+}
+
+.favFilterActive {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: #dc2626;
+}
+
+/* 삭제 확인 버튼 */
+.deleteConfirmBtn {
+  padding: 10px 24px;
+  background: var(--danger);
+  border: none;
+  border-radius: var(--radius);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.deleteConfirmBtn:hover {
+  opacity: 0.9;
 }
 
 /* ===== 모달 ===== */

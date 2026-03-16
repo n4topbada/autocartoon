@@ -14,7 +14,12 @@ export async function GET(req: NextRequest) {
     }
 
     const presets = await prisma.characterPreset.findMany({
-      where: { userId: targetUserId },
+      where: {
+        OR: [
+          { userId: targetUserId },
+          { userId: null }, // 시스템 기본 프리셋
+        ],
+      },
       include: {
         images: { orderBy: { order: "asc" }, take: 4 },
       },
