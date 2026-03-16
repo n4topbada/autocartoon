@@ -36,11 +36,15 @@ export async function uploadBase64ToBlob(
  */
 function resolveUrl(url: string): string {
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  // 상대 경로 (예: /presets/wony/...)인 경우 호스트 추가
+  // 상대 경로 (예: /presets/wony/...)인 경우 호스트 추가 + 한글/공백 인코딩
   const base =
     process.env.NEXT_PUBLIC_SITE_URL ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-  return `${base}${url}`;
+  const encoded = url
+    .split("/")
+    .map((seg) => encodeURIComponent(seg))
+    .join("/");
+  return `${base}${encoded}`;
 }
 
 export async function fetchBlobAsBase64(
