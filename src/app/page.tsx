@@ -94,6 +94,7 @@ export default function Home() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("character");
   const [presets, setPresets] = useState<Preset[]>([]);
+  const [presetsLoading, setPresetsLoading] = useState(true);
   const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null);
   const [mode, setMode] = useState<Mode>("text");
   const [prompt, setPrompt] = useState("");
@@ -132,6 +133,7 @@ export default function Home() {
   // 마켓플레이스
   const [showMarketplace, setShowMarketplace] = useState(false);
   const [marketplaceItems, setMarketplaceItems] = useState<MarketplaceItem[]>([]);
+  const [marketplaceLoading, setMarketplaceLoading] = useState(false);
   const [purchasing, setPurchasing] = useState<string | null>(null);
 
   // 관리자: 유저 목록 로드
@@ -149,11 +151,13 @@ export default function Home() {
 
   // 프리셋 목록 로드
   const loadPresets = useCallback(() => {
+    setPresetsLoading(true);
     const q = userParam ? `?${userParam}` : "";
     fetch(`/api/presets${q}`)
       .then((r) => r.json())
       .then((data) => { if (Array.isArray(data)) setPresets(data); })
-      .catch(() => setPresets([]));
+      .catch(() => setPresets([]))
+      .finally(() => setPresetsLoading(false));
   }, [userParam]);
 
   // 저장된 배경 로드
@@ -195,13 +199,16 @@ export default function Home() {
 
   // 마켓플레이스 로드
   const loadMarketplace = () => {
+    setMarketplaceLoading(true);
     fetch("/api/marketplace")
       .then((r) => r.json())
       .then((data) => { if (Array.isArray(data)) setMarketplaceItems(data); })
-      .catch(() => setMarketplaceItems([]));
+      .catch(() => setMarketplaceItems([]))
+      .finally(() => setMarketplaceLoading(false));
   };
 
   const handleOpenMarketplace = () => {
+    setMarketplaceItems([]);
     loadMarketplace();
     setShowMarketplace(true);
   };
@@ -483,28 +490,35 @@ export default function Home() {
                 <span className={styles.presetName}>새 캐릭터</span>
               </button>
 
-              {presets.map((p) => (
-                <button
-                  key={p.id}
-                  className={`${styles.presetCard} ${
-                    selectedPreset?.id === p.id ? styles.presetSelected : ""
-                  }`}
-                  onClick={() => setSelectedPreset(p)}
-                >
-                  <div
-                    className={
-                      p.images.length === 1
-                        ? styles.presetThumbSingle
-                        : styles.presetThumbGrid
-                    }
+              {presetsLoading ? (
+                <div className={styles.loadingSpinner}>
+                  <span className={styles.spinner} />
+                  <span>불러오는 중...</span>
+                </div>
+              ) : (
+                presets.map((p) => (
+                  <button
+                    key={p.id}
+                    className={`${styles.presetCard} ${
+                      selectedPreset?.id === p.id ? styles.presetSelected : ""
+                    }`}
+                    onClick={() => setSelectedPreset(p)}
                   >
-                    {p.images.map((img) => (
-                      <img key={img.id} src={img.dataUrl} alt={p.name} />
-                    ))}
-                  </div>
-                  <span className={styles.presetName}>{p.name}</span>
-                </button>
-              ))}
+                    <div
+                      className={
+                        p.images.length === 1
+                          ? styles.presetThumbSingle
+                          : styles.presetThumbGrid
+                      }
+                    >
+                      {p.images.map((img) => (
+                        <img key={img.id} src={img.dataUrl} alt={p.name} />
+                      ))}
+                    </div>
+                    <span className={styles.presetName}>{p.name}</span>
+                  </button>
+                ))
+              )}
             </div>
           </section>
 
@@ -793,7 +807,12 @@ export default function Home() {
             <p style={{ color: "var(--text-dim)", fontSize: 13 }}>
               캐릭터를 구매하여 이미지 생성에 사용하세요
             </p>
-            {marketplaceItems.length === 0 ? (
+            {marketplaceLoading ? (
+              <div className={styles.loadingSpinner} style={{ padding: "2rem 0" }}>
+                <span className={styles.spinner} />
+                <span>캐릭터 목록을 불러오는 중...</span>
+              </div>
+            ) : marketplaceItems.length === 0 ? (
               <p className={styles.emptyText}>등록된 캐릭터가 없습니다.</p>
             ) : (
               <div className={styles.marketGrid}>
