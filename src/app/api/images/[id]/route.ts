@@ -70,6 +70,16 @@ export async function DELETE(
     // DB 레코드 삭제
     await prisma.generatedImage.delete({ where: { id } });
 
+    // 해당 요청의 남은 이미지 수 확인 → 0이면 요청도 삭제
+    const remaining = await prisma.generatedImage.count({
+      where: { requestId: image.requestId },
+    });
+    if (remaining === 0) {
+      await prisma.generationRequest.delete({
+        where: { id: image.requestId },
+      });
+    }
+
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof AuthError) {

@@ -39,21 +39,23 @@ export async function GET(req: NextRequest) {
     take: limit,
   });
 
-  const result = requests.map((r) => ({
-    id: r.id,
-    mode: r.mode,
-    prompt: r.prompt,
-    background: r.background,
-    backgroundImageName: r.backgroundImage?.name || null,
-    presetName: r.preset.name,
-    createdAt: r.createdAt.toISOString(),
-    images: r.generatedImages.map((img) => ({
-      id: img.id,
-      mimeType: img.mimeType,
-      dataUrl: img.blobUrl,
-      favorite: img.favorite,
-    })),
-  }));
+  const result = requests
+    .filter((r) => r.generatedImages.length > 0)
+    .map((r) => ({
+      id: r.id,
+      mode: r.mode,
+      prompt: r.prompt,
+      background: r.background,
+      backgroundImageName: r.backgroundImage?.name || null,
+      presetName: r.preset.name,
+      createdAt: r.createdAt.toISOString(),
+      images: r.generatedImages.map((img) => ({
+        id: img.id,
+        mimeType: img.mimeType,
+        dataUrl: img.blobUrl,
+        favorite: img.favorite,
+      })),
+    }));
 
   return NextResponse.json(result);
   } catch (error) {
