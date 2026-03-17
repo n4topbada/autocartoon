@@ -52,6 +52,15 @@ function makeDataUrl(img: GeneratedImage) {
   return `data:${img.mimeType};base64,${img.base64}`;
 }
 
+async function safeFetchJson(res: Response) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(text.length > 100 ? text.slice(0, 100) + "..." : text || "서버 응답 오류");
+  }
+}
+
 export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground }: WorkflowCardProps) {
   // Step 1 state
   const [step1, setStep1] = useState<StepState>({
@@ -132,7 +141,7 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
         }),
       });
 
-      const data = await res.json();
+      const data = await safeFetchJson(res);
       if (!res.ok) throw new Error(data.error || "생성 실패");
 
       setStep1((s) => ({ ...s, generating: false, results: data.images }));
@@ -197,7 +206,7 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
         }),
       });
 
-      const data = await res.json();
+      const data = await safeFetchJson(res);
       if (!res.ok) throw new Error(data.error || "생성 실패");
 
       setStep2((s) => ({ ...s, generating: false, results: data.images }));
@@ -279,7 +288,7 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
         }),
       });
 
-      const data = await res.json();
+      const data = await safeFetchJson(res);
       if (!res.ok) throw new Error(data.error || "생성 실패");
 
       setStep3((s) => ({ ...s, generating: false, results: data.images }));

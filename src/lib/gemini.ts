@@ -102,6 +102,13 @@ export async function generateContentForBackground(
   const contents: Content[] = [{ role: "user", parts }];
   const config: Record<string, unknown> = {
     responseModalities: ["IMAGE", "TEXT"],
+    thinkingConfig: {
+      thinkingLevel: "MINIMAL",
+    },
+    imageConfig: {
+      aspectRatio: "16:9",
+      imageSize: "1K",
+    },
   };
 
   try {
