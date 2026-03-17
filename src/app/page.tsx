@@ -650,8 +650,22 @@ export default function Home() {
 
         {/* 우측: 결과 + 히스토리 */}
         <div className={styles.content}>
+          {/* 생성 중 스켈레톤 */}
+          {generating && (
+            <section className={styles.section}>
+              <h2 className={styles.sectionTitle}>
+                <LuSparkles size={14} /> 이미지 생성 중...
+              </h2>
+              <div className={styles.resultGrid}>
+                <div className={`${styles.resultCard} ${styles.skeletonCard}`}>
+                  <div className={styles.skeletonPulse} />
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* 생성 결과 */}
-          {result && result.length > 0 && (
+          {!generating && result && result.length > 0 && (
             <section className={styles.section}>
               <h2 className={styles.sectionTitle}>
                 <LuSparkles size={14} /> 생성 결과

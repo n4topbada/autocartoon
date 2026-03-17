@@ -143,6 +143,63 @@ export default function AdminPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Tier 정책 */}
+      <section className={styles.policySection}>
+        <h2 className={styles.policyTitle}>Tier 정책</h2>
+        <div className={styles.policyGrid}>
+          <div className={styles.policyCard}>
+            <div className={styles.policyCardHeader} style={{ borderColor: "#6b7280" }}>
+              <span className={styles.policyTier}>Free</span>
+              <span className={styles.policyPrice}>무료</span>
+            </div>
+            <ul className={styles.policyList}>
+              <li>월 <strong>5회</strong> 이미지 생성</li>
+              <li>기본 캐릭터 프리셋 사용</li>
+              <li>텍스트 모드</li>
+            </ul>
+          </div>
+          <div className={styles.policyCard}>
+            <div className={styles.policyCardHeader} style={{ borderColor: "#3b82f6" }}>
+              <span className={styles.policyTier}>Basic</span>
+              <span className={styles.policyPrice}>기본</span>
+            </div>
+            <ul className={styles.policyList}>
+              <li>월 <strong>30회</strong> 이미지 생성</li>
+              <li>모든 캐릭터 프리셋</li>
+              <li>텍스트 + 스케치 모드</li>
+            </ul>
+          </div>
+          <div className={styles.policyCard}>
+            <div className={styles.policyCardHeader} style={{ borderColor: "#8b5cf6" }}>
+              <span className={styles.policyTier}>Pro</span>
+              <span className={styles.policyPrice}>프로</span>
+            </div>
+            <ul className={styles.policyList}>
+              <li>월 <strong>100회</strong> 이미지 생성</li>
+              <li>모든 캐릭터 프리셋</li>
+              <li>전체 모드 (텍스트/스케치/편집)</li>
+              <li>커스텀 배경 업로드</li>
+            </ul>
+          </div>
+          <div className={styles.policyCard}>
+            <div className={styles.policyCardHeader} style={{ borderColor: "#f59e0b" }}>
+              <span className={styles.policyTier}>Enterprise</span>
+              <span className={styles.policyPrice}>엔터프라이즈</span>
+            </div>
+            <ul className={styles.policyList}>
+              <li><strong>무제한</strong> 이미지 생성</li>
+              <li>모든 캐릭터 프리셋</li>
+              <li>전체 모드 + 우선 처리</li>
+              <li>커스텀 배경 업로드</li>
+              <li>관리자 기능</li>
+            </ul>
+          </div>
+        </div>
+        <p className={styles.policyNote}>
+          * 월간 무료 사용량 초과 시, 🍌 바나나 1개가 차감됩니다. 매월 1일 자동 리셋됩니다.
+        </p>
+      </section>
     </div>
   );
 }
