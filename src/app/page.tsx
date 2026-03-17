@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import styles from "./page.module.css";
 import BackgroundGenerator from "@/components/BackgroundGenerator";
 import UserAvatar from "@/components/UserAvatar";
@@ -17,7 +17,7 @@ import {
   LuImage,
   LuUpload,
   LuPaintbrush,
-  LuLayoutGrid,
+  LuUsers,
 } from "react-icons/lu";
 
 type Tab = "character" | "background";
@@ -63,6 +63,17 @@ interface SavedBg {
   dataUrl: string;
 }
 
+// 개별 이미지 + 메타 (플랫 구조)
+interface FlatImage {
+  id: string;
+  dataUrl: string;
+  favorite: boolean;
+  mode: string;
+  presetName: string;
+  prompt: string;
+  createdAt: string;
+}
+
 const BACKGROUNDS = [
   "없음",
   "학교 교실",
@@ -105,7 +116,6 @@ export default function Home() {
     preview: string;
   } | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [result, setResult] = useState<GeneratedImageData[] | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -126,11 +136,11 @@ export default function Home() {
   const [viewingUserId, setViewingUserId] = useState<string | null>(null);
   const isAdmin = user?.role === "admin";
 
-  // My Library: 즐겨찾기 필터 + 삭제 확인
+  // 즐겨찾기 필터 + 삭제 확인
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
 
-  // 마켓플레이스
+  // 캐릭터 모달
   const [showMarketplace, setShowMarketplace] = useState(false);
   const [marketplaceItems, setMarketplaceItems] = useState<MarketplaceItem[]>([]);
   const [marketplaceLoading, setMarketplaceLoading] = useState(false);
@@ -173,7 +183,6 @@ export default function Home() {
     loadPresets();
   }, [loadPresets]);
 
-  // 탭 전환 시 배경 목록 리로드
   useEffect(() => {
     if (activeTab === "character") {
       loadSavedBackgrounds();
@@ -183,7 +192,6 @@ export default function Home() {
   // 히스토리 로드
   const loadHistory = useCallback(() => {
     const params = new URLSearchParams();
-    if (selectedPreset) params.set("presetId", selectedPreset.id);
     if (isAdmin && viewingUserId) params.set("userId", viewingUserId);
     if (showFavoritesOnly) params.set("favorites", "true");
     const q = params.toString() ? `?${params.toString()}` : "";
@@ -191,13 +199,28 @@ export default function Home() {
       .then((r) => r.json())
       .then((data) => { if (Array.isArray(data)) setHistory(data); })
       .catch(() => setHistory([]));
-  }, [selectedPreset, isAdmin, viewingUserId, showFavoritesOnly]);
+  }, [isAdmin, viewingUserId, showFavoritesOnly]);
 
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
 
-  // 마켓플레이스 로드
+  // 히스토리를 플랫 이미지 배열로 변환
+  const flatImages: FlatImage[] = useMemo(() => {
+    return history.flatMap((item) =>
+      item.images.map((img) => ({
+        id: img.id,
+        dataUrl: img.dataUrl,
+        favorite: !!img.favorite,
+        mode: item.mode,
+        presetName: item.presetName,
+        prompt: item.prompt,
+        createdAt: item.createdAt,
+      }))
+    );
+  }, [history]);
+
+  // 캐릭터 모달 로드
   const loadMarketplace = () => {
     setMarketplaceLoading(true);
     fetch("/api/marketplace")
@@ -226,7 +249,6 @@ export default function Home() {
         setError(data.error || "구매 실패");
         return;
       }
-      // 마켓플레이스 & 프리셋 목록 갱신
       loadMarketplace();
       loadPresets();
     } catch {
@@ -236,11 +258,10 @@ export default function Home() {
     }
   };
 
-  // 관리자: 유저 전환 시 선택된 프리셋 초기화
+  // 관리자: 유저 전환
   const handleUserSwitch = (userId: string) => {
     setViewingUserId(userId === user?.id ? null : userId);
     setSelectedPreset(null);
-    setResult(null);
   };
 
   // 즐겨찾기 토글
@@ -295,10 +316,8 @@ export default function Home() {
   const handleCharImageAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-
     const remaining = 4 - uploadingImages.length;
     const toProcess = Array.from(files).slice(0, remaining);
-
     toProcess.forEach((file) => {
       const reader = new FileReader();
       reader.onload = () => {
@@ -312,7 +331,6 @@ export default function Home() {
       };
       reader.readAsDataURL(file);
     });
-
     e.target.value = "";
   };
 
@@ -325,7 +343,6 @@ export default function Home() {
     if (!newCharName.trim() || uploadingImages.length === 0) return;
     setUploading(true);
     setError(null);
-
     try {
       const res = await fetch("/api/presets", {
         method: "POST",
@@ -338,10 +355,8 @@ export default function Home() {
           })),
         }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "생성 실패");
-
       loadPresets();
       setSelectedPreset(data);
       setShowUploadModal(false);
@@ -354,13 +369,11 @@ export default function Home() {
     }
   };
 
-  // 배경 드롭다운 변경 → 이미지 선택 해제
   const handleBgDropdown = (value: string) => {
     setBackground(value);
     if (value !== "없음") setSelectedBgImageId(null);
   };
 
-  // 배경 이미지 선택 → 드롭다운 초기화
   const handleBgImageSelect = (id: string) => {
     if (selectedBgImageId === id) {
       setSelectedBgImageId(null);
@@ -381,7 +394,6 @@ export default function Home() {
     if (!selectedPreset || !prompt.trim()) return;
     setGenerating(true);
     setError(null);
-    setResult(null);
 
     try {
       const body: Record<string, unknown> = {
@@ -409,8 +421,6 @@ export default function Home() {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "생성 실패");
-
-      setResult(data.images);
       loadHistory();
     } catch (err) {
       setError(err instanceof Error ? err.message : "오류 발생");
@@ -458,6 +468,25 @@ export default function Home() {
         <UserAvatar />
       </header>
 
+      {/* 관리자: 유저 전환 바 */}
+      {isAdmin && allUsers.length > 0 && activeTab === "character" && (
+        <div className={styles.adminBar}>
+          <LuUsers size={14} />
+          <span className={styles.adminBarLabel}>계정 보기:</span>
+          <select
+            className={styles.adminUserSelect}
+            value={viewingUserId || user?.id || ""}
+            onChange={(e) => handleUserSwitch(e.target.value)}
+          >
+            {allUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name || u.email.split("@")[0]} ({u.email})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <main className={styles.main}>
         {activeTab === "background" ? (
           <BackgroundGenerator />
@@ -479,7 +508,6 @@ export default function Home() {
               </button>
             </div>
             <div className={styles.presetGrid}>
-              {/* 새 캐릭터 추가 버튼 */}
               <button
                 className={styles.presetCard}
                 onClick={() => setShowUploadModal(true)}
@@ -556,7 +584,6 @@ export default function Home() {
               ))}
             </select>
 
-            {/* 저장된 배경 이미지 */}
             {savedBackgrounds.length > 0 && (
               <>
                 <span className={styles.bgSectionLabel}>저장된 배경</span>
@@ -648,121 +675,66 @@ export default function Home() {
           {error && <p className={styles.error}>{error}</p>}
         </aside>
 
-        {/* 우측: 결과 + 히스토리 */}
+        {/* 우측: 통합 갤러리 */}
         <div className={styles.content}>
-          {/* 생성 중 스켈레톤 */}
-          {generating && (
-            <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>
-                <LuSparkles size={14} /> 이미지 생성 중...
-              </h2>
-              <div className={styles.resultGrid}>
-                <div className={`${styles.resultCard} ${styles.skeletonCard}`}>
-                  <div className={styles.skeletonPulse} />
+          <div className={styles.galleryHeader}>
+            <h2 className={styles.sectionTitle}>
+              <LuSparkles size={14} /> My Gallery
+            </h2>
+            <button
+              className={`${styles.favFilterBtn} ${showFavoritesOnly ? styles.favFilterActive : ""}`}
+              onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+              title={showFavoritesOnly ? "전체 보기" : "즐겨찾기만"}
+            >
+              <LuHeart size={14} />
+            </button>
+          </div>
+
+          <div className={styles.gallery}>
+            {/* 생성 중 스켈레톤 */}
+            {generating && (
+              <div className={styles.galleryCard}>
+                <div className={styles.skeletonPulse} />
+                <div className={styles.galleryCaption}>
+                  <span className={styles.galleryCaptionText}>생성 중...</span>
                 </div>
               </div>
-            </section>
-          )}
+            )}
 
-          {/* 생성 결과 */}
-          {!generating && result && result.length > 0 && (
-            <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>
-                <LuSparkles size={14} /> 생성 결과
-              </h2>
-              <div className={styles.resultGrid}>
-                {result.map((img) => (
-                  <div key={img.id} className={styles.resultCard}>
-                    <img src={img.dataUrl} alt="generated" />
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* My Library */}
-          <section className={styles.section}>
-            <div className={styles.libraryHeader}>
-              <h2 className={styles.sectionTitle}>
-                <LuLayoutGrid size={14} /> My Library
-              </h2>
-              <button
-                className={`${styles.favFilterBtn} ${showFavoritesOnly ? styles.favFilterActive : ""}`}
-                onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
-                title={showFavoritesOnly ? "전체 보기" : "즐겨찾기만"}
-              >
-                <LuHeart size={14} />
-              </button>
-              {isAdmin && allUsers.length > 0 && (
-                <select
-                  className={styles.userSelect}
-                  value={viewingUserId || user?.id || ""}
-                  onChange={(e) => handleUserSwitch(e.target.value)}
-                >
-                  {allUsers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name || u.email.split("@")[0]} ({u.email})
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-            {history.length === 0 ? (
+            {flatImages.length === 0 && !generating && (
               <p className={styles.emptyText}>
                 아직 생성된 이미지가 없습니다.
               </p>
-            ) : (
-              <div className={styles.historyList}>
-                {history.map((item) => (
-                  <div key={item.id} className={styles.historyItem}>
-                    <div className={styles.historyMeta}>
-                      <span className={styles.historyMode}>{item.mode}</span>
-                      <span className={styles.historyPreset}>
-                        {item.presetName}
-                      </span>
-                      <span className={styles.historyDate}>
-                        {new Date(item.createdAt).toLocaleString("ko-KR")}
-                      </span>
-                    </div>
-                    {item.backgroundImageName && (
-                      <span className={styles.historyBg}>[이미지] {item.backgroundImageName}</span>
-                    )}
-                    {item.background && !item.backgroundImageName && (
-                      <span className={styles.historyBg}>{item.background}</span>
-                    )}
-                    <p className={styles.historyPrompt}>{item.prompt}</p>
-                    <div className={styles.historyImages}>
-                      {item.images.map((img) => (
-                        <div key={img.id} className={styles.imageWrapper}>
-                          <img
-                            src={img.dataUrl}
-                            alt="history"
-                            className={styles.historyThumb}
-                          />
-                          <div className={styles.imageActions}>
-                            <button
-                              className={`${styles.imageActionBtn} ${img.favorite ? styles.imageFavorited : ""}`}
-                              onClick={() => handleToggleFavorite(img.id)}
-                              title={img.favorite ? "즐겨찾기 해제" : "즐겨찾기"}
-                            >
-                              <LuHeart size={12} />
-                            </button>
-                            <button
-                              className={`${styles.imageActionBtn} ${styles.imageDeleteBtn}`}
-                              onClick={() => setDeletingImageId(img.id)}
-                              title="삭제"
-                            >
-                              <LuTrash2 size={12} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
             )}
-          </section>
+
+            {flatImages.map((img) => (
+              <div key={img.id} className={styles.galleryCard}>
+                <img src={img.dataUrl} alt="generated" className={styles.galleryImg} />
+                <div className={styles.galleryCaption}>
+                  <span className={styles.galleryCaptionMode}>{img.mode}</span>
+                  <span className={styles.galleryCaptionText}>
+                    {img.presetName} &middot; {img.prompt.length > 20 ? img.prompt.slice(0, 20) + "..." : img.prompt}
+                  </span>
+                </div>
+                <div className={styles.galleryActions}>
+                  <button
+                    className={`${styles.galleryActionBtn} ${img.favorite ? styles.galleryFavorited : ""}`}
+                    onClick={() => handleToggleFavorite(img.id)}
+                    title={img.favorite ? "즐겨찾기 해제" : "즐겨찾기"}
+                  >
+                    <LuHeart size={14} />
+                  </button>
+                  <button
+                    className={`${styles.galleryActionBtn} ${styles.galleryDeleteBtn}`}
+                    onClick={() => setDeletingImageId(img.id)}
+                    title="삭제"
+                  >
+                    <LuTrash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
         </>
         )}
@@ -804,7 +776,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* 마켓플레이스 모달 */}
+      {/* 캐릭터 모달 */}
       {showMarketplace && (
         <div
           className={styles.modalOverlay}
