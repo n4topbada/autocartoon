@@ -509,11 +509,13 @@
 /* 결과 그리드 */
 .resultGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, 512px);
   gap: 16px;
 }
 
 .resultCard {
+  width: 512px;
+  height: 512px;
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--surface);
@@ -521,7 +523,9 @@
 }
 
 .resultCard img {
-  width: 100%;
+  width: 512px;
+  height: 512px;
+  object-fit: contain;
   display: block;
 }
 
