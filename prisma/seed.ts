@@ -8,10 +8,10 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: "wony@wonyframe.com" },
-    update: {},
+    update: { passwordHash: hash("1234!@#$") },
     create: {
       email: "wony@wonyframe.com",
-      passwordHash: hash("1234!@#"),
+      passwordHash: hash("1234!@#$"),
       name: "Wony",
       role: "admin",
       tier: "enterprise",
@@ -22,10 +22,10 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: "admin@wonyframe.com" },
-    update: {},
+    update: { passwordHash: hash("1234!@#$") },
     create: {
       email: "admin@wonyframe.com",
-      passwordHash: hash("1234!@#"),
+      passwordHash: hash("1234!@#$"),
       name: "Admin",
       role: "admin",
       tier: "enterprise",
@@ -36,7 +36,7 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: "n4topbada@gmail.com" },
-    update: {},
+    update: { passwordHash: hash("1234!@#$") },
     create: {
       email: "n4topbada@gmail.com",
       passwordHash: hash("1234!@#$"),
@@ -97,12 +97,12 @@ async function main() {
   // 캐릭터 프리셋: anian (1 바나나)
   const anianPreset = await prisma.characterPreset.upsert({
     where: { alias: "anian" },
-    update: { name: "Anian", price: 1 },
+    update: { name: "Anian", price: 0 },
     create: {
       alias: "anian",
       name: "Anian",
       userId: null,
-      price: 1,
+      price: 0,
     },
   });
 
@@ -127,7 +127,7 @@ async function main() {
     });
   }
 
-  console.log(`[OK] anian 프리셋: ${anianImages.length}개 이미지 등록 (1 바나나)`);
+  console.log(`[OK] anian 프리셋: ${anianImages.length}개 이미지 등록 (무료)`);
 
   console.log("Seed completed!");
 }

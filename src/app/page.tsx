@@ -472,10 +472,10 @@ export default function Home() {
               <button
                 className={styles.marketplaceBtn}
                 onClick={handleOpenMarketplace}
-                title="마켓플레이스"
+                title="캐릭터"
               >
                 <LuStore size={14} />
-                마켓
+                캐릭터
               </button>
             </div>
             <div className={styles.presetGrid}>
@@ -802,15 +802,15 @@ export default function Home() {
             style={{ width: 560, maxHeight: "80vh", overflow: "auto" }}
           >
             <h2 className={styles.modalTitle}>
-              <LuStore size={18} /> 캐릭터 마켓플레이스
+              <LuStore size={18} /> 캐릭터
             </h2>
             <p style={{ color: "var(--text-dim)", fontSize: 13 }}>
-              캐릭터를 구매하여 이미지 생성에 사용하세요
+              사용할 캐릭터를 선택하세요
             </p>
             {marketplaceLoading ? (
               <div className={styles.loadingSpinner} style={{ padding: "2rem 0" }}>
                 <span className={styles.spinner} />
-                <span>캐릭터 목록을 불러오는 중...</span>
+                <span>불러오는 중...</span>
               </div>
             ) : marketplaceItems.length === 0 ? (
               <p className={styles.emptyText}>등록된 캐릭터가 없습니다.</p>
