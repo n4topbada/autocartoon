@@ -189,25 +189,24 @@ export default function Home() {
     }
   }, [activeTab, loadSavedBackgrounds]);
 
-  // 히스토리 로드
+  // 히스토리 로드 (전체 데이터, 필터는 클라이언트에서)
   const loadHistory = useCallback(() => {
     const params = new URLSearchParams();
     if (isAdmin && viewingUserId) params.set("userId", viewingUserId);
-    if (showFavoritesOnly) params.set("favorites", "true");
     const q = params.toString() ? `?${params.toString()}` : "";
     fetch(`/api/history${q}`)
       .then((r) => r.json())
       .then((data) => { if (Array.isArray(data)) setHistory(data); })
       .catch(() => setHistory([]));
-  }, [isAdmin, viewingUserId, showFavoritesOnly]);
+  }, [isAdmin, viewingUserId]);
 
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
 
-  // 히스토리를 플랫 이미지 배열로 변환
+  // 히스토리를 플랫 이미지 배열로 변환 + 클라이언트 필터링
   const flatImages: FlatImage[] = useMemo(() => {
-    return history.flatMap((item) =>
+    const all = history.flatMap((item) =>
       item.images.map((img) => ({
         id: img.id,
         dataUrl: img.dataUrl,
@@ -218,7 +217,8 @@ export default function Home() {
         createdAt: item.createdAt,
       }))
     );
-  }, [history]);
+    return showFavoritesOnly ? all.filter((img) => img.favorite) : all;
+  }, [history, showFavoritesOnly]);
 
   // 캐릭터 모달 로드
   const loadMarketplace = () => {
@@ -264,21 +264,29 @@ export default function Home() {
     setSelectedPreset(null);
   };
 
-  // 즐겨찾기 토글
-  const handleToggleFavorite = async (imageId: string) => {
-    try {
-      const res = await fetch(`/api/images/${imageId}`, { method: "PATCH" });
-      if (!res.ok) return;
-      const data = await res.json();
+  // 즐겨찾기 토글 (낙관적 업데이트)
+  const handleToggleFavorite = (imageId: string) => {
+    // 즉시 UI 갱신
+    setHistory((prev) =>
+      prev.map((item) => ({
+        ...item,
+        images: item.images.map((img) =>
+          img.id === imageId ? { ...img, favorite: !img.favorite } : img
+        ),
+      }))
+    );
+    // 백그라운드로 서버 요청
+    fetch(`/api/images/${imageId}`, { method: "PATCH" }).catch(() => {
+      // 실패 시 원복
       setHistory((prev) =>
         prev.map((item) => ({
           ...item,
           images: item.images.map((img) =>
-            img.id === imageId ? { ...img, favorite: data.favorite } : img
+            img.id === imageId ? { ...img, favorite: !img.favorite } : img
           ),
         }))
       );
-    } catch { /* ignore */ }
+    });
   };
 
   // 이미지 삭제
