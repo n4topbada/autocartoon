@@ -33,34 +33,35 @@ export async function GET(req: NextRequest) {
       prisma.boardPost.count(),
     ]);
 
-    // Resolve first imageId to get preview URL
-    const postsWithPreview = await Promise.all(
-      posts.map(async (post) => {
-        let previewImageUrl: string | null = null;
-        if (post.imageIds.length > 0) {
-          const image = await prisma.generatedImage.findUnique({
-            where: { id: post.imageIds[0] },
-            select: { blobUrl: true },
-          });
-          previewImageUrl = image?.blobUrl ?? null;
-        }
-        return {
-          id: post.id,
-          title: post.title,
-          content: post.content,
-          imageIds: post.imageIds,
-          links: post.links,
-          previewImageUrl,
-          createdAt: post.createdAt.toISOString(),
-          updatedAt: post.updatedAt.toISOString(),
-          user: post.user,
-          commentCount: post._count.comments,
-          likeCount: post._count.likes,
-          liked: (post as unknown as { likes?: { id: string }[] }).likes?.length ? true : false,
-          pinned: post.pinned,
-        };
-      })
-    );
+    // 모든 첫번째 imageId를 모아서 한번에 조회 (N+1 → 1 쿼리)
+    const firstImageIds = posts
+      .map((p) => p.imageIds[0])
+      .filter((id): id is string => !!id);
+
+    const previewImages = firstImageIds.length > 0
+      ? await prisma.generatedImage.findMany({
+          where: { id: { in: firstImageIds } },
+          select: { id: true, blobUrl: true },
+        })
+      : [];
+
+    const previewMap = new Map(previewImages.map((img) => [img.id, img.blobUrl]));
+
+    const postsWithPreview = posts.map((post) => ({
+      id: post.id,
+      title: post.title,
+      content: post.content,
+      imageIds: post.imageIds,
+      links: post.links,
+      previewImageUrl: post.imageIds[0] ? previewMap.get(post.imageIds[0]) ?? null : null,
+      createdAt: post.createdAt.toISOString(),
+      updatedAt: post.updatedAt.toISOString(),
+      user: post.user,
+      commentCount: post._count.comments,
+      likeCount: post._count.likes,
+      liked: (post as unknown as { likes?: { id: string }[] }).likes?.length ? true : false,
+      pinned: post.pinned,
+    }));
 
     return NextResponse.json({
       posts: postsWithPreview,
