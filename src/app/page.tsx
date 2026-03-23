@@ -147,8 +147,7 @@ export default function Home() {
 
   // Transform 모드: 4슬롯
   const [transformSlots, setTransformSlots] = useState<(SlotImage | null)[]>([null, null, null, null]);
-  const [slotUrlInputs, setSlotUrlInputs] = useState<string[]>(["", "", "", ""]);
-  const [slotUrlLoading, setSlotUrlLoading] = useState<boolean[]>([false, false, false, false]);
+  // (URL input is now global, not per-slot)
   const transformFileRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
 
   // 캐릭터 모달
@@ -421,23 +420,28 @@ export default function Home() {
     e.target.value = "";
   };
 
-  // Transform 슬롯: URL 로드
-  const handleTransformUrlLoad = async (index: number) => {
-    const url = slotUrlInputs[index]?.trim();
+  // Transform 슬롯: URL 로드 (첫 번째 빈 슬롯에 자동 삽입)
+  const [globalUrlInput, setGlobalUrlInput] = useState("");
+  const [globalUrlLoading, setGlobalUrlLoading] = useState(false);
+
+  const handleTransformUrlLoad = async () => {
+    const url = globalUrlInput.trim();
     if (!url) return;
-    setSlotUrlLoading((prev) => { const n = [...prev]; n[index] = true; return n; });
+    const emptyIndex = transformSlots.findIndex((s) => s === null);
+    if (emptyIndex === -1) { setError("모든 슬롯이 사용 중입니다."); return; }
+    setGlobalUrlLoading(true);
     try {
       const resized = await fetchImageFromUrl(url);
       setTransformSlots((prev) => {
         const next = [...prev];
-        next[index] = resized;
+        next[emptyIndex] = resized;
         return next;
       });
-      setSlotUrlInputs((prev) => { const n = [...prev]; n[index] = ""; return n; });
+      setGlobalUrlInput("");
     } catch {
       setError("URL 이미지 로드 실패 (CORS 제한일 수 있음)");
     } finally {
-      setSlotUrlLoading((prev) => { const n = [...prev]; n[index] = false; return n; });
+      setGlobalUrlLoading(false);
     }
   };
 
@@ -634,31 +638,31 @@ export default function Home() {
                           className={styles.transformSlotUploadBtn}
                           onClick={() => transformFileRefs.current[i]?.click()}
                         >
-                          <LuUpload size={16} />
-                          <span>파일 / Ctrl+V</span>
+                          <LuUpload size={14} />
+                          <span>Ctrl+V</span>
                         </button>
-                        <div className={styles.transformSlotUrl}>
-                          <input
-                            type="text"
-                            className={styles.slotUrlInput}
-                            placeholder="URL 입력"
-                            value={slotUrlInputs[i]}
-                            onChange={(e) => setSlotUrlInputs((prev) => { const n = [...prev]; n[i] = e.target.value; return n; })}
-                            onKeyDown={(e) => { if (e.key === "Enter") handleTransformUrlLoad(i); }}
-                            onPaste={(e) => handleTransformPaste(i, e)}
-                          />
-                          <button
-                            className={styles.slotUrlBtn}
-                            onClick={() => handleTransformUrlLoad(i)}
-                            disabled={slotUrlLoading[i] || !slotUrlInputs[i]?.trim()}
-                          >
-                            {slotUrlLoading[i] ? "..." : <LuLink size={12} />}
-                          </button>
-                        </div>
                       </div>
                     )}
                   </div>
                 ))}
+              </div>
+              {/* 공통 URL 입력 */}
+              <div className={styles.globalUrlRow}>
+                <input
+                  type="text"
+                  className={styles.slotUrlInput}
+                  placeholder="이미지 URL 입력 → 빈 슬롯에 자동 추가"
+                  value={globalUrlInput}
+                  onChange={(e) => setGlobalUrlInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleTransformUrlLoad(); }}
+                />
+                <button
+                  className={styles.slotUrlBtn}
+                  onClick={() => handleTransformUrlLoad()}
+                  disabled={globalUrlLoading || !globalUrlInput.trim()}
+                >
+                  {globalUrlLoading ? "..." : <LuLink size={12} />}
+                </button>
               </div>
             </section>
 

@@ -22,8 +22,10 @@
   background: none;
   border: 1px solid var(--border);
   border-radius: 50%;
-  width: 36px;
-  height: 36px;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -38,8 +40,8 @@
 }
 
 .robotWonyIcon {
-  width: 28px;
-  height: 28px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -1032,6 +1034,7 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
+  max-width: 80%;
 }
 
 .transformSlot {
@@ -1118,6 +1121,13 @@
   display: flex;
   gap: 4px;
   width: 100%;
+}
+
+.globalUrlRow {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  max-width: 80%;
 }
 
 .slotUrlInput {
