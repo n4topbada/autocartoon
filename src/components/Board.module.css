@@ -63,6 +63,12 @@
   transition: border-color 0.15s;
 }
 
+.postCardPinned {
+  border-color: var(--accent);
+  background: rgba(124, 58, 237, 0.04);
+  border-left: 3px solid var(--accent);
+}
+
 .postCard:hover {
   border-color: var(--accent);
 }

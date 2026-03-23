@@ -410,7 +410,7 @@ export default function Board() {
           {posts.map((post) => (
             <div
               key={post.id}
-              className={styles.postCard}
+              className={`${styles.postCard} ${post.pinned ? styles.postCardPinned : ""}`}
               onClick={() => loadPost(post.id)}
             >
               {post.imageUrls.length > 0 && (
