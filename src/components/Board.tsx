@@ -10,6 +10,7 @@ import {
   LuLink2,
   LuChevronLeft,
   LuSend,
+  LuHeart,
 } from "react-icons/lu";
 
 interface PostSummary {
@@ -19,6 +20,8 @@ interface PostSummary {
   userName: string;
   userEmail: string;
   commentCount: number;
+  likeCount: number;
+  liked: boolean;
   imageUrls: string[];
   links: string[];
   createdAt: string;
@@ -31,6 +34,8 @@ interface PostDetail extends PostSummary {
     userName: string;
     createdAt: string;
     userId: string;
+    likeCount: number;
+    liked: boolean;
   }[];
 }
 
@@ -68,6 +73,8 @@ export default function Board() {
             userName: (p.user as { name?: string; email?: string })?.name || (p.user as { email?: string })?.email?.toString().split("@")[0] || "",
             userEmail: (p.user as { email?: string })?.email || "",
             commentCount: (p.commentCount ?? (p as { _count?: { comments?: number } })._count?.comments ?? 0) as number,
+            likeCount: (p.likeCount ?? 0) as number,
+            liked: !!p.liked,
             imageUrls: (p.previewImageUrl ? [p.previewImageUrl] : []) as string[],
             links: (p.links ?? []) as string[],
             createdAt: p.createdAt as string,
@@ -93,15 +100,19 @@ export default function Board() {
         userName: data.user?.name || data.user?.email?.split("@")[0] || "",
         userEmail: data.user?.email || "",
         commentCount: data.comments?.length ?? 0,
+        likeCount: data.likeCount ?? 0,
+        liked: !!data.liked,
         imageUrls: (data.images || []).map((img: { blobUrl: string }) => img.blobUrl),
         links: data.links || [],
         createdAt: data.createdAt,
-        comments: (data.comments || []).map((c: { id: string; content: string; createdAt: string; userId: string; user?: { name?: string; email?: string } }) => ({
+        comments: (data.comments || []).map((c: { id: string; content: string; createdAt: string; userId: string; likeCount?: number; liked?: boolean; user?: { name?: string; email?: string } }) => ({
           id: c.id,
           content: c.content,
           userName: c.user?.name || c.user?.email?.split("@")[0] || "",
           createdAt: c.createdAt,
           userId: c.userId,
+          likeCount: c.likeCount ?? 0,
+          liked: !!c.liked,
         })),
       });
     }
@@ -159,6 +170,27 @@ export default function Board() {
     }
   };
 
+  // 글 좋아요 토글
+  const handlePostLike = async (postId: string) => {
+    // 낙관적 업데이트
+    if (selectedPost?.id === postId) {
+      setSelectedPost((prev) => prev ? { ...prev, liked: !prev.liked, likeCount: prev.likeCount + (prev.liked ? -1 : 1) } : prev);
+    }
+    setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, liked: !p.liked, likeCount: p.likeCount + (p.liked ? -1 : 1) } : p));
+    await fetch(`/api/board/${postId}/like`, { method: "POST" }).catch(() => {});
+  };
+
+  // 댓글 좋아요 토글
+  const handleCommentLike = async (postId: string, commentId: string) => {
+    if (selectedPost) {
+      setSelectedPost((prev) => prev ? {
+        ...prev,
+        comments: prev.comments.map((c) => c.id === commentId ? { ...c, liked: !c.liked, likeCount: c.likeCount + (c.liked ? -1 : 1) } : c),
+      } : prev);
+    }
+    await fetch(`/api/board/${postId}/comments/${commentId}/like`, { method: "POST" }).catch(() => {});
+  };
+
   const addLink = () => {
     const url = linkInput.trim();
     if (!url) return;
@@ -184,6 +216,12 @@ export default function Board() {
           <div className={styles.articleMeta}>
             <span>{selectedPost.userName}</span>
             <span>{formatDate(selectedPost.createdAt)}</span>
+            <button
+              className={`${styles.likeBtn} ${selectedPost.liked ? styles.likeBtnActive : ""}`}
+              onClick={() => handlePostLike(selectedPost.id)}
+            >
+              <LuHeart size={13} /> {selectedPost.likeCount}
+            </button>
             {(selectedPost.userEmail === user?.email || isAdmin) && (
               <button className={styles.deleteBtn} onClick={() => handleDelete(selectedPost.id)}>
                 <LuTrash2 size={12} /> 삭제
@@ -235,6 +273,12 @@ export default function Board() {
                   <span className={styles.commentDate}>{formatDate(c.createdAt)}</span>
                 </div>
                 <p className={styles.commentContent}>{c.content}</p>
+                <button
+                  className={`${styles.likeBtn} ${styles.likeBtnSmall} ${c.liked ? styles.likeBtnActive : ""}`}
+                  onClick={() => handleCommentLike(selectedPost.id, c.id)}
+                >
+                  <LuHeart size={11} /> {c.likeCount}
+                </button>
               </div>
             ))}
             <div className={styles.commentInput}>
@@ -353,6 +397,7 @@ export default function Board() {
                 <div className={styles.postMeta}>
                   <span>{post.userName}</span>
                   <span>{formatDate(post.createdAt)}</span>
+                  <span><LuHeart size={11} /> {post.likeCount}</span>
                   <span><LuMessageSquare size={11} /> {post.commentCount}</span>
                 </div>
               </div>

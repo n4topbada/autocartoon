@@ -9,6 +9,14 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(Math.max(1, Number(searchParams.get("limit") || "20")), 100);
     const skip = (page - 1) * limit;
 
+    // 현재 사용자 (좋아요 여부 체크용, 비로그인 허용)
+    let currentUserId: string | null = null;
+    try {
+      const { requireAuth } = await import("@/lib/auth");
+      const session = await requireAuth();
+      currentUserId = session.userId;
+    } catch { /* 비로그인 */ }
+
     const [posts, total] = await Promise.all([
       prisma.boardPost.findMany({
         skip,
@@ -16,7 +24,10 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: "desc" },
         include: {
           user: { select: { name: true, email: true } },
-          _count: { select: { comments: true } },
+          _count: { select: { comments: true, likes: true } },
+          ...(currentUserId
+            ? { likes: { where: { userId: currentUserId }, select: { id: true } } }
+            : {}),
         },
       }),
       prisma.boardPost.count(),
@@ -44,6 +55,8 @@ export async function GET(req: NextRequest) {
           updatedAt: post.updatedAt.toISOString(),
           user: post.user,
           commentCount: post._count.comments,
+          likeCount: post._count.likes,
+          liked: (post as unknown as { likes?: { id: string }[] }).likes?.length ? true : false,
         };
       })
     );

@@ -17,7 +17,7 @@ async function buildSystemPrompt(userId: string): Promise<string> {
     prisma.boardPost.findMany({
       orderBy: { createdAt: "desc" },
       take: 15,
-      select: { title: true, content: true },
+      select: { title: true, content: true, _count: { select: { likes: true, comments: true } } },
     }),
     prisma.user.findUnique({
       where: { id: userId },
@@ -34,8 +34,10 @@ async function buildSystemPrompt(userId: string): Promise<string> {
   const postsSection = recentPosts.length
     ? recentPosts
         .map(
-          (p) =>
-            `- ${p.title}: ${p.content.length > 80 ? p.content.slice(0, 80) + "..." : p.content}`
+          (p) => {
+            const counts = (p as unknown as { _count: { likes: number; comments: number } })._count;
+            return `- ${p.title} (❤️${counts.likes} 💬${counts.comments}): ${p.content.length > 80 ? p.content.slice(0, 80) + "..." : p.content}`;
+          }
         )
         .join("\n")
     : "최근 게시글이 없습니다.";

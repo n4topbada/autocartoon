@@ -123,8 +123,8 @@
 
 /* 사이드바 */
 .sidebar {
-  width: 432px;
-  min-width: 432px;
+  width: 475px;
+  min-width: 475px;
   border-right: 1px solid var(--border);
   padding: 24px;
   overflow-y: auto;
@@ -1000,6 +1000,26 @@
 
 .transformSlot:focus-within {
   border-color: var(--accent);
+}
+
+.transformSlot:nth-child(1) {
+  background: rgba(124, 58, 237, 0.06);
+  border-color: rgba(124, 58, 237, 0.2);
+}
+
+.transformSlot:nth-child(2) {
+  background: rgba(124, 58, 237, 0.10);
+  border-color: rgba(124, 58, 237, 0.25);
+}
+
+.transformSlot:nth-child(3) {
+  background: rgba(124, 58, 237, 0.15);
+  border-color: rgba(124, 58, 237, 0.3);
+}
+
+.transformSlot:nth-child(4) {
+  background: rgba(124, 58, 237, 0.20);
+  border-color: rgba(124, 58, 237, 0.35);
 }
 
 .slotNumber {

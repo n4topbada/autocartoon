@@ -94,6 +94,7 @@ model User {
   purchasedPresets   PurchasedPreset[]
   boardPosts         BoardPost[]
   boardComments      BoardComment[]
+  boardLikes         BoardLike[]
   helpRequests       HelpRequest[]
 }
 
@@ -109,6 +110,7 @@ model BoardPost {
 
   user     User           @relation(fields: [userId], references: [id])
   comments BoardComment[]
+  likes    BoardLike[]
 }
 
 model BoardComment {
@@ -118,8 +120,24 @@ model BoardComment {
   content   String
   createdAt DateTime @default(now())
 
-  post BoardPost @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user User      @relation(fields: [userId], references: [id])
+  post  BoardPost   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user  User        @relation(fields: [userId], references: [id])
+  likes BoardLike[]
+}
+
+model BoardLike {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String?
+  commentId String?
+  createdAt DateTime @default(now())
+
+  user    User          @relation(fields: [userId], references: [id])
+  post    BoardPost?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment BoardComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@unique([userId, commentId])
 }
 
 model ChatKnowledge {

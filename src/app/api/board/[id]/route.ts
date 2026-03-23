@@ -9,13 +9,28 @@ export async function GET(
   try {
     const { id } = await params;
 
+    // 현재 사용자
+    let currentUserId: string | null = null;
+    try {
+      const session = await requireAuth();
+      currentUserId = session.userId;
+    } catch { /* 비로그인 */ }
+
     const post = await prisma.boardPost.findUnique({
       where: { id },
       include: {
         user: { select: { id: true, name: true, email: true } },
+        _count: { select: { likes: true } },
+        ...(currentUserId
+          ? { likes: { where: { userId: currentUserId }, select: { id: true } } }
+          : {}),
         comments: {
           include: {
             user: { select: { id: true, name: true, email: true } },
+            _count: { select: { likes: true } },
+            ...(currentUserId
+              ? { likes: { where: { userId: currentUserId }, select: { id: true } } }
+              : {}),
           },
           orderBy: { createdAt: "asc" },
         },
@@ -40,9 +55,13 @@ export async function GET(
       createdAt: post.createdAt.toISOString(),
       updatedAt: post.updatedAt.toISOString(),
       images,
+      likeCount: (post as unknown as { _count: { likes: number } })._count.likes,
+      liked: (post as unknown as { likes?: { id: string }[] }).likes?.length ? true : false,
       comments: post.comments.map((c) => ({
         ...c,
         createdAt: c.createdAt.toISOString(),
+        likeCount: (c as unknown as { _count: { likes: number } })._count.likes,
+        liked: (c as unknown as { likes?: { id: string }[] }).likes?.length ? true : false,
       })),
     });
   } catch (error) {
