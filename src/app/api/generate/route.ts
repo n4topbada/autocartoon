@@ -14,13 +14,14 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { presetId, mode, prompt, background, backgroundImageId, inputImage } = body as {
+    const { presetId, mode, prompt, background, backgroundImageId, inputImage, inputImages } = body as {
       presetId: string;
       mode: GenerationMode;
       prompt: string;
       background?: string;
       backgroundImageId?: string;
       inputImage?: { base64: string; mimeType: string };
+      inputImages?: { base64: string; mimeType: string }[];
     };
 
     if (!presetId || !mode || !prompt) {
@@ -30,9 +31,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!["text", "sketch", "edit"].includes(mode)) {
+    if (!["text", "sketch", "edit", "transform"].includes(mode)) {
       return NextResponse.json(
-        { error: "mode는 text, sketch, edit 중 하나여야 합니다." },
+        { error: "mode는 text, sketch, edit, transform 중 하나여야 합니다." },
         { status: 400 }
       );
     }
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
       background,
       backgroundImageId,
       inputImage,
+      inputImages,
     });
 
     return NextResponse.json(result);

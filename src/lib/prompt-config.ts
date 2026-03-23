@@ -15,7 +15,12 @@
 export const STYLE_INSTRUCTION = `Output a single high-quality webtoon/cartoon-style illustration.
 The image must maintain the exact same character design, proportions, color palette, and art style shown in the reference images.
 Do not add any text, watermark, or UI elements to the image.
-Allowed to generate people/characters freely.`;
+Allowed to generate people/characters freely.
+
+CRITICAL - DENSITY MATCHING: Match the visual density, line count, and complexity of the reference images exactly.
+If the reference has simple lines with lots of whitespace, keep it equally simple and sparse.
+Do NOT add extra details, textures, shading, hatching, or complexity beyond what the reference images show.
+The density of lines and elements per pixel area must closely match the reference style.`;
 
 // ─── 배경 이미지 합성 지시문 ─────────────────────────────
 export const BG_IMAGE_INSTRUCTION = `[Background Image] One of the attached images (right after the character references) is the background.
@@ -64,6 +69,16 @@ export const SKETCH_WITH_BG_IMAGE = {
 export const EDIT_WITH_BG_IMAGE = {
   reference: `[Character Reference] The first attached images are reference sheets for the character "{{characterName}}". The next image is the background. The LAST attached image is the existing illustration to be edited.`,
   task: `[Task] Edit the last image according to the following instructions. Place the character onto the provided background image while keeping the character's identity and art style consistent:`,
+};
+
+// ─── 캐릭터 생성: 변환(Transform) 모드 ──────────────────
+export const TRANSFORM_MODE = {
+  reference: `[Character Reference] The first attached images are reference sheets for the character "{{characterName}}". Study the style, coloring, line weight, and density carefully.`,
+  task: `[Task] Transform the remaining attached images into the exact same art style as the character reference.
+Match line weight, color palette, shading style, and visual density precisely.
+If any image contains text or letters, preserve them exactly as-is without modification.
+Read any text in the images to understand context, mood, and situation, then apply appropriate design, background colors, and atmosphere accordingly.
+Output one transformed image for each input image provided.`,
 };
 
 // ─── 배경 처리: 정리(Cleanup) ───────────────────────────

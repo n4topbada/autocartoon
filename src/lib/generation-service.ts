@@ -5,12 +5,13 @@ import {
   buildTextPrompt,
   buildSketchPrompt,
   buildEditPrompt,
+  buildTransformPrompt,
   buildTextWithBgImagePrompt,
   buildSketchWithBgImagePrompt,
   buildEditWithBgImagePrompt,
 } from "./prompts";
 
-export type GenerationMode = "text" | "sketch" | "edit";
+export type GenerationMode = "text" | "sketch" | "edit" | "transform";
 
 export interface GenerateInput {
   presetId: string;
@@ -21,6 +22,8 @@ export interface GenerateInput {
   backgroundImageId?: string;
   /** base64 이미지 (sketch/edit 모드) */
   inputImage?: { base64: string; mimeType: string };
+  /** 여러 이미지 (transform 모드) */
+  inputImages?: { base64: string; mimeType: string }[];
 }
 
 /**
@@ -68,6 +71,13 @@ export async function generate(input: GenerateInput) {
     referenceImages.push(input.inputImage);
   }
 
+  // transform 모드: 사용자 이미지들 추가
+  if (input.inputImages && input.mode === "transform") {
+    for (const img of input.inputImages) {
+      referenceImages.push(img);
+    }
+  }
+
   // 4. 프롬프트 구성
   const ctx = {
     characterName: preset.name,
@@ -87,6 +97,9 @@ export async function generate(input: GenerateInput) {
       break;
     case "edit":
       prompt = useBgImage ? buildEditWithBgImagePrompt(ctx) : buildEditPrompt(ctx);
+      break;
+    case "transform":
+      prompt = buildTransformPrompt(ctx);
       break;
   }
 

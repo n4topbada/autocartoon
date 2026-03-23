@@ -18,7 +18,11 @@ import {
   LuUpload,
   LuPaintbrush,
   LuUsers,
+  LuRefreshCw,
+  LuLink,
+  LuX,
 } from "react-icons/lu";
+import { resizeFromFile, fetchImageFromUrl, type ResizedImage } from "@/lib/image-resize";
 
 type Tab = "character" | "background";
 
@@ -87,9 +91,15 @@ const BACKGROUNDS = [
   "사무실",
 ];
 
-type Mode = "text" | "sketch" | "edit";
+type Mode = "text" | "sketch" | "edit" | "transform";
 
 interface UploadingImage {
+  base64: string;
+  mimeType: string;
+  preview: string;
+}
+
+interface SlotImage {
   base64: string;
   mimeType: string;
   preview: string;
@@ -139,6 +149,12 @@ export default function Home() {
   // 즐겨찾기 필터 + 삭제 확인
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
+
+  // Transform 모드: 4슬롯
+  const [transformSlots, setTransformSlots] = useState<(SlotImage | null)[]>([null, null, null, null]);
+  const [slotUrlInputs, setSlotUrlInputs] = useState<string[]>(["", "", "", ""]);
+  const [slotUrlLoading, setSlotUrlLoading] = useState<boolean[]>([false, false, false, false]);
+  const transformFileRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
 
   // 캐릭터 모달
   const [showMarketplace, setShowMarketplace] = useState(false);
@@ -397,9 +413,80 @@ export default function Home() {
     loadSavedBackgrounds();
   };
 
+  // Transform 슬롯: 파일 업로드
+  const handleTransformFileUpload = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const resized = await resizeFromFile(file);
+      setTransformSlots((prev) => {
+        const next = [...prev];
+        next[index] = resized;
+        return next;
+      });
+    } catch {
+      setError("이미지 로드 실패");
+    }
+    e.target.value = "";
+  };
+
+  // Transform 슬롯: URL 로드
+  const handleTransformUrlLoad = async (index: number) => {
+    const url = slotUrlInputs[index]?.trim();
+    if (!url) return;
+    setSlotUrlLoading((prev) => { const n = [...prev]; n[index] = true; return n; });
+    try {
+      const resized = await fetchImageFromUrl(url);
+      setTransformSlots((prev) => {
+        const next = [...prev];
+        next[index] = resized;
+        return next;
+      });
+      setSlotUrlInputs((prev) => { const n = [...prev]; n[index] = ""; return n; });
+    } catch {
+      setError("URL 이미지 로드 실패 (CORS 제한일 수 있음)");
+    } finally {
+      setSlotUrlLoading((prev) => { const n = [...prev]; n[index] = false; return n; });
+    }
+  };
+
+  // Transform 슬롯: 붙여넣기
+  const handleTransformPaste = async (index: number, e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        try {
+          const resized = await resizeFromFile(file);
+          setTransformSlots((prev) => {
+            const next = [...prev];
+            next[index] = resized;
+            return next;
+          });
+        } catch {
+          setError("붙여넣기 이미지 처리 실패");
+        }
+        return;
+      }
+    }
+  };
+
+  // Transform 슬롯: 제거
+  const handleTransformSlotRemove = (index: number) => {
+    setTransformSlots((prev) => {
+      const next = [...prev];
+      next[index] = null;
+      return next;
+    });
+  };
+
   // 생성 요청
   const handleGenerate = async () => {
-    if (!selectedPreset || !prompt.trim()) return;
+    if (!selectedPreset) return;
+    if (!prompt.trim() && mode !== "transform") return;
     setGenerating(true);
     setError(null);
 
@@ -407,18 +494,27 @@ export default function Home() {
       const body: Record<string, unknown> = {
         presetId: selectedPreset.id,
         mode,
-        prompt: prompt.trim(),
+        prompt: prompt.trim() || (mode === "transform" ? "캐릭터 스타일로 변환" : ""),
       };
       if (selectedBgImageId) {
         body.backgroundImageId = selectedBgImageId;
       } else if (background !== "없음") {
         body.background = background;
       }
-      if (inputImage && mode !== "text") {
+      if (inputImage && (mode === "sketch" || mode === "edit")) {
         body.inputImage = {
           base64: inputImage.base64,
           mimeType: inputImage.mimeType,
         };
+      }
+      if (mode === "transform") {
+        const imgs = transformSlots.filter((s): s is SlotImage => s !== null);
+        if (imgs.length === 0) {
+          setError("변환할 이미지를 최소 1개 업로드해주세요.");
+          setGenerating(false);
+          return;
+        }
+        body.inputImages = imgs.map((s) => ({ base64: s.base64, mimeType: s.mimeType }));
       }
 
       const res = await fetch("/api/generate", {
@@ -441,12 +537,14 @@ export default function Home() {
     text: <LuType size={14} />,
     sketch: <LuPenLine size={14} />,
     edit: <LuPencil size={14} />,
+    transform: <LuRefreshCw size={14} />,
   };
 
   const modeLabels: Record<Mode, string> = {
     text: "텍스트",
     sketch: "스케치",
     edit: "편집",
+    transform: "변환",
   };
 
   return (
@@ -562,7 +660,7 @@ export default function Home() {
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>생성 모드</h2>
             <div className={styles.modeButtons}>
-              {(["text", "sketch", "edit"] as Mode[]).map((m) => (
+              {(["text", "sketch", "edit", "transform"] as Mode[]).map((m) => (
                 <button
                   key={m}
                   className={`${styles.modeBtn} ${
@@ -620,7 +718,7 @@ export default function Home() {
           </section>
 
           {/* 이미지 업로드 (sketch/edit) */}
-          {mode !== "text" && (
+          {(mode === "sketch" || mode === "edit") && (
             <section className={styles.section}>
               <h2 className={styles.sectionTitle}>
                 {mode === "sketch" ? "스케치 업로드" : "편집할 이미지"}
@@ -653,6 +751,70 @@ export default function Home() {
             </section>
           )}
 
+          {/* 이미지 변환 슬롯 (transform) */}
+          {mode === "transform" && (
+            <section className={styles.section}>
+              <h2 className={styles.sectionTitle}>변환할 이미지 (최대 4개)</h2>
+              <div className={styles.transformGrid}>
+                {transformSlots.map((slot, i) => (
+                  <div
+                    key={i}
+                    className={styles.transformSlot}
+                    onPaste={(e) => handleTransformPaste(i, e)}
+                    tabIndex={0}
+                  >
+                    {slot ? (
+                      <div className={styles.transformSlotPreview}>
+                        <img src={slot.preview} alt={`slot-${i}`} />
+                        <button
+                          className={styles.transformSlotRemove}
+                          onClick={() => handleTransformSlotRemove(i)}
+                        >
+                          <LuX size={12} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className={styles.transformSlotEmpty}>
+                        <input
+                          ref={(el) => { transformFileRefs.current[i] = el; }}
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleTransformFileUpload(i, e)}
+                          className={styles.fileInput}
+                        />
+                        <button
+                          className={styles.transformSlotUploadBtn}
+                          onClick={() => transformFileRefs.current[i]?.click()}
+                        >
+                          <LuUpload size={16} />
+                          <span>파일 / Ctrl+V</span>
+                        </button>
+                        <div className={styles.transformSlotUrl}>
+                          <input
+                            type="text"
+                            className={styles.slotUrlInput}
+                            placeholder="URL 입력"
+                            value={slotUrlInputs[i]}
+                            onChange={(e) => setSlotUrlInputs((prev) => { const n = [...prev]; n[i] = e.target.value; return n; })}
+                            onKeyDown={(e) => { if (e.key === "Enter") handleTransformUrlLoad(i); }}
+                            onPaste={(e) => handleTransformPaste(i, e)}
+                          />
+                          <button
+                            className={styles.slotUrlBtn}
+                            onClick={() => handleTransformUrlLoad(i)}
+                            disabled={slotUrlLoading[i] || !slotUrlInputs[i]?.trim()}
+                          >
+                            {slotUrlLoading[i] ? "..." : <LuLink size={12} />}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* 프롬프트 입력 */}
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>프롬프트</h2>
@@ -663,7 +825,9 @@ export default function Home() {
                   ? "원하는 장면을 설명하세요..."
                   : mode === "sketch"
                     ? "스케치에 대한 추가 설명..."
-                    : "편집 내용을 입력하세요..."
+                    : mode === "transform"
+                      ? "변환 시 추가 지시사항 (선택)..."
+                      : "편집 내용을 입력하세요..."
               }
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
@@ -675,7 +839,7 @@ export default function Home() {
           <button
             className={styles.generateBtn}
             onClick={handleGenerate}
-            disabled={generating || !selectedPreset || !prompt.trim()}
+            disabled={generating || !selectedPreset || (!prompt.trim() && mode !== "transform") || (mode === "transform" && transformSlots.every((s) => s === null))}
           >
             <LuSparkles size={16} />
             {generating ? "생성 중..." : "이미지 생성"}

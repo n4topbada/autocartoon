@@ -4,6 +4,7 @@ import {
   TEXT_MODE,
   SKETCH_MODE,
   EDIT_MODE,
+  TRANSFORM_MODE,
   TEXT_WITH_BG_IMAGE,
   SKETCH_WITH_BG_IMAGE,
   EDIT_WITH_BG_IMAGE,
@@ -57,6 +58,18 @@ export function buildEditPrompt(ctx: PromptContext): string {
   ];
   if (ctx.background) {
     parts.push(`${EDIT_MODE.backgroundPrefix} ${ctx.background}`);
+  }
+  parts.push(STYLE_INSTRUCTION);
+  return parts.join("\n\n");
+}
+
+export function buildTransformPrompt(ctx: PromptContext): string {
+  const parts = [
+    fill(TRANSFORM_MODE.reference, ctx),
+    fill(TRANSFORM_MODE.task, ctx),
+  ];
+  if (ctx.userPrompt) {
+    parts.push(`[Additional Instructions] ${ctx.userPrompt}`);
   }
   parts.push(STYLE_INSTRUCTION);
   return parts.join("\n\n");
