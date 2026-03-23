@@ -175,7 +175,17 @@ export default function Home() {
     const q = userParam ? `?${userParam}` : "";
     fetch(`/api/presets${q}`)
       .then((r) => r.json())
-      .then((data) => { if (Array.isArray(data)) setPresets(data); })
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setPresets(data);
+          // 디폴트로 wony 선택
+          if (!selectedPreset) {
+            const wony = data.find((p: Preset) => p.alias === "wony");
+            if (wony) setSelectedPreset(wony);
+            else if (data.length > 0) setSelectedPreset(data[0]);
+          }
+        }
+      })
       .catch(() => setPresets([]))
       .finally(() => setPresetsLoading(false));
   }, [userParam]);
