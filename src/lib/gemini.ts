@@ -13,6 +13,8 @@ export type Modality = "IMAGE" | "TEXT";
 export interface GeminiRequest {
   prompt: string;
   referenceImages?: { base64: string; mimeType: string }[];
+  /** 번호 라벨이 붙은 이미지 (transform 모드용) */
+  labeledImages?: { label: string; base64: string; mimeType: string }[];
   modalities?: Modality[];
 }
 
@@ -132,6 +134,18 @@ export async function generateContent(
 
   if (req.referenceImages) {
     for (const img of req.referenceImages) {
+      parts.push({
+        inlineData: {
+          data: img.base64,
+          mimeType: img.mimeType,
+        },
+      });
+    }
+  }
+
+  if (req.labeledImages) {
+    for (const img of req.labeledImages) {
+      parts.push({ text: img.label });
       parts.push({
         inlineData: {
           data: img.base64,

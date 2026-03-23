@@ -74,11 +74,12 @@ export const EDIT_WITH_BG_IMAGE = {
 // ─── 캐릭터 생성: 변환(Transform) 모드 ──────────────────
 export const TRANSFORM_MODE = {
   reference: `[Character Reference] The first attached images are reference sheets for the character "{{characterName}}". Study the style, coloring, line weight, and density carefully.`,
-  task: `[Task] Transform the remaining attached images into the exact same art style as the character reference.
+  task: `[Task] The user's input images follow, each labeled with a number (1번, 2번, 3번, 4번).
+Transform each numbered image into the exact same art style as the character reference.
 Match line weight, color palette, shading style, and visual density precisely.
 If any image contains text or letters, preserve them exactly as-is without modification.
 Read any text in the images to understand context, mood, and situation, then apply appropriate design, background colors, and atmosphere accordingly.
-Output one transformed image for each input image provided.`,
+When the user refers to "1번 이미지" or "image 1", it means the image labeled "=== 사용자 참조 이미지 1번 ===".`,
 };
 
 // ─── 배경 처리: 정리(Cleanup) ───────────────────────────

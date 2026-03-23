@@ -698,6 +698,7 @@ export default function Home() {
                     onPaste={(e) => handleTransformPaste(i, e)}
                     tabIndex={0}
                   >
+                    <span className={styles.slotNumber}>{i + 1}</span>
                     {slot ? (
                       <div className={styles.transformSlotPreview}>
                         <img src={slot.preview} alt={`slot-${i}`} />

@@ -71,11 +71,14 @@ export async function generate(input: GenerateInput) {
     referenceImages.push(input.inputImage);
   }
 
-  // transform 모드: 사용자 이미지들 추가
+  // transform 모드: 사용자 이미지들 (번호 라벨 포함, 별도 처리)
+  let labeledImages: { label: string; base64: string; mimeType: string }[] | undefined;
   if (input.inputImages && input.mode === "transform") {
-    for (const img of input.inputImages) {
-      referenceImages.push(img);
-    }
+    labeledImages = input.inputImages.map((img, i) => ({
+      label: `=== 사용자 참조 이미지 ${i + 1}번 ===`,
+      base64: img.base64,
+      mimeType: img.mimeType,
+    }));
   }
 
   // 4. 프롬프트 구성
@@ -107,6 +110,7 @@ export async function generate(input: GenerateInput) {
   const result = await generateContent({
     prompt,
     referenceImages,
+    labeledImages,
     modalities: ["IMAGE", "TEXT"],
   });
 
