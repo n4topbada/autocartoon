@@ -181,6 +181,46 @@
   margin-top: 4px;
 }
 
+/* 스켈레톤 로딩 */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeletonCard {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeletonTitle,
+.skeletonLine,
+.skeletonMeta {
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--border) 25%, var(--surface) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.skeletonTitle {
+  height: 18px;
+  width: 60%;
+}
+
+.skeletonLine {
+  height: 14px;
+  width: 90%;
+}
+
+.skeletonMeta {
+  height: 12px;
+  width: 40%;
+}
+
 .pinIcon {
   color: var(--accent);
   flex-shrink: 0;

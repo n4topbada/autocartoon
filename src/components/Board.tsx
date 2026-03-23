@@ -402,7 +402,15 @@ export default function Board() {
       </div>
 
       {loading ? (
-        <div className={styles.loadingText}>불러오는 중...</div>
+        <div className={styles.postList}>
+          {[1, 2, 3].map((n) => (
+            <div key={n} className={styles.skeletonCard}>
+              <div className={styles.skeletonTitle} />
+              <div className={styles.skeletonLine} />
+              <div className={styles.skeletonMeta} />
+            </div>
+          ))}
+        </div>
       ) : posts.length === 0 ? (
         <div className={styles.emptyText}>아직 게시글이 없습니다.</div>
       ) : (
