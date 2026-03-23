@@ -12,6 +12,31 @@
   gap: 16px;
 }
 
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.chatToggleBtn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.chatToggleBtn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .logo {
   font-size: 20px;
   font-weight: 700;
@@ -98,8 +123,8 @@
 
 /* 사이드바 */
 .sidebar {
-  width: 540px;
-  min-width: 540px;
+  width: 432px;
+  min-width: 432px;
   border-right: 1px solid var(--border);
   padding: 24px;
   overflow-y: auto;
@@ -963,7 +988,7 @@
 .transformSlot {
   border: 2px dashed var(--border);
   border-radius: var(--radius);
-  min-height: 130px;
+  aspect-ratio: 1;
   display: flex;
   align-items: center;
   justify-content: center;

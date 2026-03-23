@@ -92,6 +92,53 @@ model User {
   backgrounds        SavedBackground[]
   generationRequests GenerationRequest[]
   purchasedPresets   PurchasedPreset[]
+  boardPosts         BoardPost[]
+  boardComments      BoardComment[]
+  helpRequests       HelpRequest[]
+}
+
+model BoardPost {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  content   String
+  imageIds  String[] // GeneratedImage ID 참조
+  links     String[] // 외부 URL
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User           @relation(fields: [userId], references: [id])
+  comments BoardComment[]
+}
+
+model BoardComment {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  post BoardPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User      @relation(fields: [userId], references: [id])
+}
+
+model ChatKnowledge {
+  id        String   @id @default(cuid())
+  category  String   // "guide" | "faq" | "persona" | "custom"
+  title     String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model HelpRequest {
+  id        String   @id @default(cuid())
+  userId    String
+  message   String
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
 }
 
 model GeneratedImage {

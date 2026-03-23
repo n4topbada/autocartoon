@@ -17,10 +17,14 @@ import {
   LuUsers,
   LuLink,
   LuX,
+  LuLayoutList,
+  LuMessageCircle,
 } from "react-icons/lu";
 import { resizeFromFile, fetchImageFromUrl, type ResizedImage } from "@/lib/image-resize";
+import Board from "@/components/Board";
+import ChatBot from "@/components/ChatBot";
 
-type Tab = "character" | "background";
+type Tab = "character" | "background" | "board";
 
 interface PresetImageData {
   id: string;
@@ -116,6 +120,9 @@ export default function Home() {
   const [generating, setGenerating] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  // 챗봇
+  const [chatOpen, setChatOpen] = useState(false);
 
   // 캐릭터 업로드 상태
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -524,8 +531,24 @@ export default function Home() {
             <LuImage size={14} />
             배경 생성
           </button>
+          <button
+            className={`${styles.tab} ${activeTab === "board" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("board")}
+          >
+            <LuLayoutList size={14} />
+            게시판
+          </button>
         </nav>
-        <UserAvatar />
+        <div className={styles.headerRight}>
+          <button
+            className={styles.chatToggleBtn}
+            onClick={() => setChatOpen(!chatOpen)}
+            title="워니봇"
+          >
+            <LuMessageCircle size={20} />
+          </button>
+          <UserAvatar />
+        </div>
       </header>
 
       {/* 관리자: 유저 전환 바 */}
@@ -550,6 +573,8 @@ export default function Home() {
       <main className={styles.main}>
         {activeTab === "background" ? (
           <BackgroundGenerator />
+        ) : activeTab === "board" ? (
+          <Board />
         ) : (
         <>
         {/* 좌측 패널 */}
@@ -996,6 +1021,8 @@ export default function Home() {
           </div>
         </div>
       )}
+      {/* 챗봇 패널 */}
+      <ChatBot open={chatOpen} onClose={() => setChatOpen(false)} />
     </div>
   );
 }
