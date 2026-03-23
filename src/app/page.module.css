@@ -98,8 +98,8 @@
 
 /* 사이드바 */
 .sidebar {
-  width: 360px;
-  min-width: 360px;
+  width: 540px;
+  min-width: 540px;
   border-right: 1px solid var(--border);
   padding: 24px;
   overflow-y: auto;

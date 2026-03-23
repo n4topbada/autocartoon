@@ -6,9 +6,6 @@ import BackgroundGenerator from "@/components/BackgroundGenerator";
 import UserAvatar from "@/components/UserAvatar";
 import { useAuth } from "@/components/AuthProvider";
 import {
-  LuType,
-  LuPenLine,
-  LuPencil,
   LuPlus,
   LuHeart,
   LuTrash2,
@@ -18,7 +15,6 @@ import {
   LuUpload,
   LuPaintbrush,
   LuUsers,
-  LuRefreshCw,
   LuLink,
   LuX,
 } from "react-icons/lu";
@@ -91,8 +87,6 @@ const BACKGROUNDS = [
   "사무실",
 ];
 
-type Mode = "text" | "sketch" | "edit" | "transform";
-
 interface UploadingImage {
   base64: string;
   mimeType: string;
@@ -117,18 +111,11 @@ export default function Home() {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetsLoading, setPresetsLoading] = useState(true);
   const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null);
-  const [mode, setMode] = useState<Mode>("text");
   const [prompt, setPrompt] = useState("");
   const [background, setBackground] = useState("없음");
-  const [inputImage, setInputImage] = useState<{
-    base64: string;
-    mimeType: string;
-    preview: string;
-  } | null>(null);
   const [generating, setGenerating] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 캐릭터 업로드 상태
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -322,20 +309,6 @@ export default function Home() {
     } catch { /* ignore */ }
   };
 
-  // 파일 업로드 처리 (sketch/edit용)
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const [header, base64] = dataUrl.split(",");
-      const mimeType = header.match(/data:(.*?);/)?.[1] || "image/png";
-      setInputImage({ base64, mimeType, preview: dataUrl });
-    };
-    reader.readAsDataURL(file);
-  };
-
   // 캐릭터 이미지 추가 (업로드 모달)
   const handleCharImageAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -483,37 +456,32 @@ export default function Home() {
     });
   };
 
-  // 생성 요청
+  // 생성 요청 (자동 모드 감지)
   const handleGenerate = async () => {
     if (!selectedPreset) return;
-    if (!prompt.trim() && mode !== "transform") return;
+    const hasImages = transformSlots.some((s) => s !== null);
+    const hasPrompt = prompt.trim().length > 0;
+    if (!hasImages && !hasPrompt) return;
+
+    // 자동 모드: 이미지 있으면 transform, 텍스트만이면 text
+    const autoMode = hasImages ? "transform" : "text";
+
     setGenerating(true);
     setError(null);
 
     try {
       const body: Record<string, unknown> = {
         presetId: selectedPreset.id,
-        mode,
-        prompt: prompt.trim() || (mode === "transform" ? "캐릭터 스타일로 변환" : ""),
+        mode: autoMode,
+        prompt: hasPrompt ? prompt.trim() : "캐릭터 스타일로 변환",
       };
       if (selectedBgImageId) {
         body.backgroundImageId = selectedBgImageId;
       } else if (background !== "없음") {
         body.background = background;
       }
-      if (inputImage && (mode === "sketch" || mode === "edit")) {
-        body.inputImage = {
-          base64: inputImage.base64,
-          mimeType: inputImage.mimeType,
-        };
-      }
-      if (mode === "transform") {
+      if (hasImages) {
         const imgs = transformSlots.filter((s): s is SlotImage => s !== null);
-        if (imgs.length === 0) {
-          setError("변환할 이미지를 최소 1개 업로드해주세요.");
-          setGenerating(false);
-          return;
-        }
         body.inputImages = imgs.map((s) => ({ base64: s.base64, mimeType: s.mimeType }));
       }
 
@@ -531,20 +499,6 @@ export default function Home() {
     } finally {
       setGenerating(false);
     }
-  };
-
-  const modeIcons: Record<Mode, React.ReactNode> = {
-    text: <LuType size={14} />,
-    sketch: <LuPenLine size={14} />,
-    edit: <LuPencil size={14} />,
-    transform: <LuRefreshCw size={14} />,
-  };
-
-  const modeLabels: Record<Mode, string> = {
-    text: "텍스트",
-    sketch: "스케치",
-    edit: "편집",
-    transform: "변환",
   };
 
   return (
@@ -656,25 +610,6 @@ export default function Home() {
             </div>
           </section>
 
-          {/* 모드 선택 */}
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>생성 모드</h2>
-            <div className={styles.modeButtons}>
-              {(["text", "sketch", "edit", "transform"] as Mode[]).map((m) => (
-                <button
-                  key={m}
-                  className={`${styles.modeBtn} ${
-                    mode === m ? styles.modeBtnActive : ""
-                  }`}
-                  onClick={() => setMode(m)}
-                >
-                  {modeIcons[m]}
-                  {modeLabels[m]}
-                </button>
-              ))}
-            </div>
-          </section>
-
           {/* 배경 선택 */}
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>배경</h2>
@@ -717,44 +652,9 @@ export default function Home() {
             )}
           </section>
 
-          {/* 이미지 업로드 (sketch/edit) */}
-          {(mode === "sketch" || mode === "edit") && (
-            <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>
-                {mode === "sketch" ? "스케치 업로드" : "편집할 이미지"}
-              </h2>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleFileUpload}
-                className={styles.fileInput}
-              />
-              <button
-                className={styles.uploadBtn}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <LuUpload size={14} />
-                이미지 선택
-              </button>
-              {inputImage && (
-                <div className={styles.uploadPreview}>
-                  <img src={inputImage.preview} alt="uploaded" />
-                  <button
-                    className={styles.removeBtn}
-                    onClick={() => setInputImage(null)}
-                  >
-                    <LuTrash2 size={12} /> 제거
-                  </button>
-                </div>
-              )}
-            </section>
-          )}
-
-          {/* 이미지 변환 슬롯 (transform) */}
-          {mode === "transform" && (
-            <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>변환할 이미지 (최대 4개)</h2>
+          {/* 이미지 슬롯 (최대 4개, 선택) */}
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>참조 이미지 (선택, 최대 4개)</h2>
               <div className={styles.transformGrid}>
                 {transformSlots.map((slot, i) => (
                   <div
@@ -813,22 +713,13 @@ export default function Home() {
                 ))}
               </div>
             </section>
-          )}
 
           {/* 프롬프트 입력 */}
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>프롬프트</h2>
             <textarea
               className={styles.textarea}
-              placeholder={
-                mode === "text"
-                  ? "원하는 장면을 설명하세요..."
-                  : mode === "sketch"
-                    ? "스케치에 대한 추가 설명..."
-                    : mode === "transform"
-                      ? "변환 시 추가 지시사항 (선택)..."
-                      : "편집 내용을 입력하세요..."
-              }
+              placeholder="원하는 장면이나 변환 지시사항을 입력하세요..."
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={4}
@@ -839,7 +730,7 @@ export default function Home() {
           <button
             className={styles.generateBtn}
             onClick={handleGenerate}
-            disabled={generating || !selectedPreset || (!prompt.trim() && mode !== "transform") || (mode === "transform" && transformSlots.every((s) => s === null))}
+            disabled={generating || !selectedPreset || (!prompt.trim() && transformSlots.every((s) => s === null))}
           >
             <LuSparkles size={16} />
             {generating ? "생성 중..." : "이미지 생성"}
