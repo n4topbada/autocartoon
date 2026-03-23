@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
       prisma.boardPost.findMany({
         skip,
         take: limit,
-        orderBy: { createdAt: "desc" },
+        orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
         include: {
           user: { select: { name: true, email: true } },
           _count: { select: { comments: true, likes: true } },
@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
           commentCount: post._count.comments,
           likeCount: post._count.likes,
           liked: (post as unknown as { likes?: { id: string }[] }).likes?.length ? true : false,
+          pinned: post.pinned,
         };
       })
     );

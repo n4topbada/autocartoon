@@ -105,6 +105,7 @@ model BoardPost {
   content   String
   imageIds  String[] // GeneratedImage ID 참조
   links     String[] // 외부 URL
+  pinned    Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

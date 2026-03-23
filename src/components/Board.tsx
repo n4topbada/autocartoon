@@ -11,6 +11,7 @@ import {
   LuChevronLeft,
   LuSend,
   LuHeart,
+  LuPin,
 } from "react-icons/lu";
 
 interface PostSummary {
@@ -22,6 +23,7 @@ interface PostSummary {
   commentCount: number;
   likeCount: number;
   liked: boolean;
+  pinned: boolean;
   imageUrls: string[];
   links: string[];
   createdAt: string;
@@ -75,6 +77,7 @@ export default function Board() {
             commentCount: (p.commentCount ?? (p as { _count?: { comments?: number } })._count?.comments ?? 0) as number,
             likeCount: (p.likeCount ?? 0) as number,
             liked: !!p.liked,
+            pinned: !!p.pinned,
             imageUrls: (p.previewImageUrl ? [p.previewImageUrl] : []) as string[],
             links: (p.links ?? []) as string[],
             createdAt: p.createdAt as string,
@@ -102,6 +105,7 @@ export default function Board() {
         commentCount: data.comments?.length ?? 0,
         likeCount: data.likeCount ?? 0,
         liked: !!data.liked,
+        pinned: !!data.pinned,
         imageUrls: (data.images || []).map((img: { blobUrl: string }) => img.blobUrl),
         links: data.links || [],
         createdAt: data.createdAt,
@@ -191,6 +195,20 @@ export default function Board() {
     await fetch(`/api/board/${postId}/comments/${commentId}/like`, { method: "POST" }).catch(() => {});
   };
 
+  // 핀 토글 (관리자)
+  const handlePin = async (postId: string) => {
+    const res = await fetch(`/api/board/${postId}/pin`, { method: "POST" });
+    if (res.ok) {
+      const data = await res.json();
+      setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, pinned: data.pinned } : p));
+      if (selectedPost?.id === postId) {
+        setSelectedPost((prev) => prev ? { ...prev, pinned: data.pinned } : prev);
+      }
+      // 리로드 for ordering
+      loadPosts();
+    }
+  };
+
   const addLink = () => {
     const url = linkInput.trim();
     if (!url) return;
@@ -222,6 +240,15 @@ export default function Board() {
             >
               <LuHeart size={13} /> {selectedPost.likeCount}
             </button>
+            {isAdmin && (
+              <button
+                className={`${styles.likeBtn} ${selectedPost.pinned ? styles.likeBtnActive : ""}`}
+                onClick={() => handlePin(selectedPost.id)}
+                title={selectedPost.pinned ? "핀 해제" : "핀 고정"}
+              >
+                <LuPin size={13} /> {selectedPost.pinned ? "핀 해제" : "핀"}
+              </button>
+            )}
             {(selectedPost.userEmail === user?.email || isAdmin) && (
               <button className={styles.deleteBtn} onClick={() => handleDelete(selectedPost.id)}>
                 <LuTrash2 size={12} /> 삭제
@@ -390,7 +417,10 @@ export default function Board() {
                 <img src={post.imageUrls[0]} alt="" className={styles.postThumb} />
               )}
               <div className={styles.postInfo}>
-                <h3 className={styles.postTitle}>{post.title}</h3>
+                <h3 className={styles.postTitle}>
+                  {post.pinned && <LuPin size={12} className={styles.pinIcon} />}
+                  {post.title}
+                </h3>
                 <p className={styles.postSnippet}>
                   {post.content.length > 60 ? post.content.slice(0, 60) + "..." : post.content}
                 </p>

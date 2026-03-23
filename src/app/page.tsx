@@ -117,6 +117,7 @@ export default function Home() {
   const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null);
   const [prompt, setPrompt] = useState("");
   const [background, setBackground] = useState("없음");
+  const [characterOnly, setCharacterOnly] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -487,14 +488,19 @@ export default function Home() {
     setError(null);
 
     try {
+      let finalPrompt = hasPrompt ? prompt.trim() : "캐릭터 스타일로 변환";
+      if (characterOnly) {
+        finalPrompt += "\n\n[중요] 배경은 완전히 투명하거나 순수 흰색으로 처리하고, 캐릭터만 단독으로 그려주세요. 배경 요소(풍경, 사물, 장소 등)를 절대 포함하지 마세요.";
+      }
+
       const body: Record<string, unknown> = {
         presetId: selectedPreset.id,
         mode: autoMode,
-        prompt: hasPrompt ? prompt.trim() : "캐릭터 스타일로 변환",
+        prompt: finalPrompt,
       };
-      if (selectedBgImageId) {
+      if (!characterOnly && selectedBgImageId) {
         body.backgroundImageId = selectedBgImageId;
-      } else if (background !== "없음") {
+      } else if (!characterOnly && background !== "없음") {
         body.background = background;
       }
       if (hasImages) {
@@ -522,7 +528,11 @@ export default function Home() {
     <div className={styles.container}>
       {/* 헤더 */}
       <header className={styles.header}>
-        <h1 className={styles.logo}>
+        <h1
+          className={styles.logo}
+          onClick={() => { setActiveTab("character"); window.scrollTo(0, 0); }}
+          style={{ cursor: "pointer" }}
+        >
           <span className={styles.logoEmoji}>🍌</span>
           워니의 나노바나나봇
         </h1>
@@ -589,105 +599,7 @@ export default function Home() {
         <>
         {/* 좌측 패널 */}
         <aside className={styles.sidebar}>
-          {/* 캐릭터 선택 */}
-          <section className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>캐릭터 선택</h2>
-              <button
-                className={styles.marketplaceBtn}
-                onClick={handleOpenMarketplace}
-                title="캐릭터"
-              >
-                <LuStore size={14} />
-                캐릭터
-              </button>
-            </div>
-            <div className={styles.presetGrid}>
-              <button
-                className={styles.presetCard}
-                onClick={() => setShowUploadModal(true)}
-              >
-                <div className={styles.presetThumbSingle}>
-                  <LuPlus size={24} className={styles.addIcon} />
-                </div>
-                <span className={styles.presetName}>새 캐릭터</span>
-              </button>
-
-              {presetsLoading ? (
-                <div className={styles.loadingSpinner}>
-                  <span className={styles.spinner} />
-                  <span>불러오는 중...</span>
-                </div>
-              ) : (
-                presets.map((p) => (
-                  <button
-                    key={p.id}
-                    className={`${styles.presetCard} ${
-                      selectedPreset?.id === p.id ? styles.presetSelected : ""
-                    }`}
-                    onClick={() => setSelectedPreset(p)}
-                  >
-                    <div
-                      className={
-                        p.images.length === 1
-                          ? styles.presetThumbSingle
-                          : styles.presetThumbGrid
-                      }
-                    >
-                      {p.images.map((img) => (
-                        <img key={img.id} src={img.dataUrl} alt={p.name} />
-                      ))}
-                    </div>
-                    <span className={styles.presetName}>{p.name}</span>
-                  </button>
-                ))
-              )}
-            </div>
-          </section>
-
-          {/* 배경 선택 */}
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>배경</h2>
-            <select
-              className={styles.select}
-              value={background}
-              onChange={(e) => handleBgDropdown(e.target.value)}
-            >
-              {BACKGROUNDS.map((bg) => (
-                <option key={bg} value={bg}>
-                  {bg}
-                </option>
-              ))}
-            </select>
-
-            {savedBackgrounds.length > 0 && (
-              <>
-                <span className={styles.bgSectionLabel}>저장된 배경</span>
-                <div className={styles.bgThumbnailStrip}>
-                  {savedBackgrounds.map((bg) => (
-                    <button
-                      key={bg.id}
-                      className={`${styles.bgThumb} ${selectedBgImageId === bg.id ? styles.bgThumbSelected : ""}`}
-                      onClick={() => handleBgImageSelect(bg.id)}
-                      title={bg.name}
-                    >
-                      <img src={bg.dataUrl} alt={bg.name} />
-                      <span className={styles.bgThumbName}>{bg.name}</span>
-                      <button
-                        className={styles.bgThumbDelete}
-                        onClick={(e) => { e.stopPropagation(); handleDeleteBg(bg.id); }}
-                        title="삭제"
-                      >
-                        ×
-                      </button>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </section>
-
-          {/* 이미지 슬롯 (최대 4개, 선택) */}
+          {/* 1) 참조 이미지 슬롯 (최상단) */}
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>참조 이미지 (선택, 최대 4개)</h2>
               <div className={styles.transformGrid}>
@@ -750,7 +662,123 @@ export default function Home() {
               </div>
             </section>
 
-          {/* 프롬프트 입력 */}
+          {/* 2) 캐릭터 선택 */}
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>캐릭터 선택</h2>
+              <div className={styles.sectionHeaderBtns}>
+                <button
+                  className={styles.textBtn}
+                  onClick={() => setShowUploadModal(true)}
+                >
+                  <LuPlus size={12} />
+                  새 캐릭터
+                </button>
+                <button
+                  className={styles.textBtn}
+                  onClick={handleOpenMarketplace}
+                >
+                  <LuStore size={12} />
+                  캐릭터
+                </button>
+              </div>
+            </div>
+            <div className={styles.presetGrid}>
+              {presetsLoading ? (
+                <div className={styles.loadingSpinner}>
+                  <span className={styles.spinner} />
+                  <span>불러오는 중...</span>
+                </div>
+              ) : (
+                presets.map((p) => (
+                  <button
+                    key={p.id}
+                    className={`${styles.presetCard} ${
+                      selectedPreset?.id === p.id ? styles.presetSelected : ""
+                    }`}
+                    onClick={() => setSelectedPreset(p)}
+                  >
+                    <div
+                      className={
+                        p.images.length === 1
+                          ? styles.presetThumbSingle
+                          : styles.presetThumbGrid
+                      }
+                    >
+                      {p.images.map((img) => (
+                        <img key={img.id} src={img.dataUrl} alt={p.name} />
+                      ))}
+                    </div>
+                    <span className={styles.presetName}>{p.name}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </section>
+
+          {/* 3) 배경없이 캐릭터만 생성 체크박스 */}
+          <section className={styles.section}>
+            <label className={styles.checkboxLabel}>
+              <input
+                type="checkbox"
+                checked={characterOnly}
+                onChange={(e) => {
+                  setCharacterOnly(e.target.checked);
+                  if (e.target.checked) {
+                    setBackground("없음");
+                    setSelectedBgImageId(null);
+                  }
+                }}
+              />
+              <span>배경없이 캐릭터만 생성</span>
+            </label>
+          </section>
+
+          {/* 4) 배경 선택 (캐릭터만 모드가 아닐 때) */}
+          {!characterOnly && (
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>배경</h2>
+            <select
+              className={styles.select}
+              value={background}
+              onChange={(e) => handleBgDropdown(e.target.value)}
+            >
+              {BACKGROUNDS.map((bg) => (
+                <option key={bg} value={bg}>
+                  {bg}
+                </option>
+              ))}
+            </select>
+
+            {savedBackgrounds.length > 0 && (
+              <>
+                <span className={styles.bgSectionLabel}>저장된 배경</span>
+                <div className={styles.bgThumbnailStrip}>
+                  {savedBackgrounds.map((bg) => (
+                    <button
+                      key={bg.id}
+                      className={`${styles.bgThumb} ${selectedBgImageId === bg.id ? styles.bgThumbSelected : ""}`}
+                      onClick={() => handleBgImageSelect(bg.id)}
+                      title={bg.name}
+                    >
+                      <img src={bg.dataUrl} alt={bg.name} />
+                      <span className={styles.bgThumbName}>{bg.name}</span>
+                      <button
+                        className={styles.bgThumbDelete}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteBg(bg.id); }}
+                        title="삭제"
+                      >
+                        ×
+                      </button>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+          )}
+
+          {/* 5) 프롬프트 입력 */}
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>프롬프트</h2>
             <textarea
@@ -762,7 +790,7 @@ export default function Home() {
             />
           </section>
 
-          {/* 생성 버튼 */}
+          {/* 6) 생성 버튼 */}
           <button
             className={styles.generateBtn}
             onClick={handleGenerate}

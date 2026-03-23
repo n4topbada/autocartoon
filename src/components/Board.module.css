@@ -175,6 +175,12 @@
   margin-top: 4px;
 }
 
+.pinIcon {
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
 .deleteBtn {
   display: flex;
   align-items: center;
