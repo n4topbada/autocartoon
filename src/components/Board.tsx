@@ -59,7 +59,20 @@ export default function Board() {
     fetch("/api/board")
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data)) setPosts(data);
+        const list = data?.posts ?? (Array.isArray(data) ? data : []);
+        setPosts(
+          list.map((p: Record<string, unknown>) => ({
+            id: p.id as string,
+            title: p.title as string,
+            content: p.content as string,
+            userName: (p.user as { name?: string; email?: string })?.name || (p.user as { email?: string })?.email?.toString().split("@")[0] || "",
+            userEmail: (p.user as { email?: string })?.email || "",
+            commentCount: (p.commentCount ?? (p as { _count?: { comments?: number } })._count?.comments ?? 0) as number,
+            imageUrls: (p.previewImageUrl ? [p.previewImageUrl] : []) as string[],
+            links: (p.links ?? []) as string[],
+            createdAt: p.createdAt as string,
+          }))
+        );
       })
       .catch(() => setPosts([]))
       .finally(() => setLoading(false));
@@ -73,7 +86,24 @@ export default function Board() {
     const res = await fetch(`/api/board/${id}`);
     if (res.ok) {
       const data = await res.json();
-      setSelectedPost(data);
+      setSelectedPost({
+        id: data.id,
+        title: data.title,
+        content: data.content,
+        userName: data.user?.name || data.user?.email?.split("@")[0] || "",
+        userEmail: data.user?.email || "",
+        commentCount: data.comments?.length ?? 0,
+        imageUrls: (data.images || []).map((img: { blobUrl: string }) => img.blobUrl),
+        links: data.links || [],
+        createdAt: data.createdAt,
+        comments: (data.comments || []).map((c: { id: string; content: string; createdAt: string; userId: string; user?: { name?: string; email?: string } }) => ({
+          id: c.id,
+          content: c.content,
+          userName: c.user?.name || c.user?.email?.split("@")[0] || "",
+          createdAt: c.createdAt,
+          userId: c.userId,
+        })),
+      });
     }
   };
 

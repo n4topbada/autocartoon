@@ -3,7 +3,7 @@ import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 
 export const metadata: Metadata = {
-  title: "워니의 Autocartoon Bot",
+  title: "워니의 나노바나나봇",
   description: "웹툰 캐릭터 이미지 생성 서비스 by wonyframe",
 };
 

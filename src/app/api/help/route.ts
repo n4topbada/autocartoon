@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     if (resend) {
       try {
         await resend.emails.send({
-          from: "Autocartoon Bot <onboarding@resend.dev>",
+          from: "나노바나나봇 <onboarding@resend.dev>",
           to: WONY_EMAIL,
           subject: `[도움 요청] ${userName} 님이 도움을 요청합니다`,
           html: `
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
             <blockquote style="border-left: 3px solid #7c3aed; padding: 12px; background: #f5f3ff;">
               ${message.trim().replace(/\n/g, "<br>")}
             </blockquote>
-            <p style="color: #666; font-size: 12px;">워니의 Autocartoon Bot에서 발송됨</p>
+            <p style="color: #666; font-size: 12px;">워니의 나노바나나봇에서 발송됨</p>
           `,
         });
         emailSent = true;

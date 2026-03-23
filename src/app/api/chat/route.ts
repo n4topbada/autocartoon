@@ -44,7 +44,7 @@ async function buildSystemPrompt(userId: string): Promise<string> {
     ? `사용자 이름: ${user.name ?? "미설정"}, 등급: ${user.tier}, 잔여 크레딧: ${user.credits}`
     : "사용자 정보 없음";
 
-  return `너는 "워니봇"이야. "워니의 Autocartoon Bot" 서비스의 AI 도우미야.
+  return `너는 "워니봇"이야. "워니의 나노바나나봇" 서비스의 AI 도우미야.
 서비스 이용 방법, 기능, 요금제, 크레딧, 커뮤니티 관련 질문에 한국어로 친절하게 답변해.
 아래 지식 베이스와 커뮤니티 게시글을 참고해서 답변해줘.
 답을 모르면 솔직하게 모른다고 말하고, 고객센터 연결을 안내해.
@@ -77,16 +77,24 @@ async function generateReply(
     { role: "user" as const, parts: [{ text: message }] },
   ];
 
-  const response = await genai.models.generateContent({
-    model: "gemini-2.0-flash",
-    contents,
-    config: {
-      temperature: 0.7,
-      maxOutputTokens: 1024,
+  const config: Record<string, unknown> = {
+    temperature: 1.5,
+    thinkingConfig: {
+      thinkingLevel: "MINIMAL",
     },
+  };
+
+  const response = await genai.models.generateContentStream({
+    model: "gemini-3.1-flash-lite-preview",
+    contents,
+    config,
   });
 
-  return response.text ?? "";
+  let text = "";
+  for await (const chunk of response) {
+    if (chunk.text) text += chunk.text;
+  }
+  return text;
 }
 
 export async function POST(req: NextRequest) {

@@ -514,7 +514,7 @@ export default function Home() {
       <header className={styles.header}>
         <h1 className={styles.logo}>
           <span className={styles.logoEmoji}>🍌</span>
-          워니의 Autocartoon Bot
+          워니의 나노바나나봇
         </h1>
         <nav className={styles.tabNav} style={{ flex: 1 }}>
           <button
