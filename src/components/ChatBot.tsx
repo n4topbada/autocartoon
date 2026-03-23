@@ -170,10 +170,17 @@ export default function ChatBot({ open, onClose }: ChatBotProps) {
             <div
               key={i}
               className={
-                msg.role === "user" ? styles.bubbleUser : styles.bubbleBot
+                msg.role === "user" ? styles.bubbleUser : styles.bubbleBotWrap
               }
             >
-              {msg.content}
+              {msg.role === "assistant" && (
+                <img src="/robot-wony.png" alt="워니봇" className={styles.botAvatar} />
+              )}
+              {msg.role === "assistant" ? (
+                <div className={styles.bubbleBot}>{msg.content}</div>
+              ) : (
+                msg.content
+              )}
             </div>
           ))}
           {loading && <div className={styles.typing}>입력 중...</div>}

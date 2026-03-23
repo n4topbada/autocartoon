@@ -37,6 +37,13 @@
   border-color: var(--accent);
 }
 
+.robotWonyIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .logo {
   font-size: 20px;
   font-weight: 700;

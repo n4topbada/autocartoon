@@ -565,7 +565,7 @@ export default function Home() {
             onClick={() => setChatOpen(!chatOpen)}
             title="워니봇"
           >
-            <LuMessageCircle size={20} />
+            <img src="/robot-wony.png" alt="워니봇" className={styles.robotWonyIcon} />
           </button>
           <UserAvatar />
         </div>
