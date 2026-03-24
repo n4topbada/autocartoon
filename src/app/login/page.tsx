@@ -46,6 +46,14 @@ export default function LoginPage() {
     setRegError("");
     setRegMessage("");
 
+    if (regPassword.length < 8) {
+      setRegError("비밀번호는 8자 이상이어야 합니다.");
+      return;
+    }
+    if (!/[a-zA-Z]/.test(regPassword) || !/[0-9]/.test(regPassword)) {
+      setRegError("비밀번호는 영문과 숫자를 모두 포함해야 합니다.");
+      return;
+    }
     if (regPassword !== regConfirm) {
       setRegError("비밀번호가 일치하지 않습니다.");
       return;
@@ -152,9 +160,9 @@ export default function LoginPage() {
                   type="password"
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
-                  placeholder="4자 이상"
+                  placeholder="영문+숫자 혼합 8자 이상"
                   required
-                  minLength={4}
+                  minLength={8}
                 />
               </div>
               <div className={styles.field}>
@@ -168,6 +176,7 @@ export default function LoginPage() {
                   required
                 />
               </div>
+              <p className={styles.notice}>추후 이메일 인증절차로 회원등급관리가 되니 실사용하시는 이메일 주소 입력 바랍니다.</p>
               {regError && <p className={styles.error}>{regError}</p>}
               {regMessage && <p className={styles.success}>{regMessage}</p>}
               <button
