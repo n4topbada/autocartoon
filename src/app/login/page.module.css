@@ -16,6 +16,20 @@
   padding: 40px 32px;
 }
 
+.logoIcon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.logoIcon img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #374151;
+}
+
 .logo {
   font-size: 28px;
   font-weight: 800;

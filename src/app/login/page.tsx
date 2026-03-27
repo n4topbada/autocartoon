@@ -88,6 +88,9 @@ export default function LoginPage() {
   return (
     <div className={styles.container}>
       <div className={styles.card}>
+        <div className={styles.logoIcon}>
+          <img src="/robot-wony.png" alt="워니봇" />
+        </div>
         <h1 className={styles.logo}>🍌 워니바나나봇</h1>
         <p className={styles.subtitle}>웹툰 캐릭터 이미지 생성 서비스</p>
 
