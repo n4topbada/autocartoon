@@ -132,8 +132,8 @@
 
 /* 사이드바 */
 .sidebar {
-  width: 640px;
-  min-width: 640px;
+  width: 450px;
+  min-width: 450px;
   border-right: 1px solid var(--border);
   padding: 24px;
   overflow-y: auto;
@@ -211,14 +211,24 @@
   color: white;
 }
 
+.bgRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bgRow .select {
+  flex: 1;
+}
+
 .checkboxLabel {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-size: 13px;
   color: var(--text);
   cursor: pointer;
-  padding: 2px 0;
+  white-space: nowrap;
 }
 
 .checkboxLabel input[type="checkbox"] {
@@ -231,8 +241,8 @@
 /* 프리셋 그리드 */
 .presetGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
 }
 
 .presetCard {
@@ -257,8 +267,8 @@
 }
 
 .presetThumbSingle {
-  width: 80px;
-  height: 80px;
+  width: 60px;
+  height: 60px;
   border-radius: 8px;
   overflow: hidden;
   background: var(--border);
@@ -1032,9 +1042,8 @@
 /* ─── Transform 모드 슬롯 ─── */
 .transformGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  max-width: 80%;
 }
 
 .transformSlot {
@@ -1059,16 +1068,11 @@
 }
 
 .transformSlot:nth-child(2) {
-  background: rgba(124, 58, 237, 0.10);
-  border-color: rgba(124, 58, 237, 0.25);
+  background: rgba(124, 58, 237, 0.12);
+  border-color: rgba(124, 58, 237, 0.28);
 }
 
 .transformSlot:nth-child(3) {
-  background: rgba(124, 58, 237, 0.15);
-  border-color: rgba(124, 58, 237, 0.3);
-}
-
-.transformSlot:nth-child(4) {
   background: rgba(124, 58, 237, 0.20);
   border-color: rgba(124, 58, 237, 0.35);
 }

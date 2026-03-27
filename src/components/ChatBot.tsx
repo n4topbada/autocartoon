@@ -16,7 +16,7 @@ interface ChatBotProps {
 const WELCOME_MESSAGE: Message = {
   role: "assistant",
   content:
-    "안녕하세요! 워니봇이에요 🤖\n워니의 나노바나나봇 서비스에 대해 궁금한 점이 있으시면 편하게 물어보세요!",
+    "안녕하세요! 워니봇이에요 🤖\n워니바나나봇 서비스에 대해 궁금한 점이 있으시면 편하게 물어보세요!",
 };
 
 export default function ChatBot({ open, onClose }: ChatBotProps) {

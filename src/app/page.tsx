@@ -145,10 +145,10 @@ export default function Home() {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [deletingImageId, setDeletingImageId] = useState<string | null>(null);
 
-  // Transform 모드: 4슬롯
-  const [transformSlots, setTransformSlots] = useState<(SlotImage | null)[]>([null, null, null, null]);
+  // Transform 모드: 3슬롯
+  const [transformSlots, setTransformSlots] = useState<(SlotImage | null)[]>([null, null, null]);
   // (URL input is now global, not per-slot)
-  const transformFileRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
+  const transformFileRefs = useRef<(HTMLInputElement | null)[]>([null, null, null]);
 
   // 캐릭터 모달
   const [showMarketplace, setShowMarketplace] = useState(false);
@@ -538,7 +538,7 @@ export default function Home() {
           style={{ cursor: "pointer" }}
         >
           <span className={styles.logoEmoji}>🍌</span>
-          워니의 나노바나나봇
+          워니바나나봇
         </h1>
         <nav className={styles.tabNav} style={{ flex: 1 }}>
           <button
@@ -605,7 +605,7 @@ export default function Home() {
         <aside className={styles.sidebar}>
           {/* 1) 참조 이미지 슬롯 (최상단) */}
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>참조 이미지 (선택, 최대 4개)</h2>
+            <h2 className={styles.sectionTitle}>참조 이미지 (선택, 최대 3개)</h2>
               <div className={styles.transformGrid}>
                 {transformSlots.map((slot, i) => (
                   <div
@@ -702,16 +702,10 @@ export default function Home() {
                     }`}
                     onClick={() => setSelectedPreset(p)}
                   >
-                    <div
-                      className={
-                        p.images.length === 1
-                          ? styles.presetThumbSingle
-                          : styles.presetThumbGrid
-                      }
-                    >
-                      {p.images.map((img) => (
-                        <img key={img.id} src={img.dataUrl} alt={p.name} />
-                      ))}
+                    <div className={styles.presetThumbSingle}>
+                      {p.images[0] && (
+                        <img src={p.images[0].dataUrl} alt={p.name} />
+                      )}
                     </div>
                     <span className={styles.presetName}>{p.name}</span>
                   </button>
@@ -720,41 +714,38 @@ export default function Home() {
             </div>
           </section>
 
-          {/* 3) 배경없이 캐릭터만 생성 체크박스 */}
+          {/* 3) 배경 설정 (체크박스 + 드롭다운 한줄) */}
           <section className={styles.section}>
-            <label className={styles.checkboxLabel}>
-              <input
-                type="checkbox"
-                checked={characterOnly}
-                onChange={(e) => {
-                  setCharacterOnly(e.target.checked);
-                  if (e.target.checked) {
-                    setBackground("없음");
-                    setSelectedBgImageId(null);
-                  }
-                }}
-              />
-              <span>배경없이 캐릭터만 생성</span>
-            </label>
-          </section>
+            <div className={styles.bgRow}>
+              <label className={styles.checkboxLabel}>
+                <input
+                  type="checkbox"
+                  checked={characterOnly}
+                  onChange={(e) => {
+                    setCharacterOnly(e.target.checked);
+                    if (e.target.checked) {
+                      setBackground("없음");
+                      setSelectedBgImageId(null);
+                    }
+                  }}
+                />
+                <span>캐릭터만</span>
+              </label>
+              <select
+                className={styles.select}
+                value={background}
+                onChange={(e) => handleBgDropdown(e.target.value)}
+                disabled={characterOnly}
+              >
+                {BACKGROUNDS.map((bg) => (
+                  <option key={bg} value={bg}>
+                    {bg}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {/* 4) 배경 선택 (캐릭터만 모드가 아닐 때) */}
-          {!characterOnly && (
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>배경</h2>
-            <select
-              className={styles.select}
-              value={background}
-              onChange={(e) => handleBgDropdown(e.target.value)}
-            >
-              {BACKGROUNDS.map((bg) => (
-                <option key={bg} value={bg}>
-                  {bg}
-                </option>
-              ))}
-            </select>
-
-            {savedBackgrounds.length > 0 && (
+            {!characterOnly && savedBackgrounds.length > 0 && (
               <>
                 <span className={styles.bgSectionLabel}>저장된 배경</span>
                 <div className={styles.bgThumbnailStrip}>
@@ -780,7 +771,6 @@ export default function Home() {
               </>
             )}
           </section>
-          )}
 
           {/* 5) 프롬프트 입력 */}
           <section className={styles.section}>
