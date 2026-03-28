@@ -49,9 +49,14 @@ interface CharacterGroupData {
   presets: Preset[];
 }
 
-interface MarketplaceItem extends Preset {
+interface MarketplaceItem {
+  type: "preset" | "group";
+  id: string;
+  name: string;
   price: number;
   owned: boolean;
+  characterCount: number;
+  thumbnail: string | null;
 }
 
 interface GeneratedImageData {
@@ -331,13 +336,14 @@ export default function Home() {
     setShowMarketplace(true);
   };
 
-  const handlePurchase = async (presetId: string) => {
-    setPurchasing(presetId);
+  const handlePurchase = async (item: MarketplaceItem) => {
+    setPurchasing(item.id);
     try {
+      const body = item.type === "group" ? { groupId: item.id } : { presetId: item.id };
       const res = await fetch("/api/marketplace/purchase", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ presetId }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1077,13 +1083,16 @@ export default function Home() {
                 {marketplaceItems.map((item) => (
                   <div key={item.id} className={styles.marketCard}>
                     <div className={styles.marketCardThumb}>
-                      {item.images.slice(0, 1).map((img) => (
-                        <img key={img.id} src={img.dataUrl} alt={item.name} />
-                      ))}
+                      {item.thumbnail && (
+                        <img src={item.thumbnail} alt={item.name} />
+                      )}
                     </div>
                     <div className={styles.marketCardInfo}>
                       <span className={styles.marketCardName}>{item.name}</span>
                       <span className={styles.marketCardPrice}>
+                        {item.characterCount > 1 && (
+                          <span className={styles.charCount}>{item.characterCount}캐릭터 </span>
+                        )}
                         🍌 {item.price === 0 ? "무료" : `${item.price}`}
                       </span>
                     </div>
@@ -1094,7 +1103,7 @@ export default function Home() {
                     ) : (
                       <button
                         className={styles.marketBuyBtn}
-                        onClick={() => handlePurchase(item.id)}
+                        onClick={() => handlePurchase(item)}
                         disabled={purchasing === item.id}
                       >
                         {purchasing === item.id ? "구매 중..." : "획득하기"}
