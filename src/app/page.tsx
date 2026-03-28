@@ -653,19 +653,37 @@ export default function Home() {
     }
   }, [expandedGroupId]);
 
-  // 태그 토글 (이미지에 태그 추가/제거)
+  // 태그 토글 (낙관적 업데이트)
   const handleToggleTag = async (imageId: string, tagId: string) => {
-    try {
-      const res = await fetch(`/api/images/${imageId}/tags`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tagId }),
-      });
-      if (res.ok) loadHistory();
-    } catch { /* ignore */ }
+    const tag = allTags.find((t) => t.id === tagId);
+    if (!tag) return;
+
+    // 즉시 UI 업데이트
+    setHistory((prev) =>
+      prev.map((item) => ({
+        ...item,
+        images: item.images.map((img) => {
+          if (img.id !== imageId) return img;
+          const hasTag = (img.tags ?? []).some((t) => t.id === tagId);
+          return {
+            ...img,
+            tags: hasTag
+              ? (img.tags ?? []).filter((t) => t.id !== tagId)
+              : [...(img.tags ?? []), tag],
+          };
+        }),
+      }))
+    );
+
+    // 서버 동기화 (백그라운드)
+    fetch(`/api/images/${imageId}/tags`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tagId }),
+    }).catch(() => loadHistory()); // 실패 시 롤백
   };
 
-  // 새 태그 생성
+  // 새 태그 생성 + 자동 태깅
   const handleCreateTag = async () => {
     if (!newTagName.trim()) return;
     try {
@@ -675,10 +693,32 @@ export default function Home() {
         body: JSON.stringify({ name: newTagName.trim(), color: newTagColor }),
       });
       if (res.ok) {
+        const newTag = await res.json();
+        setAllTags((prev) => [...prev, newTag]);
         setNewTagName("");
-        loadTags();
+        // 태그 메뉴가 열린 이미지에 자동 태깅
+        if (tagMenuImageId) {
+          handleToggleTagDirect(tagMenuImageId, newTag);
+        }
       }
     } catch { /* ignore */ }
+  };
+
+  // 새로 만든 태그를 즉시 적용 (allTags에 아직 반영 안 됐을 수 있으므로 직접)
+  const handleToggleTagDirect = (imageId: string, tag: TagData) => {
+    setHistory((prev) =>
+      prev.map((item) => ({
+        ...item,
+        images: item.images.map((img) =>
+          img.id === imageId ? { ...img, tags: [...(img.tags ?? []), tag] } : img
+        ),
+      }))
+    );
+    fetch(`/api/images/${imageId}/tags`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tagId: tag.id }),
+    }).catch(() => loadHistory());
   };
 
   const handleGenerate = async () => {
@@ -1087,69 +1127,54 @@ export default function Home() {
 
             {flatImages.map((img) => (
               <div key={img.id} className={styles.galleryCard}>
-                {/* 색 책갈피 (좌상단) */}
-                {img.tags.length > 0 && (
-                  <div className={styles.bookmarks}>
-                    {img.tags.map((tag) => (
-                      <span key={tag.id} className={styles.bookmark} style={{ background: tag.color }} title={tag.name} />
-                    ))}
-                  </div>
-                )}
                 <img src={img.dataUrl} alt="generated" className={styles.galleryImg} />
-                {/* 태그 라벨 바 */}
-                {img.tags.length > 0 && (
-                  <div className={styles.tagBar}>
+                <div className={styles.galleryActions}>
+                  {/* 좌측: 태그 아이콘들 */}
+                  <div className={styles.tagIcons}>
                     {img.tags.map((tag) => (
-                      <span key={tag.id} className={styles.tagLabel} style={{ background: tag.color }}>
-                        {tag.name}
-                        <button
-                          className={styles.tagLabelX}
-                          onClick={(e) => { e.stopPropagation(); handleToggleTag(img.id, tag.id); }}
-                        >
-                          ×
-                        </button>
-                      </span>
+                      <LuTag key={tag.id} size={12} style={{ color: tag.color }} title={tag.name} />
                     ))}
                   </div>
-                )}
-                <div className={styles.galleryActions}>
-                  <button
-                    className={`${styles.galleryActionBtn} ${img.favorite ? styles.galleryFavorited : ""}`}
-                    onClick={() => handleToggleFavorite(img.id)}
-                    title="즐겨찾기"
-                  >
-                    <LuHeart size={14} />
-                  </button>
-                  <button
-                    className={styles.galleryActionBtn}
-                    onClick={() => setTagMenuImageId(tagMenuImageId === img.id ? null : img.id)}
-                    title="태그"
-                  >
-                    <LuTag size={14} />
-                  </button>
-                  <button
-                    className={styles.galleryActionBtn}
-                    onClick={() => setEditingImage(img)}
-                    title="편집"
-                  >
-                    <LuPencil size={14} />
-                  </button>
-                  <a
-                    className={styles.galleryActionBtn}
-                    href={img.dataUrl}
-                    download={`image_${img.id}.png`}
-                    onClick={(e) => e.stopPropagation()}
-                    title="다운로드"
-                  >
-                    <LuDownload size={14} />
-                  </a>
-                  <button
-                    className={`${styles.galleryActionBtn} ${styles.galleryDeleteBtn}`}
-                    onClick={() => setDeletingImageId(img.id)}
-                    title="삭제"
-                  >
-                    <LuTrash2 size={14} />
-                  </button>
+                  {/* 우측: 기능 버튼들 */}
+                  <div className={styles.actionBtns}>
+                    <button
+                      className={`${styles.galleryActionBtn} ${img.favorite ? styles.galleryFavorited : ""}`}
+                      onClick={() => handleToggleFavorite(img.id)}
+                      title="즐겨찾기"
+                    >
+                      <LuHeart size={14} />
+                    </button>
+                    <button
+                      className={styles.galleryActionBtn}
+                      onClick={() => setTagMenuImageId(tagMenuImageId === img.id ? null : img.id)}
+                      title="태그"
+                    >
+                      <LuTag size={14} />
+                    </button>
+                    <button
+                      className={styles.galleryActionBtn}
+                      onClick={() => setEditingImage(img)}
+                      title="편집"
+                    >
+                      <LuPencil size={14} />
+                    </button>
+                    <a
+                      className={styles.galleryActionBtn}
+                      href={img.dataUrl}
+                      download={`image_${img.id}.png`}
+                      onClick={(e) => e.stopPropagation()}
+                      title="다운로드"
+                    >
+                      <LuDownload size={14} />
+                    </a>
+                    <button
+                      className={`${styles.galleryActionBtn} ${styles.galleryDeleteBtn}`}
+                      onClick={() => setDeletingImageId(img.id)}
+                      title="삭제"
+                    >
+                      <LuTrash2 size={14} />
+                    </button>
+                  </div>
                 </div>
                 {/* 태그 메뉴 */}
                 {tagMenuImageId === img.id && (
