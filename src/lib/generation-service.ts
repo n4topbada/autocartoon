@@ -51,16 +51,16 @@ export async function generate(input: GenerateInput) {
     throw new Error("선택된 캐릭터를 찾을 수 없습니다.");
   }
 
-  // 2. 각 캐릭터의 대표이미지를 라벨 포함으로 로드
-  const characterLabeledImages: { label: string; base64: string; mimeType: string }[] = [];
+  // 2. 각 캐릭터의 대표이미지 로드
+  const characterImages: { name: string; base64: string; mimeType: string }[] = [];
   for (const preset of presets) {
     const repImage =
       preset.images.find((img) => img.id === preset.representativeImageId) ??
       preset.images[0];
     if (repImage) {
       const data = await fetchBlobAsBase64(repImage.blobUrl);
-      characterLabeledImages.push({
-        label: `=== Character: ${preset.name} ===`,
+      characterImages.push({
+        name: preset.name,
         base64: data.base64,
         mimeType: repImage.mimeType,
       });
@@ -69,6 +69,15 @@ export async function generate(input: GenerateInput) {
 
   // 3. 배경 이미지 로드 (이미지 모드)
   const referenceImages: { base64: string; mimeType: string }[] = [];
+
+  // 단일 캐릭터: referenceImages로 (기존 방식 유지)
+  // 다중 캐릭터: labeledImages로 (이름 라벨 필요)
+  if (presets.length === 1 && characterImages.length > 0) {
+    referenceImages.push({
+      base64: characterImages[0].base64,
+      mimeType: characterImages[0].mimeType,
+    });
+  }
   let bgImageName: string | undefined;
   if (input.backgroundImageId) {
     const bgRecord = await prisma.savedBackground.findUnique({
@@ -90,6 +99,14 @@ export async function generate(input: GenerateInput) {
   }
 
   // transform 모드: 사용자 이미지들 (번호 라벨 포함)
+  // 다중 캐릭터: 라벨 포함 이미지
+  const characterLabeledImages = presets.length > 1
+    ? characterImages.map((ci) => ({
+        label: `=== Character: ${ci.name} ===`,
+        base64: ci.base64,
+        mimeType: ci.mimeType,
+      }))
+    : [];
   let labeledImages: { label: string; base64: string; mimeType: string }[] =
     [...characterLabeledImages];
   if (input.inputImages && input.mode === "transform") {
