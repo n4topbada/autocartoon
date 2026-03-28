@@ -14,8 +14,9 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { presetId, mode, prompt, background, backgroundImageId, inputImage, inputImages } = body as {
-      presetId: string;
+    const { presetId, presetIds: rawPresetIds, mode, prompt, background, backgroundImageId, inputImage, inputImages } = body as {
+      presetId?: string;
+      presetIds?: string[];
       mode: GenerationMode;
       prompt: string;
       background?: string;
@@ -24,9 +25,19 @@ export async function POST(req: NextRequest) {
       inputImages?: { base64: string; mimeType: string }[];
     };
 
-    if (!presetId || !mode || !prompt) {
+    // 하위호환: presetId 제공 시 배열로 래핑
+    const presetIds = rawPresetIds ?? (presetId ? [presetId] : []);
+
+    if (presetIds.length === 0 || !mode || !prompt) {
       return NextResponse.json(
-        { error: "presetId, mode, prompt 는 필수입니다." },
+        { error: "presetIds, mode, prompt 는 필수입니다." },
+        { status: 400 }
+      );
+    }
+
+    if (presetIds.length > 4) {
+      return NextResponse.json(
+        { error: "최대 4개 캐릭터까지 선택할 수 있습니다." },
         { status: 400 }
       );
     }
@@ -39,7 +50,7 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await generate({
-      presetId,
+      presetIds,
       userId: session.userId,
       mode,
       prompt,

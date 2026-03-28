@@ -245,6 +245,154 @@
   gap: 6px;
 }
 
+/* 2단계 그룹핑 */
+.charGroupList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.charGroup {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  transition: background 0.15s;
+}
+
+.groupHeader:hover {
+  background: var(--surface-hover);
+}
+
+.groupExpanded {
+  background: var(--surface-hover);
+}
+
+.groupName {
+  flex: 1;
+  text-align: left;
+}
+
+.groupArrow {
+  font-size: 11px;
+  color: var(--text-sub);
+}
+
+/* Depth_B 가로 스크롤러 */
+.depthBContainer {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  background: var(--bg);
+}
+
+.depthBScrollBtn {
+  flex-shrink: 0;
+  width: 20px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-sub);
+  transition: background 0.15s;
+}
+
+.depthBScrollBtn:hover {
+  background: var(--surface-hover);
+}
+
+.depthBScroller {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+  min-width: 0;
+}
+
+.depthBScroller::-webkit-scrollbar {
+  display: none;
+}
+
+.depthBScroller .presetCard {
+  flex-shrink: 0;
+  width: calc(25% - 6px);
+  min-width: 72px;
+}
+
+/* 독립 캐릭터 카드 (ungrouped) */
+.ungroupedCard {
+  flex-direction: row;
+  gap: 10px;
+  padding: 6px 10px;
+}
+
+.ungroupedCard .presetThumbSingle {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+}
+
+/* 선택 카운트 */
+.selectionCount {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-sub);
+}
+
+/* 선택된 캐릭터 태그 */
+.selectedTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.selectedTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.tagRemove {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.tagRemove:hover {
+  color: #fff;
+}
+
 .presetCard {
   display: flex;
   flex-direction: column;

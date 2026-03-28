@@ -12,6 +12,7 @@ import {
 
 export interface PromptContext {
   characterName: string;
+  characters?: { name: string }[];
   background?: string;
   userPrompt: string;
 }

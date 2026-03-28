@@ -14,7 +14,7 @@ import {
 export type GenerationMode = "text" | "sketch" | "edit" | "transform";
 
 export interface GenerateInput {
-  presetId: string;
+  presetIds: string[];
   userId: string;
   mode: GenerationMode;
   prompt: string;
@@ -41,16 +41,34 @@ async function loadPresetImages(
 }
 
 export async function generate(input: GenerateInput) {
-  // 1. 프리셋 조회
-  const preset = await prisma.characterPreset.findUniqueOrThrow({
-    where: { id: input.presetId },
+  // 1. 프리셋 조회 (다중 캐릭터)
+  const presets = await prisma.characterPreset.findMany({
+    where: { id: { in: input.presetIds } },
     include: { images: { orderBy: { order: "asc" } } },
   });
 
-  // 2. 참조 이미지 로드 (Blob → base64)
-  const referenceImages = await loadPresetImages(preset.images);
+  if (presets.length === 0) {
+    throw new Error("선택된 캐릭터를 찾을 수 없습니다.");
+  }
+
+  // 2. 각 캐릭터의 대표이미지를 라벨 포함으로 로드
+  const characterLabeledImages: { label: string; base64: string; mimeType: string }[] = [];
+  for (const preset of presets) {
+    const repImage =
+      preset.images.find((img) => img.id === preset.representativeImageId) ??
+      preset.images[0];
+    if (repImage) {
+      const data = await fetchBlobAsBase64(repImage.blobUrl);
+      characterLabeledImages.push({
+        label: `=== Character: ${preset.name} ===`,
+        base64: data.base64,
+        mimeType: repImage.mimeType,
+      });
+    }
+  }
 
   // 3. 배경 이미지 로드 (이미지 모드)
+  const referenceImages: { base64: string; mimeType: string }[] = [];
   let bgImageName: string | undefined;
   if (input.backgroundImageId) {
     const bgRecord = await prisma.savedBackground.findUnique({
@@ -71,19 +89,24 @@ export async function generate(input: GenerateInput) {
     referenceImages.push(input.inputImage);
   }
 
-  // transform 모드: 사용자 이미지들 (번호 라벨 포함, 별도 처리)
-  let labeledImages: { label: string; base64: string; mimeType: string }[] | undefined;
+  // transform 모드: 사용자 이미지들 (번호 라벨 포함)
+  let labeledImages: { label: string; base64: string; mimeType: string }[] =
+    [...characterLabeledImages];
   if (input.inputImages && input.mode === "transform") {
-    labeledImages = input.inputImages.map((img, i) => ({
-      label: `=== 사용자 참조 이미지 ${i + 1}번 ===`,
-      base64: img.base64,
-      mimeType: img.mimeType,
-    }));
+    for (let i = 0; i < input.inputImages.length; i++) {
+      labeledImages.push({
+        label: `=== 사용자 참조 이미지 ${i + 1}번 ===`,
+        base64: input.inputImages[i].base64,
+        mimeType: input.inputImages[i].mimeType,
+      });
+    }
   }
 
   // 4. 프롬프트 구성
+  const characterNames = presets.map((p) => p.name);
   const ctx = {
-    characterName: preset.name,
+    characterName: characterNames.join(", "),
+    characters: characterNames.map((name) => ({ name })),
     background: input.background,
     userPrompt: input.prompt,
   };
@@ -106,18 +129,25 @@ export async function generate(input: GenerateInput) {
       break;
   }
 
+  // 다중 캐릭터 참조 안내 프롬프트 추가
+  if (presets.length > 1) {
+    const charRef = `[캐릭터 참조] 첨부된 이미지는 ${characterNames.map((n) => `"${n}"`).join(", ")} 캐릭터의 레퍼런스입니다. 각 이미지 앞에 캐릭터 이름 라벨이 있습니다. 프롬프트에서 언급된 캐릭터를 해당 레퍼런스에 맞게 그려주세요.`;
+    prompt = charRef + "\n\n" + prompt;
+  }
+
   // 5. Gemini 호출
   const result = await generateContent({
     prompt,
     referenceImages,
-    labeledImages,
+    labeledImages: labeledImages.length > 0 ? labeledImages : undefined,
     modalities: ["IMAGE", "TEXT"],
   });
 
   // 6. 결과를 Blob에 업로드 후 DB 저장
   const genRequest = await prisma.generationRequest.create({
     data: {
-      presetId: input.presetId,
+      presetId: input.presetIds[0],
+      presetIds: input.presetIds,
       userId: input.userId,
       mode: input.mode,
       prompt: input.prompt,

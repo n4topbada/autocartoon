@@ -23,6 +23,7 @@ import {
 import { resizeFromFile, fetchImageFromUrl, type ResizedImage } from "@/lib/image-resize";
 import Board from "@/components/Board";
 import ChatBot from "@/components/ChatBot";
+import CharacterManagementModal from "@/components/CharacterManagementModal";
 
 type Tab = "character" | "background" | "board";
 
@@ -35,7 +36,17 @@ interface Preset {
   id: string;
   alias: string;
   name: string;
+  groupId?: string | null;
+  order?: number;
+  representativeImage: PresetImageData | null;
   images: PresetImageData[];
+}
+
+interface CharacterGroupData {
+  id: string;
+  name: string;
+  order: number;
+  presets: Preset[];
 }
 
 interface MarketplaceItem extends Preset {
@@ -97,6 +108,51 @@ interface UploadingImage {
   preview: string;
 }
 
+// Depth_B 가로 스크롤 컴포넌트
+function DepthBScroller({
+  presets,
+  selectedPresets,
+  onToggle,
+  onManage,
+}: {
+  presets: Preset[];
+  selectedPresets: Preset[];
+  onToggle: (p: Preset) => void;
+  onManage: (p: Preset) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scroll = (dir: "left" | "right") => {
+    if (!scrollRef.current) return;
+    const amount = scrollRef.current.offsetWidth;
+    scrollRef.current.scrollBy({ left: dir === "left" ? -amount : amount, behavior: "smooth" });
+  };
+  return (
+    <div className={styles.depthBContainer}>
+      <button className={styles.depthBScrollBtn} onClick={() => scroll("left")}>‹</button>
+      <div className={styles.depthBScroller} ref={scrollRef}>
+        {presets.map((p) => (
+          <button
+            key={p.id}
+            className={`${styles.presetCard} ${
+              selectedPresets.find((s) => s.id === p.id) ? styles.presetSelected : ""
+            }`}
+            onClick={() => onToggle(p)}
+            onContextMenu={(e) => { e.preventDefault(); onManage(p); }}
+          >
+            <div className={styles.presetThumbSingle}>
+              {(p.representativeImage ?? p.images[0]) && (
+                <img src={(p.representativeImage ?? p.images[0]).dataUrl} alt={p.name} />
+              )}
+            </div>
+            <span className={styles.presetName}>{p.name}</span>
+          </button>
+        ))}
+      </div>
+      <button className={styles.depthBScrollBtn} onClick={() => scroll("right")}>›</button>
+    </div>
+  );
+}
+
 interface SlotImage {
   base64: string;
   mimeType: string;
@@ -112,9 +168,12 @@ interface UserOption {
 export default function Home() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("character");
-  const [presets, setPresets] = useState<Preset[]>([]);
+  const [charGroups, setCharGroups] = useState<CharacterGroupData[]>([]);
+  const [ungroupedPresets, setUngroupedPresets] = useState<Preset[]>([]);
   const [presetsLoading, setPresetsLoading] = useState(true);
-  const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null);
+  const [selectedPresets, setSelectedPresets] = useState<Preset[]>([]);
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
+  const [managingPreset, setManagingPreset] = useState<Preset | null>(null);
   const [prompt, setPrompt] = useState("");
   const [background, setBackground] = useState("없음");
   const [characterOnly, setCharacterOnly] = useState(false);
@@ -169,24 +228,40 @@ export default function Home() {
   // API 호출 시 userId 파라미터 생성
   const userParam = isAdmin && viewingUserId ? `userId=${viewingUserId}` : "";
 
-  // 프리셋 목록 로드
+  // 프리셋 목록 로드 (그룹핑 구조)
   const loadPresets = useCallback(() => {
     setPresetsLoading(true);
     const q = userParam ? `?${userParam}` : "";
     fetch(`/api/presets${q}`)
       .then((r) => r.json())
       .then((data) => {
-        if (Array.isArray(data)) {
-          setPresets(data);
-          // 디폴트로 wony 선택
-          if (!selectedPreset) {
-            const wony = data.find((p: Preset) => p.alias === "wony");
-            if (wony) setSelectedPreset(wony);
-            else if (data.length > 0) setSelectedPreset(data[0]);
+        if (data && typeof data === "object" && !Array.isArray(data)) {
+          const groups: CharacterGroupData[] = data.groups ?? [];
+          const ungrouped: Preset[] = data.ungrouped ?? [];
+          setCharGroups(groups);
+          setUngroupedPresets(ungrouped);
+          // 디폴트 선택
+          if (selectedPresets.length === 0) {
+            const allPresets = [...ungrouped, ...groups.flatMap((g: CharacterGroupData) => g.presets)];
+            const wony = allPresets.find((p: Preset) => p.alias === "wony");
+            if (wony) setSelectedPresets([wony]);
+            else if (allPresets.length > 0) setSelectedPresets([allPresets[0]]);
+          }
+        } else if (Array.isArray(data)) {
+          // 하위호환: 이전 flat 응답
+          const mapped = data.map((p: Preset & { representativeImage?: PresetImageData | null }) => ({
+            ...p,
+            representativeImage: p.representativeImage ?? p.images[0] ?? null,
+          }));
+          setUngroupedPresets(mapped);
+          setCharGroups([]);
+          if (selectedPresets.length === 0 && mapped.length > 0) {
+            const wony = mapped.find((p: Preset) => p.alias === "wony");
+            setSelectedPresets([wony ?? mapped[0]]);
           }
         }
       })
-      .catch(() => setPresets([]))
+      .catch(() => { setCharGroups([]); setUngroupedPresets([]); })
       .finally(() => setPresetsLoading(false));
   }, [userParam]);
 
@@ -281,7 +356,7 @@ export default function Home() {
   // 관리자: 유저 전환
   const handleUserSwitch = (userId: string) => {
     setViewingUserId(userId === user?.id ? null : userId);
-    setSelectedPreset(null);
+    setSelectedPresets([]);
   };
 
   // 즐겨찾기 토글 (낙관적 업데이트)
@@ -372,7 +447,11 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "생성 실패");
       loadPresets();
-      setSelectedPreset(data);
+      const newPreset: Preset = {
+        ...data,
+        representativeImage: data.representativeImage ?? data.images?.[0] ?? null,
+      };
+      setSelectedPresets((prev) => prev.length < 4 ? [...prev, newPreset] : prev);
       setShowUploadModal(false);
       setNewCharName("");
       setUploadingImages([]);
@@ -479,8 +558,36 @@ export default function Home() {
   };
 
   // 생성 요청 (자동 모드 감지)
+  // 캐릭터 토글 선택 (최대 4개)
+  const togglePresetSelection = useCallback((preset: Preset) => {
+    setSelectedPresets((prev) => {
+      const exists = prev.find((p) => p.id === preset.id);
+      if (exists) return prev.filter((p) => p.id !== preset.id);
+      if (prev.length >= 4) return prev; // 최대 4개
+      return [...prev, preset];
+    });
+  }, []);
+
+  // 그룹 선택 (Depth_A)
+  const handleGroupSelect = useCallback((group: CharacterGroupData) => {
+    if (expandedGroupId === group.id) {
+      setExpandedGroupId(null);
+      return;
+    }
+    setExpandedGroupId(group.id);
+    // Depth_B가 있으면 첫 번째 캐릭터 자동 선택
+    if (group.presets.length > 0) {
+      const firstChar = group.presets[0];
+      setSelectedPresets((prev) => {
+        if (prev.find((p) => p.id === firstChar.id)) return prev;
+        if (prev.length >= 4) return prev;
+        return [...prev, firstChar];
+      });
+    }
+  }, [expandedGroupId]);
+
   const handleGenerate = async () => {
-    if (!selectedPreset) return;
+    if (selectedPresets.length === 0) return;
     const hasImages = transformSlots.some((s) => s !== null);
     const hasPrompt = prompt.trim().length > 0;
     if (!hasImages && !hasPrompt) return;
@@ -498,7 +605,7 @@ export default function Home() {
       }
 
       const body: Record<string, unknown> = {
-        presetId: selectedPreset.id,
+        presetIds: selectedPresets.map((p) => p.id),
         mode: autoMode,
         prompt: finalPrompt,
       };
@@ -666,10 +773,10 @@ export default function Home() {
               </div>
             </section>
 
-          {/* 2) 캐릭터 선택 */}
+          {/* 2) 캐릭터 선택 (2단계 그룹핑) */}
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>캐릭터 선택</h2>
+              <h2 className={styles.sectionTitle}>캐릭터 선택 <span className={styles.selectionCount}>({selectedPresets.length}/4)</span></h2>
               <div className={styles.sectionHeaderBtns}>
                 <button
                   className={styles.textBtn}
@@ -687,31 +794,71 @@ export default function Home() {
                 </button>
               </div>
             </div>
-            <div className={styles.presetGrid}>
-              {presetsLoading ? (
-                <div className={styles.loadingSpinner}>
-                  <span className={styles.spinner} />
-                  <span>불러오는 중...</span>
-                </div>
-              ) : (
-                presets.map((p) => (
+
+            {presetsLoading ? (
+              <div className={styles.loadingSpinner}>
+                <span className={styles.spinner} />
+                <span>불러오는 중...</span>
+              </div>
+            ) : (
+              <div className={styles.charGroupList}>
+                {/* Depth_A 그룹들 */}
+                {charGroups.map((group) => (
+                  <div key={group.id} className={styles.charGroup}>
+                    <button
+                      className={`${styles.groupHeader} ${expandedGroupId === group.id ? styles.groupExpanded : ""}`}
+                      onClick={() => handleGroupSelect(group)}
+                    >
+                      <span className={styles.groupName}>{group.name}</span>
+                      <span className={styles.groupArrow}>{expandedGroupId === group.id ? "▾" : "▸"}</span>
+                    </button>
+                    {expandedGroupId === group.id && group.presets.length > 0 && (
+                      <DepthBScroller
+                        presets={group.presets}
+                        selectedPresets={selectedPresets}
+                        onToggle={togglePresetSelection}
+                        onManage={setManagingPreset}
+                      />
+                    )}
+                  </div>
+                ))}
+                {/* 독립 캐릭터 (ungrouped) */}
+                {ungroupedPresets.map((p) => (
                   <button
                     key={p.id}
-                    className={`${styles.presetCard} ${
-                      selectedPreset?.id === p.id ? styles.presetSelected : ""
+                    className={`${styles.presetCard} ${styles.ungroupedCard} ${
+                      selectedPresets.find((s) => s.id === p.id) ? styles.presetSelected : ""
                     }`}
-                    onClick={() => setSelectedPreset(p)}
+                    onClick={() => togglePresetSelection(p)}
+                    onContextMenu={(e) => { e.preventDefault(); setManagingPreset(p); }}
                   >
                     <div className={styles.presetThumbSingle}>
-                      {p.images[0] && (
-                        <img src={p.images[0].dataUrl} alt={p.name} />
+                      {(p.representativeImage ?? p.images[0]) && (
+                        <img src={(p.representativeImage ?? p.images[0]).dataUrl} alt={p.name} />
                       )}
                     </div>
                     <span className={styles.presetName}>{p.name}</span>
                   </button>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
+
+            {/* 선택된 캐릭터 태그 */}
+            {selectedPresets.length > 0 && (
+              <div className={styles.selectedTags}>
+                {selectedPresets.map((p) => (
+                  <span key={p.id} className={styles.selectedTag}>
+                    {p.name}
+                    <button
+                      className={styles.tagRemove}
+                      onClick={() => setSelectedPresets((prev) => prev.filter((s) => s.id !== p.id))}
+                    >
+                      <LuX size={10} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* 3) 배경 설정 (체크박스 + 드롭다운 한줄) */}
@@ -788,7 +935,7 @@ export default function Home() {
           <button
             className={styles.generateBtn}
             onClick={handleGenerate}
-            disabled={generating || !selectedPreset || (!prompt.trim() && transformSlots.every((s) => s === null))}
+            disabled={generating || selectedPresets.length === 0 || (!prompt.trim() && transformSlots.every((s) => s === null))}
           >
             <LuSparkles size={16} />
             {generating ? "생성 중..." : "이미지 생성"}
@@ -963,6 +1110,33 @@ export default function Home() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 캐릭터 관리 모달 */}
+      {managingPreset && (
+        <CharacterManagementModal
+          preset={managingPreset}
+          onClose={() => setManagingPreset(null)}
+          onUpdate={(updated) => {
+            // 선택 목록 갱신
+            setSelectedPresets((prev) =>
+              prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p))
+            );
+            // 그룹/독립 프리셋 목록 갱신
+            setUngroupedPresets((prev) =>
+              prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p))
+            );
+            setCharGroups((prev) =>
+              prev.map((g) => ({
+                ...g,
+                presets: g.presets.map((p) =>
+                  p.id === updated.id ? { ...p, ...updated } : p
+                ),
+              }))
+            );
+            setManagingPreset(null);
+          }}
+        />
       )}
 
       {/* 캐릭터 업로드 모달 */}

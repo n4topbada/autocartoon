@@ -7,16 +7,32 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model CharacterPreset {
+model CharacterGroup {
   id        String   @id @default(cuid())
-  alias     String   @unique
   name      String
   userId    String?
-  price     Int      @default(0) // 바나나(크레딧) 가격. 0=무료
+  order     Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  user    User?             @relation(fields: [userId], references: [id])
+  presets CharacterPreset[]
+}
+
+model CharacterPreset {
+  id                    String   @id @default(cuid())
+  alias                 String   @unique
+  name                  String
+  userId                String?
+  price                 Int      @default(0) // 바나나(크레딧) 가격. 0=무료
+  groupId               String?
+  representativeImageId String?
+  order                 Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
   user               User?              @relation(fields: [userId], references: [id])
+  group              CharacterGroup?    @relation(fields: [groupId], references: [id])
   images             PresetImage[]
   generationRequests GenerationRequest[]
   purchasedBy        PurchasedPreset[]
@@ -59,6 +75,7 @@ model SavedBackground {
 model GenerationRequest {
   id                String   @id @default(cuid())
   presetId          String
+  presetIds         String[] // 다중 캐릭터 선택
   userId            String?
   mode              String   // "text" | "sketch" | "edit"
   prompt            String
@@ -89,6 +106,7 @@ model User {
   updatedAt         DateTime  @updatedAt
 
   presets            CharacterPreset[]
+  characterGroups    CharacterGroup[]
   backgrounds        SavedBackground[]
   generationRequests GenerationRequest[]
   purchasedPresets   PurchasedPreset[]

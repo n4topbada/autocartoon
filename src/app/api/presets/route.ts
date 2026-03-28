@@ -31,20 +31,46 @@ export async function GET(req: NextRequest) {
       include: {
         images: { orderBy: { order: "asc" }, take: 4 },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { order: "asc" },
     });
 
-    const result = presets.map((p) => ({
-      id: p.id,
-      alias: p.alias,
-      name: p.name,
-      images: p.images.map((img) => ({
-        id: img.id,
-        dataUrl: img.blobUrl,
-      })),
+    const mapPreset = (p: (typeof presets)[0]) => {
+      const repImage =
+        p.images.find((img) => img.id === p.representativeImageId) ??
+        p.images[0] ??
+        null;
+      return {
+        id: p.id,
+        alias: p.alias,
+        name: p.name,
+        groupId: p.groupId,
+        order: p.order,
+        representativeImage: repImage
+          ? { id: repImage.id, dataUrl: repImage.blobUrl }
+          : null,
+        images: p.images.map((img) => ({
+          id: img.id,
+          dataUrl: img.blobUrl,
+        })),
+      };
+    };
+
+    // 그룹 조회
+    const groups = await prisma.characterGroup.findMany({
+      where: { userId: targetUserId },
+      orderBy: { order: "asc" },
+    });
+
+    const grouped = groups.map((g) => ({
+      id: g.id,
+      name: g.name,
+      order: g.order,
+      presets: presets.filter((p) => p.groupId === g.id).map(mapPreset),
     }));
 
-    return NextResponse.json(result);
+    const ungrouped = presets.filter((p) => !p.groupId).map(mapPreset);
+
+    return NextResponse.json({ groups: grouped, ungrouped });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -57,9 +83,10 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth();
     const body = await req.json();
-    const { name, images } = body as {
+    const { name, images, groupId } = body as {
       name: string;
       images: { base64: string; mimeType: string }[];
+      groupId?: string;
     };
 
     if (!name?.trim()) {
@@ -93,6 +120,7 @@ export async function POST(req: NextRequest) {
         alias,
         name: name.trim(),
         userId: session.userId,
+        groupId: groupId || null,
         images: {
           create: images.map((img, i) => ({
             blobUrl: blobUrls[i],
