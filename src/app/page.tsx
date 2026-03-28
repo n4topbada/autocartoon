@@ -70,6 +70,7 @@ interface GeneratedImageData {
   mimeType: string;
   dataUrl: string;
   favorite?: boolean;
+  tags?: TagData[];
 }
 
 interface HistoryItem {
@@ -368,7 +369,7 @@ export default function Home() {
         presetName: item.presetName,
         prompt: item.prompt,
         createdAt: item.createdAt,
-        tags: (img as { tags?: TagData[] }).tags ?? [],
+        tags: img.tags ?? [],
       }))
     );
     let filtered = showFavoritesOnly ? all.filter((img) => img.favorite) : all;
@@ -1095,6 +1096,22 @@ export default function Home() {
                   </div>
                 )}
                 <img src={img.dataUrl} alt="generated" className={styles.galleryImg} />
+                {/* 태그 라벨 바 */}
+                {img.tags.length > 0 && (
+                  <div className={styles.tagBar}>
+                    {img.tags.map((tag) => (
+                      <span key={tag.id} className={styles.tagLabel} style={{ background: tag.color }}>
+                        {tag.name}
+                        <button
+                          className={styles.tagLabelX}
+                          onClick={(e) => { e.stopPropagation(); handleToggleTag(img.id, tag.id); }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className={styles.galleryActions}>
                   <button
                     className={`${styles.galleryActionBtn} ${img.favorite ? styles.galleryFavorited : ""}`}
@@ -1158,7 +1175,7 @@ export default function Home() {
                             key={tc.color}
                             className={`${styles.tagNewColorBtn} ${newTagColor === tc.color ? styles.tagNewColorActive : ""}`}
                             style={{ background: tc.color }}
-                            onClick={() => setNewTagColor(tc.color)}
+                            onClick={() => { setNewTagColor(tc.color); if (!newTagName.trim()) setNewTagName(tc.name); }}
                           />
                         ))}
                       </div>

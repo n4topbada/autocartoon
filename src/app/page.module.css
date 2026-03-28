@@ -951,6 +951,40 @@
   opacity: 0.9;
 }
 
+/* 태그 라벨 바 (이미지 하단) */
+.tagBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 4px 6px;
+}
+
+.tagLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.tagLabelX {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.6);
+  cursor: pointer;
+  padding: 0 0 0 2px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.tagLabelX:hover {
+  color: #fff;
+}
+
 /* 태그 메뉴 (카드 하단 드롭다운) */
 .tagMenu {
   position: absolute;
