@@ -11,6 +11,7 @@ import {
   LuEraser,
   LuSave,
   LuLayers,
+  LuUndo2,
 } from "react-icons/lu";
 
 interface GalleryImage {
@@ -69,6 +70,42 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
   const [activeLayerId, setActiveLayerId] = useState<string>("");
   const [tool, setTool] = useState<"move" | "crop">("move");
   const [saving, setSaving] = useState(false);
+  const [bgThreshold, setBgThreshold] = useState(240);
+
+  // Undo: 이전 레이어 상태 1개 저장
+  const undoSnapshot = useRef<Layer[] | null>(null);
+
+  const saveUndo = useCallback(() => {
+    // 현재 레이어들의 canvas를 복제하여 저장
+    undoSnapshot.current = layers.map((l) => {
+      let clonedCanvas: HTMLCanvasElement | null = null;
+      if (l.canvas) {
+        clonedCanvas = document.createElement("canvas");
+        clonedCanvas.width = l.canvas.width;
+        clonedCanvas.height = l.canvas.height;
+        clonedCanvas.getContext("2d")!.drawImage(l.canvas, 0, 0);
+      }
+      return { ...l, canvas: clonedCanvas };
+    });
+  }, [layers]);
+
+  const handleUndo = useCallback(() => {
+    if (!undoSnapshot.current) return;
+    setLayers(undoSnapshot.current);
+    undoSnapshot.current = null;
+  }, []);
+
+  // Ctrl+Z / Cmd+Z 키보드 핸들러
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+        e.preventDefault();
+        handleUndo();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [handleUndo]);
 
   // 드래그 이동
   const isDragging = useRef(false);
@@ -207,6 +244,7 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
   // 크롭 적용
   const applyCrop = () => {
     if (!cropRect) return;
+    saveUndo(); // Undo 저장
     const activeLayer = layers.find((l) => l.id === activeLayerId);
     if (!activeLayer?.canvas) return;
 
@@ -235,19 +273,73 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
     setCropRect(null);
   };
 
-  // 배경 제거 (흰색→투명)
+  // 배경 제거 (Flood Fill: 가장자리에서 흰색→투명, 캐릭터 내부 보존)
   const handleRemoveBackground = () => {
     const activeLayer = layers.find((l) => l.id === activeLayerId);
     if (!activeLayer?.canvas) return;
 
-    const ctx = activeLayer.canvas.getContext("2d")!;
-    const imageData = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-    const data = imageData.data;
-    const threshold = 240; // 흰색 기준
+    saveUndo(); // Undo 저장
 
-    for (let i = 0; i < data.length; i += 4) {
-      if (data[i] >= threshold && data[i + 1] >= threshold && data[i + 2] >= threshold) {
-        data[i + 3] = 0; // 알파 = 투명
+    const ctx = activeLayer.canvas.getContext("2d")!;
+    const w = activeLayer.canvas.width;
+    const h = activeLayer.canvas.height;
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+    const threshold = bgThreshold;
+
+    // 픽셀이 흰색(±threshold)인지 판별
+    const isWhite = (idx: number) => {
+      return (
+        data[idx] >= threshold &&
+        data[idx + 1] >= threshold &&
+        data[idx + 2] >= threshold &&
+        data[idx + 3] > 0 // 이미 투명인 건 건너뜀
+      );
+    };
+
+    // BFS Flood Fill: 4방향 가장자리에서 시작
+    const visited = new Uint8Array(w * h);
+    const queue: number[] = [];
+
+    // 가장자리 픽셀을 시드로
+    for (let x = 0; x < w; x++) {
+      // 상단 행
+      if (isWhite(x * 4)) { queue.push(x); visited[x] = 1; }
+      // 하단 행
+      const bottomIdx = (h - 1) * w + x;
+      if (isWhite(bottomIdx * 4)) { queue.push(bottomIdx); visited[bottomIdx] = 1; }
+    }
+    for (let y = 1; y < h - 1; y++) {
+      // 좌측 열
+      const leftIdx = y * w;
+      if (isWhite(leftIdx * 4)) { queue.push(leftIdx); visited[leftIdx] = 1; }
+      // 우측 열
+      const rightIdx = y * w + (w - 1);
+      if (isWhite(rightIdx * 4)) { queue.push(rightIdx); visited[rightIdx] = 1; }
+    }
+
+    // BFS
+    let head = 0;
+    while (head < queue.length) {
+      const pos = queue[head++];
+      const px = pos % w;
+      const py = Math.floor(pos / w);
+
+      // 투명화
+      data[pos * 4 + 3] = 0;
+
+      // 4방향 이웃
+      const neighbors = [
+        py > 0 ? pos - w : -1,       // 상
+        py < h - 1 ? pos + w : -1,   // 하
+        px > 0 ? pos - 1 : -1,       // 좌
+        px < w - 1 ? pos + 1 : -1,   // 우
+      ];
+      for (const n of neighbors) {
+        if (n >= 0 && !visited[n] && isWhite(n * 4)) {
+          visited[n] = 1;
+          queue.push(n);
+        }
       }
     }
 
@@ -433,6 +525,30 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
               </button>
               <button className={styles.toolBtn} onClick={handleRemoveBackground} title="배경제거">
                 <LuEraser size={16} /> 배경제거
+              </button>
+            </div>
+            <div className={styles.toolGroup}>
+              <label className={styles.opacityLabel}>
+                민감도
+                <input
+                  type="range"
+                  min={200}
+                  max={255}
+                  value={bgThreshold}
+                  onChange={(e) => setBgThreshold(Number(e.target.value))}
+                  className={styles.opacitySlider}
+                />
+                <span className={styles.opacityValue}>{bgThreshold}</span>
+              </label>
+            </div>
+            <div className={styles.toolGroup}>
+              <button
+                className={styles.toolBtn}
+                onClick={handleUndo}
+                disabled={!undoSnapshot.current}
+                title="되돌리기 (Ctrl+Z)"
+              >
+                <LuUndo2 size={16} /> Undo
               </button>
             </div>
           </div>
