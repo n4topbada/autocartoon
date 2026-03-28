@@ -48,9 +48,14 @@ interface Props {
   onSave: () => void;
 }
 
-const CANVAS_SIZE = 540;
+const CANVAS_W = 540;
+type AspectRatio = "1:1" | "4:5";
+const ASPECT_CONFIG = {
+  "1:1": { w: 540, h: 540, exportW: 1080, exportH: 1080 },
+  "4:5": { w: 540, h: 675, exportW: 1080, exportH: 1350 },
+};
 
-function createLayer(id?: string): Layer {
+function createLayer(id?: string, w = CANVAS_W, h = CANVAS_W): Layer {
   return {
     id: id || `layer_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     image: null,
@@ -58,8 +63,8 @@ function createLayer(id?: string): Layer {
     opacity: 1,
     x: 0,
     y: 0,
-    width: CANVAS_SIZE,
-    height: CANVAS_SIZE,
+    width: w,
+    height: h,
     visible: true,
     fillColor: null,
     canvas: null,
@@ -83,6 +88,9 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
   const [tool, setTool] = useState<"move" | "crop">("move");
   const [saving, setSaving] = useState(false);
   const [bgThreshold, setBgThreshold] = useState(240);
+  const [aspect, setAspect] = useState<AspectRatio>("1:1");
+  const canvasW = ASPECT_CONFIG[aspect].w;
+  const canvasH = ASPECT_CONFIG[aspect].h;
 
   // Undo: 이전 레이어 상태 1개 저장
   const undoSnapshot = useRef<Layer[] | null>(null);
@@ -135,30 +143,28 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
       try {
         const img = await loadImage(initialImage.dataUrl);
         const layerCanvas = document.createElement("canvas");
-        layerCanvas.width = CANVAS_SIZE;
-        layerCanvas.height = CANVAS_SIZE;
+        layerCanvas.width = canvasW;
+        layerCanvas.height = canvasH;
         const ctx = layerCanvas.getContext("2d")!;
-        // 이미지를 캔버스에 맞게 그리기
-        const scale = Math.min(CANVAS_SIZE / img.width, CANVAS_SIZE / img.height);
+        const scale = Math.min(canvasW / img.width, canvasH / img.height);
         const w = img.width * scale;
         const h = img.height * scale;
-        const x = (CANVAS_SIZE - w) / 2;
-        const y = (CANVAS_SIZE - h) / 2;
+        const x = (canvasW - w) / 2;
+        const y = (canvasH - h) / 2;
         ctx.drawImage(img, x, y, w, h);
 
         const layer: Layer = {
-          ...createLayer("layer_initial"),
+          ...createLayer("layer_initial", canvasW, canvasH),
           image: img,
           imageUrl: initialImage.dataUrl,
           canvas: layerCanvas,
-          width: CANVAS_SIZE,
-          height: CANVAS_SIZE,
+          width: canvasW,
+          height: canvasH,
         };
         setLayers([layer]);
         setActiveLayerId(layer.id);
       } catch {
-        // fallback
-        const layer = createLayer("layer_initial");
+        const layer = createLayer("layer_initial", canvasW, canvasH);
         setLayers([layer]);
         setActiveLayerId(layer.id);
       }
@@ -170,7 +176,7 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
-    ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+    ctx.clearRect(0, 0, canvasW, canvasH);
 
     // 레이어 아래→위 순서로 합성
     for (const layer of layers) {
@@ -180,7 +186,7 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
       if (layer.fillColor && !layer.canvas) {
         // 단색 채우기 레이어
         ctx.fillStyle = layer.fillColor;
-        ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+        ctx.fillRect(0, 0, canvasW, canvasH);
       } else if (layer.canvas) {
         ctx.drawImage(layer.canvas, layer.x, layer.y);
       }
@@ -196,10 +202,10 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
       ctx.strokeRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
       // 어두운 오버레이
       ctx.fillStyle = "rgba(0,0,0,0.4)";
-      ctx.fillRect(0, 0, CANVAS_SIZE, cropRect.y);
+      ctx.fillRect(0, 0, canvasW, cropRect.y);
       ctx.fillRect(0, cropRect.y, cropRect.x, cropRect.h);
-      ctx.fillRect(cropRect.x + cropRect.w, cropRect.y, CANVAS_SIZE - cropRect.x - cropRect.w, cropRect.h);
-      ctx.fillRect(0, cropRect.y + cropRect.h, CANVAS_SIZE, CANVAS_SIZE - cropRect.y - cropRect.h);
+      ctx.fillRect(cropRect.x + cropRect.w, cropRect.y, canvasW - cropRect.x - cropRect.w, cropRect.h);
+      ctx.fillRect(0, cropRect.y + cropRect.h, canvasW, canvasH - cropRect.y - cropRect.h);
       ctx.restore();
     }
   }, [layers, cropRect, tool]);
@@ -275,12 +281,11 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
     );
 
     const newCanvas = document.createElement("canvas");
-    newCanvas.width = CANVAS_SIZE;
-    newCanvas.height = CANVAS_SIZE;
+    newCanvas.width = canvasW;
+    newCanvas.height = canvasH;
     const newCtx = newCanvas.getContext("2d")!;
-    // 크롭된 영역을 캔버스 중앙에 배치
-    const cx = (CANVAS_SIZE - cropRect.w) / 2;
-    const cy = (CANVAS_SIZE - cropRect.h) / 2;
+    const cx = (canvasW - cropRect.w) / 2;
+    const cy = (canvasH - cropRect.h) / 2;
     newCtx.putImageData(imageData, cx, cy);
 
     setLayers((prev) =>
@@ -372,10 +377,36 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
     );
   };
 
+  // 비율 변경
+  const handleAspectChange = (newAspect: AspectRatio) => {
+    if (newAspect === aspect) return;
+    saveUndo();
+    const newCfg = ASPECT_CONFIG[newAspect];
+    const oldH = canvasH;
+    const newH = newCfg.h;
+    const dy = (newH - oldH) / 2; // 상하 확장/축소 오프셋
+
+    setAspect(newAspect);
+    setLayers((prev) =>
+      prev.map((l) => {
+        if (l.canvas) {
+          // 기존 캔버스를 새 크기로 복사 (중앙 유지)
+          const newCanvas = document.createElement("canvas");
+          newCanvas.width = newCfg.w;
+          newCanvas.height = newCfg.h;
+          const ctx = newCanvas.getContext("2d")!;
+          ctx.drawImage(l.canvas, 0, dy);
+          return { ...l, canvas: newCanvas, y: l.y + dy, width: newCfg.w, height: newCfg.h };
+        }
+        return { ...l, width: newCfg.w, height: newCfg.h };
+      })
+    );
+  };
+
   // 레이어 추가
   const addLayer = (position: "above" | "below") => {
     const idx = layers.findIndex((l) => l.id === activeLayerId);
-    const newLayer = createLayer();
+    const newLayer = createLayer(undefined, canvasW, canvasH);
     const newLayers = [...layers];
     if (position === "above") {
       newLayers.splice(idx + 1, 0, newLayer);
@@ -401,14 +432,14 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
     try {
       const img = await loadImage(imageUrl);
       const layerCanvas = document.createElement("canvas");
-      layerCanvas.width = CANVAS_SIZE;
-      layerCanvas.height = CANVAS_SIZE;
+      layerCanvas.width = canvasW;
+      layerCanvas.height = canvasH;
       const ctx = layerCanvas.getContext("2d")!;
-      const scale = Math.min(CANVAS_SIZE / img.width, CANVAS_SIZE / img.height);
+      const scale = Math.min(canvasW / img.width, canvasH / img.height);
       const w = img.width * scale;
       const h = img.height * scale;
-      const x = (CANVAS_SIZE - w) / 2;
-      const y = (CANVAS_SIZE - h) / 2;
+      const x = (canvasW - w) / 2;
+      const y = (canvasH - h) / 2;
       ctx.drawImage(img, x, y, w, h);
 
       setLayers((prev) =>
@@ -427,11 +458,13 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
   const handleSave = async () => {
     setSaving(true);
     try {
+      const cfg = ASPECT_CONFIG[aspect];
       const exportCanvas = document.createElement("canvas");
-      exportCanvas.width = 1080;
-      exportCanvas.height = 1080;
+      exportCanvas.width = cfg.exportW;
+      exportCanvas.height = cfg.exportH;
       const ctx = exportCanvas.getContext("2d")!;
-      const scale = 1080 / CANVAS_SIZE;
+      const scaleX = cfg.exportW / canvasW;
+      const scaleY = cfg.exportH / canvasH;
 
       for (const layer of layers) {
         if (!layer.visible) continue;
@@ -439,9 +472,9 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
         ctx.globalAlpha = layer.opacity;
         if (layer.fillColor && !layer.canvas) {
           ctx.fillStyle = layer.fillColor;
-          ctx.fillRect(0, 0, 1080, 1080);
+          ctx.fillRect(0, 0, cfg.exportW, cfg.exportH);
         } else if (layer.canvas) {
-          ctx.drawImage(layer.canvas, layer.x * scale, layer.y * scale, 1080, 1080);
+          ctx.drawImage(layer.canvas, layer.x * scaleX, layer.y * scaleY, cfg.exportW, cfg.exportH);
         }
         ctx.restore();
       }
@@ -484,29 +517,14 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
       </div>
 
       <div className={styles.body}>
-        {/* 좌측: 갤러리 이미지 리스트 */}
-        <div className={styles.imageList}>
-          {galleryImages.map((img) => (
-            <div
-              key={img.id}
-              className={styles.imageListItem}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData("text/plain", img.dataUrl);
-              }}
-            >
-              <img src={img.dataUrl} alt="" />
-            </div>
-          ))}
-        </div>
 
         {/* 중앙: 캔버스 */}
         <div className={styles.canvasArea}>
           <div className={styles.canvasWrapper}>
             <canvas
               ref={canvasRef}
-              width={CANVAS_SIZE}
-              height={CANVAS_SIZE}
+              width={canvasW}
+              height={canvasH}
               className={styles.canvas}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
@@ -548,6 +566,20 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
               </button>
               <button className={styles.toolBtn} onClick={handleRemoveBackground} title="배경제거">
                 <LuEraser size={16} /> 배경제거
+              </button>
+            </div>
+            <div className={styles.toolGroup}>
+              <button
+                className={`${styles.toolBtn} ${aspect === "1:1" ? styles.toolActive : ""}`}
+                onClick={() => handleAspectChange("1:1")}
+              >
+                1:1
+              </button>
+              <button
+                className={`${styles.toolBtn} ${aspect === "4:5" ? styles.toolActive : ""}`}
+                onClick={() => handleAspectChange("4:5")}
+              >
+                4:5
               </button>
             </div>
             <div className={styles.toolGroup}>
@@ -678,8 +710,24 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
             disabled={saving}
           >
             <LuSave size={16} />
-            {saving ? "저장 중..." : "합치고 저장하기 (1080px)"}
+            {saving ? "저장 중..." : `합치고 저장하기 (${ASPECT_CONFIG[aspect].exportW}×${ASPECT_CONFIG[aspect].exportH})`}
           </button>
+        </div>
+
+        {/* 우측 끝: 갤러리 이미지 리스트 */}
+        <div className={styles.imageList}>
+          {galleryImages.map((img) => (
+            <div
+              key={img.id}
+              className={styles.imageListItem}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/plain", img.dataUrl);
+              }}
+            >
+              <img src={img.dataUrl} alt="" />
+            </div>
+          ))}
         </div>
       </div>
     </div>

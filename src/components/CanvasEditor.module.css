@@ -48,20 +48,22 @@
   overflow: hidden;
 }
 
-/* 좌측: 갤러리 이미지 리스트 */
+/* 우측 끝: 갤러리 이미지 리스트 */
 .imageList {
-  width: 144px;
-  border-right: 1px solid var(--border);
+  width: 150px;
+  border-left: 1px solid var(--border);
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .imageListItem {
-  width: 124px;
-  height: 124px;
+  width: 128px;
+  height: 128px;
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--border);
