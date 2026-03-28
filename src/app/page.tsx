@@ -982,10 +982,9 @@ export default function Home() {
 
           {/* 5) 프롬프트 입력 */}
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>프롬프트</h2>
             <textarea
               className={styles.textarea}
-              placeholder="원하는 장면이나 변환 지시사항을 입력하세요..."
+              placeholder="이곳에 프롬프트를 입력하세요"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={4}
