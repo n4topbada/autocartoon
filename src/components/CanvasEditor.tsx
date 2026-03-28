@@ -15,6 +15,8 @@ import {
   LuEye,
   LuEyeOff,
   LuPaintBucket,
+  LuChevronUp,
+  LuChevronDown,
 } from "react-icons/lu";
 
 interface GalleryImage {
@@ -450,6 +452,21 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
     }
   };
 
+  // 레이어 순서 이동 (layers 배열에서 위=뒤, 아래=앞 — 렌더 순서상 앞이 아래)
+  const moveLayer = (id: string, direction: "up" | "down") => {
+    setLayers((prev) => {
+      const idx = prev.findIndex((l) => l.id === id);
+      if (idx < 0) return prev;
+      // "up" = 배열에서 뒤로 (렌더 순서상 위로)
+      // "down" = 배열에서 앞으로 (렌더 순서상 아래로)
+      const swapIdx = direction === "up" ? idx + 1 : idx - 1;
+      if (swapIdx < 0 || swapIdx >= prev.length) return prev;
+      const newLayers = [...prev];
+      [newLayers[idx], newLayers[swapIdx]] = [newLayers[swapIdx], newLayers[idx]];
+      return newLayers;
+    });
+  };
+
   // 갤러리 이미지를 레이어에 드롭
   const handleDropOnLayer = async (layerId: string, imageUrl: string) => {
     try {
@@ -660,6 +677,32 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
                     if (url) handleDropOnLayer(layer.id, url);
                   }}
                 >
+                  {/* 선택된 레이어: 순서 이동 화살표 */}
+                  {activeLayerId === layer.id ? (
+                    <div className={styles.layerArrows}>
+                      {ri > 0 && (
+                        <button
+                          className={styles.layerArrowBtn}
+                          onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, "up"); }}
+                          title="위로"
+                        >
+                          <LuChevronUp size={12} />
+                        </button>
+                      )}
+                      {ri < layers.length - 1 && (
+                        <button
+                          className={styles.layerArrowBtn}
+                          onClick={(e) => { e.stopPropagation(); moveLayer(layer.id, "down"); }}
+                          title="아래로"
+                        >
+                          <LuChevronDown size={12} />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className={styles.layerArrows} />
+                  )}
+
                   {/* 보기/안보기 */}
                   <button
                     className={styles.layerVisBtn}
@@ -681,7 +724,13 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
                       <span className={styles.layerEmpty}>빈</span>
                     )}
                   </div>
-                  <span className={styles.layerName}>L{layers.length - ri}</span>
+
+                  <div className={styles.layerInfo}>
+                    <span className={styles.layerName}>Layer {layers.length - ri}</span>
+                    {!layer.imageUrl && !layer.canvas && !layer.fillColor && (
+                      <span className={styles.layerHint}>드래그&드롭으로 이미지를 추가하세요</span>
+                    )}
+                  </div>
 
                   {/* 빈 레이어: 색칠 버튼 */}
                   {!layer.imageUrl && !layer.canvas && (
