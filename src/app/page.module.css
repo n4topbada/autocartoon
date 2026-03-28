@@ -894,6 +894,164 @@
   color: var(--danger) !important;
 }
 
+/* 갤러리 필터 영역 */
+.galleryFilters {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* 태그 필터 칩 */
+.tagFilterChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tagFilterChip:hover {
+  border-color: var(--tag-color);
+}
+
+.tagFilterActive {
+  background: var(--tag-color);
+  color: #fff;
+  border-color: var(--tag-color);
+}
+
+.tagDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 색 책갈피 (이미지 좌상단) */
+.bookmarks {
+  position: absolute;
+  top: 0;
+  left: 8px;
+  display: flex;
+  gap: 3px;
+  z-index: 1;
+}
+
+.bookmark {
+  width: 6px;
+  height: 20px;
+  border-radius: 0 0 3px 3px;
+  opacity: 0.9;
+}
+
+/* 태그 메뉴 (카드 하단 드롭다운) */
+.tagMenu {
+  position: absolute;
+  bottom: 40px;
+  left: 4px;
+  right: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px;
+  z-index: 10;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.tagMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.tagMenuItem:hover {
+  background: var(--surface-hover);
+}
+
+.tagMenuItemActive {
+  background: var(--surface-hover);
+}
+
+.tagCheck {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.tagMenuNew {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 6px;
+}
+
+.tagNewColorPicker {
+  display: flex;
+  gap: 3px;
+  padding: 2px 4px 6px;
+}
+
+.tagNewColorBtn {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tagNewColorBtn:hover {
+  transform: scale(1.2);
+}
+
+.tagNewColorActive {
+  border-color: #fff;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.tagNewRow {
+  display: flex;
+  gap: 4px;
+}
+
+.tagNewInput {
+  flex: 1;
+  padding: 4px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 11px;
+  outline: none;
+}
+
+.tagNewBtn {
+  padding: 4px 8px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 /* 스켈레톤 로딩 */
 .skeletonPulse {
   width: 256px;

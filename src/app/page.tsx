@@ -21,6 +21,7 @@ import {
   LuMessageCircle,
   LuPencil,
   LuDownload,
+  LuTag,
 } from "react-icons/lu";
 import { resizeFromFile, fetchImageFromUrl, type ResizedImage } from "@/lib/image-resize";
 import Board from "@/components/Board";
@@ -88,6 +89,12 @@ interface SavedBg {
   dataUrl: string;
 }
 
+interface TagData {
+  id: string;
+  name: string;
+  color: string;
+}
+
 // 개별 이미지 + 메타 (플랫 구조)
 interface FlatImage {
   id: string;
@@ -97,7 +104,19 @@ interface FlatImage {
   presetName: string;
   prompt: string;
   createdAt: string;
+  tags: TagData[];
 }
+
+const TAG_COLORS = [
+  { name: "빨강", color: "#ef4444" },
+  { name: "주황", color: "#f97316" },
+  { name: "노랑", color: "#eab308" },
+  { name: "초록", color: "#22c55e" },
+  { name: "파랑", color: "#3b82f6" },
+  { name: "보라", color: "#8b5cf6" },
+  { name: "핑크", color: "#ec4899" },
+  { name: "회색", color: "#6b7280" },
+];
 
 const BACKGROUNDS = [
   "없음",
@@ -196,6 +215,14 @@ export default function Home() {
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [managingPreset, setManagingPreset] = useState<Preset | null>(null);
   const [editingImage, setEditingImage] = useState<FlatImage | null>(null);
+
+  // 태그 시스템
+  const [allTags, setAllTags] = useState<TagData[]>([]);
+  const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
+  const [tagMenuImageId, setTagMenuImageId] = useState<string | null>(null);
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState("#3b82f6");
+
   const [prompt, setPrompt] = useState("");
   const [background, setBackground] = useState("없음");
   const [characterOnly, setCharacterOnly] = useState(false);
@@ -288,6 +315,14 @@ export default function Home() {
   }, [userParam]);
 
   // 저장된 배경 로드
+  // 태그 로드
+  const loadTags = useCallback(() => {
+    fetch("/api/tags")
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setAllTags(data); })
+      .catch(() => setAllTags([]));
+  }, []);
+
   const loadSavedBackgrounds = useCallback(() => {
     const q = userParam ? `?${userParam}` : "";
     fetch(`/api/backgrounds${q}`)
@@ -298,7 +333,8 @@ export default function Home() {
 
   useEffect(() => {
     loadPresets();
-  }, [loadPresets]);
+    loadTags();
+  }, [loadPresets, loadTags]);
 
   useEffect(() => {
     if (activeTab === "character") {
@@ -332,10 +368,17 @@ export default function Home() {
         presetName: item.presetName,
         prompt: item.prompt,
         createdAt: item.createdAt,
+        tags: (img as { tags?: TagData[] }).tags ?? [],
       }))
     );
-    return showFavoritesOnly ? all.filter((img) => img.favorite) : all;
-  }, [history, showFavoritesOnly]);
+    let filtered = showFavoritesOnly ? all.filter((img) => img.favorite) : all;
+    if (filterTagIds.length > 0) {
+      filtered = filtered.filter((img) =>
+        filterTagIds.some((tid) => img.tags.some((t) => t.id === tid))
+      );
+    }
+    return filtered;
+  }, [history, showFavoritesOnly, filterTagIds]);
 
   // 캐릭터 모달 로드
   const loadMarketplace = () => {
@@ -608,6 +651,34 @@ export default function Home() {
       });
     }
   }, [expandedGroupId]);
+
+  // 태그 토글 (이미지에 태그 추가/제거)
+  const handleToggleTag = async (imageId: string, tagId: string) => {
+    try {
+      const res = await fetch(`/api/images/${imageId}/tags`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tagId }),
+      });
+      if (res.ok) loadHistory();
+    } catch { /* ignore */ }
+  };
+
+  // 새 태그 생성
+  const handleCreateTag = async () => {
+    if (!newTagName.trim()) return;
+    try {
+      const res = await fetch("/api/tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newTagName.trim(), color: newTagColor }),
+      });
+      if (res.ok) {
+        setNewTagName("");
+        loadTags();
+      }
+    } catch { /* ignore */ }
+  };
 
   const handleGenerate = async () => {
     if (selectedPresets.length === 0) return;
@@ -974,13 +1045,29 @@ export default function Home() {
             <h2 className={styles.sectionTitle}>
               <LuSparkles size={14} /> My Gallery
             </h2>
-            <button
-              className={`${styles.favFilterBtn} ${showFavoritesOnly ? styles.favFilterActive : ""}`}
-              onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
-              title={showFavoritesOnly ? "전체 보기" : "즐겨찾기만"}
-            >
-              <LuHeart size={14} />
-            </button>
+            <div className={styles.galleryFilters}>
+              <button
+                className={`${styles.favFilterBtn} ${showFavoritesOnly ? styles.favFilterActive : ""}`}
+                onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+                title={showFavoritesOnly ? "전체 보기" : "즐겨찾기만"}
+              >
+                <LuHeart size={14} />
+              </button>
+              {/* 태그 필터 칩들 */}
+              {allTags.map((tag) => (
+                <button
+                  key={tag.id}
+                  className={`${styles.tagFilterChip} ${filterTagIds.includes(tag.id) ? styles.tagFilterActive : ""}`}
+                  style={{ "--tag-color": tag.color } as React.CSSProperties}
+                  onClick={() => setFilterTagIds((prev) =>
+                    prev.includes(tag.id) ? prev.filter((id) => id !== tag.id) : [...prev, tag.id]
+                  )}
+                >
+                  <span className={styles.tagDot} style={{ background: tag.color }} />
+                  {tag.name}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className={styles.gallery}>
@@ -999,6 +1086,14 @@ export default function Home() {
 
             {flatImages.map((img) => (
               <div key={img.id} className={styles.galleryCard}>
+                {/* 색 책갈피 (좌상단) */}
+                {img.tags.length > 0 && (
+                  <div className={styles.bookmarks}>
+                    {img.tags.map((tag) => (
+                      <span key={tag.id} className={styles.bookmark} style={{ background: tag.color }} title={tag.name} />
+                    ))}
+                  </div>
+                )}
                 <img src={img.dataUrl} alt="generated" className={styles.galleryImg} />
                 <div className={styles.galleryActions}>
                   <button
@@ -1007,6 +1102,13 @@ export default function Home() {
                     title="즐겨찾기"
                   >
                     <LuHeart size={14} />
+                  </button>
+                  <button
+                    className={styles.galleryActionBtn}
+                    onClick={() => setTagMenuImageId(tagMenuImageId === img.id ? null : img.id)}
+                    title="태그"
+                  >
+                    <LuTag size={14} />
                   </button>
                   <button
                     className={styles.galleryActionBtn}
@@ -1032,6 +1134,47 @@ export default function Home() {
                     <LuTrash2 size={14} />
                   </button>
                 </div>
+                {/* 태그 메뉴 */}
+                {tagMenuImageId === img.id && (
+                  <div className={styles.tagMenu}>
+                    {allTags.map((tag) => {
+                      const isActive = img.tags.some((t) => t.id === tag.id);
+                      return (
+                        <button
+                          key={tag.id}
+                          className={`${styles.tagMenuItem} ${isActive ? styles.tagMenuItemActive : ""}`}
+                          onClick={() => handleToggleTag(img.id, tag.id)}
+                        >
+                          <span className={styles.tagDot} style={{ background: tag.color }} />
+                          {tag.name}
+                          {isActive && <span className={styles.tagCheck}>✓</span>}
+                        </button>
+                      );
+                    })}
+                    <div className={styles.tagMenuNew}>
+                      <div className={styles.tagNewColorPicker}>
+                        {TAG_COLORS.map((tc) => (
+                          <button
+                            key={tc.color}
+                            className={`${styles.tagNewColorBtn} ${newTagColor === tc.color ? styles.tagNewColorActive : ""}`}
+                            style={{ background: tc.color }}
+                            onClick={() => setNewTagColor(tc.color)}
+                          />
+                        ))}
+                      </div>
+                      <div className={styles.tagNewRow}>
+                        <input
+                          className={styles.tagNewInput}
+                          placeholder="새 태그"
+                          value={newTagName}
+                          onChange={(e) => setNewTagName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") handleCreateTag(); }}
+                        />
+                        <button className={styles.tagNewBtn} onClick={handleCreateTag}>+</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

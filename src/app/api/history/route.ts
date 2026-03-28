@@ -32,7 +32,10 @@ export async function GET(req: NextRequest) {
       backgroundImage: { select: { name: true } },
       generatedImages: {
         where: favoritesOnly ? { favorite: true } : {},
-        select: { id: true, mimeType: true, blobUrl: true, favorite: true },
+        select: {
+          id: true, mimeType: true, blobUrl: true, favorite: true,
+          tagLinks: { include: { tag: { select: { id: true, name: true, color: true } } } },
+        },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -54,6 +57,7 @@ export async function GET(req: NextRequest) {
         mimeType: img.mimeType,
         dataUrl: img.blobUrl,
         favorite: img.favorite,
+        tags: img.tagLinks.map((tl) => ({ id: tl.tag.id, name: tl.tag.name, color: tl.tag.color })),
       })),
     }));
 

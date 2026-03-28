@@ -114,6 +114,7 @@ model User {
   boardComments      BoardComment[]
   boardLikes         BoardLike[]
   helpRequests       HelpRequest[]
+  imageTags          ImageTag[]
 }
 
 model BoardPost {
@@ -186,5 +187,29 @@ model GeneratedImage {
   favorite  Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  request GenerationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  request  GenerationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  tagLinks ImageTagLink[]
+}
+
+model ImageTag {
+  id     String @id @default(cuid())
+  userId String
+  name   String
+  color  String @default("#3b82f6")
+
+  user   User           @relation(fields: [userId], references: [id])
+  images ImageTagLink[]
+
+  @@unique([userId, name])
+}
+
+model ImageTagLink {
+  id      String @id @default(cuid())
+  imageId String
+  tagId   String
+
+  image GeneratedImage @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  tag   ImageTag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([imageId, tagId])
 }
