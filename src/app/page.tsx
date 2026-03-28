@@ -25,6 +25,7 @@ import { resizeFromFile, fetchImageFromUrl, type ResizedImage } from "@/lib/imag
 import Board from "@/components/Board";
 import ChatBot from "@/components/ChatBot";
 import CharacterManagementModal from "@/components/CharacterManagementModal";
+import PromptInput from "@/components/PromptInput";
 
 type Tab = "character" | "background" | "board";
 
@@ -941,32 +942,15 @@ export default function Home() {
             )}
           </section>
 
-          {/* 5) 프롬프트 입력 (캐릭터 태그 + 텍스트) */}
+          {/* 5) 프롬프트 입력 (캐릭터 태그 인라인) */}
           <section className={styles.section}>
-            <div className={styles.promptContainer}>
-              {selectedPresets.length > 0 && (
-                <div className={styles.promptTags}>
-                  {selectedPresets.map((p) => (
-                    <span key={p.id} className={styles.selectedTag}>
-                      {p.name}
-                      <button
-                        className={styles.tagRemove}
-                        onClick={() => setSelectedPresets((prev) => prev.filter((s) => s.id !== p.id))}
-                      >
-                        <LuX size={10} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <textarea
-                className={styles.textarea}
-                placeholder={selectedPresets.length === 0 ? "이곳에 프롬프트를 입력하세요" : "장면을 설명하세요..."}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                rows={3}
-              />
-            </div>
+            <PromptInput
+              tags={selectedPresets.map((p) => ({ id: p.id, name: p.name }))}
+              text={prompt}
+              onTextChange={setPrompt}
+              onTagRemove={(id) => setSelectedPresets((prev) => prev.filter((p) => p.id !== id))}
+              placeholder="이곳에 프롬프트를 입력하세요"
+            />
           </section>
 
           {/* 6) 생성 버튼 */}

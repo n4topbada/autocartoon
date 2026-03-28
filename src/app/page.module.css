@@ -709,26 +709,6 @@
 }
 
 /* 텍스트영역 */
-/* 프롬프트 복합 컨테이너 (태그 + 텍스트) */
-.promptContainer {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  transition: border-color 0.15s;
-}
-
-.promptContainer:focus-within {
-  border-color: var(--accent);
-}
-
-.promptTags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 8px 10px 4px;
-}
-
 .textarea {
   padding: 8px 12px;
   background: transparent;
