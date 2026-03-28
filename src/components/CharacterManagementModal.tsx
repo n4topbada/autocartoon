@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import styles from "./CharacterManagementModal.module.css";
-import { LuPlus, LuStar, LuX, LuUpload } from "react-icons/lu";
+import { LuStar, LuX, LuUpload, LuTrash2 } from "react-icons/lu";
 
 interface PresetImageData {
   id: string;
@@ -76,6 +76,32 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate }: 
     }
   }, [images, preset, repId, onUpdate]);
 
+  const handleDeleteImage = async (imageId: string) => {
+    if (images.length <= 1) return; // 최소 1개 유지
+    const newImages = images.filter((img) => img.id !== imageId);
+    setImages(newImages);
+    // 삭제된 이미지가 대표이미지면 첫 번째로 변경
+    if (repId === imageId) {
+      const newRepId = newImages[0]?.id ?? null;
+      setRepId(newRepId);
+      if (newRepId) {
+        fetch(`/api/presets/${preset.id}/representative`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageId: newRepId }),
+        });
+      }
+    }
+    // 서버에서 삭제
+    fetch(`/api/presets/${preset.id}/images`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageId }),
+    });
+    const repImg = newImages.find((img) => img.id === (repId === imageId ? newImages[0]?.id : repId)) ?? null;
+    onUpdate({ ...preset, images: newImages, representativeImage: repImg });
+  };
+
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
     const items = e.clipboardData.items;
     const files: File[] = [];
@@ -115,6 +141,14 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate }: 
                 <span className={styles.repBadge}>
                   <LuStar size={12} />
                 </span>
+              )}
+              {images.length > 1 && (
+                <button
+                  className={styles.deleteBtn}
+                  onClick={(e) => { e.stopPropagation(); handleDeleteImage(img.id); }}
+                >
+                  <LuTrash2 size={10} />
+                </button>
               )}
             </button>
           ))}

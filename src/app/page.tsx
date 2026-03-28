@@ -19,6 +19,7 @@ import {
   LuX,
   LuLayoutList,
   LuMessageCircle,
+  LuPencil,
 } from "react-icons/lu";
 import { resizeFromFile, fetchImageFromUrl, type ResizedImage } from "@/lib/image-resize";
 import Board from "@/components/Board";
@@ -38,6 +39,7 @@ interface Preset {
   name: string;
   groupId?: string | null;
   order?: number;
+  userId?: string | null;
   representativeImage: PresetImageData | null;
   images: PresetImageData[];
 }
@@ -119,11 +121,13 @@ function DepthBScroller({
   selectedPresets,
   onToggle,
   onManage,
+  currentUserId,
 }: {
   presets: Preset[];
   selectedPresets: Preset[];
   onToggle: (p: Preset) => void;
   onManage: (p: Preset) => void;
+  currentUserId?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const scroll = (dir: "left" | "right") => {
@@ -135,23 +139,32 @@ function DepthBScroller({
     <div className={styles.depthBContainer}>
       <button className={styles.depthBScrollBtn} onClick={() => scroll("left")}>‹</button>
       <div className={styles.depthBScroller} ref={scrollRef}>
-        {presets.map((p) => (
-          <button
-            key={p.id}
-            className={`${styles.presetCard} ${
-              selectedPresets.find((s) => s.id === p.id) ? styles.presetSelected : ""
-            }`}
-            onClick={() => onToggle(p)}
-            onContextMenu={(e) => { e.preventDefault(); onManage(p); }}
-          >
-            <div className={styles.presetThumbSingle}>
-              {(p.representativeImage ?? p.images[0]) && (
-                <img src={(p.representativeImage ?? p.images[0]).dataUrl} alt={p.name} />
-              )}
-            </div>
-            <span className={styles.presetName}>{p.name}</span>
-          </button>
-        ))}
+        {presets.map((p) => {
+          const isSelected = !!selectedPresets.find((s) => s.id === p.id);
+          const isOwner = p.userId === currentUserId;
+          return (
+            <button
+              key={p.id}
+              className={`${styles.presetCard} ${isSelected ? styles.presetSelected : ""}`}
+              onClick={() => onToggle(p)}
+            >
+              <div className={styles.presetThumbSingle}>
+                {(p.representativeImage ?? p.images[0]) && (
+                  <img src={(p.representativeImage ?? p.images[0]).dataUrl} alt={p.name} />
+                )}
+                {isSelected && isOwner && (
+                  <button
+                    className={styles.editBtn}
+                    onClick={(e) => { e.stopPropagation(); onManage(p); }}
+                  >
+                    <LuPencil size={10} />
+                  </button>
+                )}
+              </div>
+              <span className={styles.presetName}>{p.name}</span>
+            </button>
+          );
+        })}
       </div>
       <button className={styles.depthBScrollBtn} onClick={() => scroll("right")}>›</button>
     </div>
@@ -592,6 +605,23 @@ export default function Home() {
     }
   }, [expandedGroupId]);
 
+  // 캐릭터 선택 시 프롬프트에 트리거 워드 자동 삽입
+  const prevSelectedRef = useRef<string[]>([]);
+  useEffect(() => {
+    const prevIds = prevSelectedRef.current;
+    const currIds = selectedPresets.map((p) => p.id);
+    // 새로 추가된 캐릭터만
+    const added = selectedPresets.filter((p) => !prevIds.includes(p.id));
+    if (added.length > 0) {
+      setPrompt((prev) => {
+        const names = added.map((p) => p.name);
+        const addition = names.join(", ");
+        return prev ? prev + ", " + addition : addition;
+      });
+    }
+    prevSelectedRef.current = currIds;
+  }, [selectedPresets]);
+
   const handleGenerate = async () => {
     if (selectedPresets.length === 0) return;
     const hasImages = transformSlots.some((s) => s !== null);
@@ -677,6 +707,7 @@ export default function Home() {
           </button>
         </nav>
         <div className={styles.headerRight}>
+          <UserAvatar />
           <button
             className={styles.chatToggleBtn}
             onClick={() => setChatOpen(!chatOpen)}
@@ -684,7 +715,6 @@ export default function Home() {
           >
             <img src="/robot-wony.png" alt="워니봇" className={styles.robotWonyIcon} />
           </button>
-          <UserAvatar />
         </div>
       </header>
 
@@ -718,7 +748,26 @@ export default function Home() {
         <aside className={styles.sidebar}>
           {/* 1) 참조 이미지 슬롯 (최상단) */}
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>참조 이미지 (선택, 최대 3개)</h2>
+            <div className={styles.refImageHeader}>
+              <h2 className={styles.sectionTitle}>참조 이미지</h2>
+              <div className={styles.refUrlRow}>
+                <input
+                  type="text"
+                  className={styles.slotUrlInput}
+                  placeholder="이미지 URL"
+                  value={globalUrlInput}
+                  onChange={(e) => setGlobalUrlInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleTransformUrlLoad(); }}
+                />
+                <button
+                  className={styles.slotUrlBtn}
+                  onClick={() => handleTransformUrlLoad()}
+                  disabled={globalUrlLoading || !globalUrlInput.trim()}
+                >
+                  {globalUrlLoading ? "..." : <LuLink size={12} />}
+                </button>
+              </div>
+            </div>
               <div className={styles.transformGrid}>
                 {transformSlots.map((slot, i) => (
                   <div
@@ -758,24 +807,6 @@ export default function Home() {
                     )}
                   </div>
                 ))}
-              </div>
-              {/* 공통 URL 입력 */}
-              <div className={styles.globalUrlRow}>
-                <input
-                  type="text"
-                  className={styles.slotUrlInput}
-                  placeholder="이미지 URL 입력 → 빈 슬롯에 자동 추가"
-                  value={globalUrlInput}
-                  onChange={(e) => setGlobalUrlInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleTransformUrlLoad(); }}
-                />
-                <button
-                  className={styles.slotUrlBtn}
-                  onClick={() => handleTransformUrlLoad()}
-                  disabled={globalUrlLoading || !globalUrlInput.trim()}
-                >
-                  {globalUrlLoading ? "..." : <LuLink size={12} />}
-                </button>
               </div>
             </section>
 
@@ -824,6 +855,7 @@ export default function Home() {
                         selectedPresets={selectedPresets}
                         onToggle={togglePresetSelection}
                         onManage={setManagingPreset}
+                        currentUserId={user?.id}
                       />
                     )}
                   </div>
@@ -831,23 +863,32 @@ export default function Home() {
                 {/* 독립 캐릭터 (ungrouped) - 기존 4열 그리드 */}
                 {ungroupedPresets.length > 0 && (
                   <div className={styles.presetGrid}>
-                    {ungroupedPresets.map((p) => (
-                      <button
-                        key={p.id}
-                        className={`${styles.presetCard} ${
-                          selectedPresets.find((s) => s.id === p.id) ? styles.presetSelected : ""
-                        }`}
-                        onClick={() => togglePresetSelection(p)}
-                        onContextMenu={(e) => { e.preventDefault(); setManagingPreset(p); }}
-                      >
-                        <div className={styles.presetThumbSingle}>
-                          {(p.representativeImage ?? p.images[0]) && (
-                            <img src={(p.representativeImage ?? p.images[0]).dataUrl} alt={p.name} />
-                          )}
-                        </div>
-                        <span className={styles.presetName}>{p.name}</span>
-                      </button>
-                    ))}
+                    {ungroupedPresets.map((p) => {
+                      const isSelected = !!selectedPresets.find((s) => s.id === p.id);
+                      const isOwner = p.userId === user?.id;
+                      return (
+                        <button
+                          key={p.id}
+                          className={`${styles.presetCard} ${isSelected ? styles.presetSelected : ""}`}
+                          onClick={() => togglePresetSelection(p)}
+                        >
+                          <div className={styles.presetThumbSingle}>
+                            {(p.representativeImage ?? p.images[0]) && (
+                              <img src={(p.representativeImage ?? p.images[0]).dataUrl} alt={p.name} />
+                            )}
+                            {isSelected && isOwner && (
+                              <button
+                                className={styles.editBtn}
+                                onClick={(e) => { e.stopPropagation(); setManagingPreset(p); }}
+                              >
+                                <LuPencil size={10} />
+                              </button>
+                            )}
+                          </div>
+                          <span className={styles.presetName}>{p.name}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -867,13 +908,20 @@ export default function Home() {
                     </button>
                   </span>
                 ))}
+                <button
+                  className={styles.tagClearAll}
+                  onClick={() => setSelectedPresets([])}
+                >
+                  모두제거
+                </button>
               </div>
             )}
           </section>
 
-          {/* 3) 배경 설정 (체크박스 + 드롭다운 한줄) */}
+          {/* 3) 배경 설정 */}
           <section className={styles.section}>
             <div className={styles.bgRow}>
+              <span className={styles.bgLabel}>배경 :</span>
               <label className={styles.checkboxLabel}>
                 <input
                   type="checkbox"

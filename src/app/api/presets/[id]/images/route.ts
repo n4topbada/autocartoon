@@ -56,3 +56,34 @@ export async function POST(
     return NextResponse.json({ error: "이미지 추가 실패" }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await requireAuth();
+    const { id } = await params;
+    const { imageId } = (await req.json()) as { imageId: string };
+
+    const preset = await prisma.characterPreset.findUnique({
+      where: { id },
+      include: { images: true },
+    });
+    if (!preset || preset.userId !== session.userId) {
+      return NextResponse.json({ error: "프리셋을 찾을 수 없습니다." }, { status: 404 });
+    }
+    if (preset.images.length <= 1) {
+      return NextResponse.json({ error: "최소 1개의 이미지는 유지해야 합니다." }, { status: 400 });
+    }
+
+    await prisma.presetImage.delete({ where: { id: imageId } });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: "이미지 삭제 실패" }, { status: 500 });
+  }
+}

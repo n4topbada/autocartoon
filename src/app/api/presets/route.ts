@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
         name: p.name,
         groupId: p.groupId,
         order: p.order,
+        userId: p.userId,
         representativeImage: repImage
           ? { id: repImage.id, dataUrl: repImage.blobUrl }
           : null,

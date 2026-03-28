@@ -97,6 +97,28 @@
   justify-content: center;
 }
 
+.deleteBtn {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.imageCard:hover .deleteBtn {
+  opacity: 1;
+}
+
 .addCard {
   aspect-ratio: 1;
   border-radius: 8px;

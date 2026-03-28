@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       where: { id: presetId },
     });
 
-    if (!preset || preset.userId !== null) {
+    if (!preset) {
       return NextResponse.json({ error: "마켓플레이스 프리셋을 찾을 수 없습니다." }, { status: 404 });
     }
 
