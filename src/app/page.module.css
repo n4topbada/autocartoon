@@ -921,15 +921,12 @@
 .tagFilterChip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: transparent;
-  color: var(--text-dim);
   font-size: 11px;
-  cursor: pointer;
   transition: all 0.15s;
+  overflow: hidden;
 }
 
 .tagFilterChip:hover {
@@ -940,6 +937,35 @@
   background: var(--tag-color);
   color: #fff;
   border-color: var(--tag-color);
+}
+
+.tagFilterChipBody {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px 3px 10px;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.tagFilterDelete {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 3px 6px 3px 0;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.tagFilterDelete:hover {
+  opacity: 1;
+  color: #ef4444;
 }
 
 .tagDot {

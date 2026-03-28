@@ -721,6 +721,24 @@ export default function Home() {
     }).catch(() => loadHistory());
   };
 
+  // 태그 삭제
+  const handleDeleteTag = async (tagId: string) => {
+    // 해당 태그가 달린 이미지 수 확인
+    const count = flatImages.filter((img) => img.tags.some((t) => t.id === tagId)).length;
+    if (count > 0) {
+      const tag = allTags.find((t) => t.id === tagId);
+      if (!window.confirm(`"${tag?.name}" 태그가 ${count}개 이미지에 사용 중입니다.\n해당 이미지들의 태그도 모두 사라집니다. 계속하시겠습니까?`)) return;
+    }
+    try {
+      const res = await fetch(`/api/tags/${tagId}`, { method: "DELETE" });
+      if (res.ok) {
+        setAllTags((prev) => prev.filter((t) => t.id !== tagId));
+        setFilterTagIds((prev) => prev.filter((id) => id !== tagId));
+        loadHistory();
+      }
+    } catch { /* ignore */ }
+  };
+
   const handleGenerate = async () => {
     if (selectedPresets.length === 0) return;
     const hasImages = transformSlots.some((s) => s !== null);
@@ -1096,17 +1114,28 @@ export default function Home() {
               </button>
               {/* 태그 필터 칩들 */}
               {allTags.map((tag) => (
-                <button
+                <span
                   key={tag.id}
                   className={`${styles.tagFilterChip} ${filterTagIds.includes(tag.id) ? styles.tagFilterActive : ""}`}
                   style={{ "--tag-color": tag.color } as React.CSSProperties}
-                  onClick={() => setFilterTagIds((prev) =>
-                    prev.includes(tag.id) ? prev.filter((id) => id !== tag.id) : [...prev, tag.id]
-                  )}
                 >
-                  <span className={styles.tagDot} style={{ background: tag.color }} />
-                  {tag.name}
-                </button>
+                  <button
+                    className={styles.tagFilterChipBody}
+                    onClick={() => setFilterTagIds((prev) =>
+                      prev.includes(tag.id) ? prev.filter((id) => id !== tag.id) : [...prev, tag.id]
+                    )}
+                  >
+                    <span className={styles.tagDot} style={{ background: tag.color }} />
+                    {tag.name}
+                  </button>
+                  <button
+                    className={styles.tagFilterDelete}
+                    onClick={(e) => { e.stopPropagation(); handleDeleteTag(tag.id); }}
+                    title="태그 삭제"
+                  >
+                    ×
+                  </button>
+                </span>
               ))}
             </div>
           </div>
