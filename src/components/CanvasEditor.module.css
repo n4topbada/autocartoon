@@ -50,7 +50,7 @@
 
 /* 우측 끝: 갤러리 이미지 리스트 */
 .imageList {
-  width: 150px;
+  width: 180px;
   border-left: 1px solid var(--border);
   overflow-y: auto;
   overflow-x: hidden;
@@ -62,8 +62,8 @@
 }
 
 .imageListItem {
-  width: 128px;
-  height: 128px;
+  width: 158px;
+  height: 158px;
   border-radius: 6px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -105,11 +105,19 @@
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 0 0 0 1px var(--border);
+  max-height: calc(100vh - 180px);
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .canvas {
   display: block;
   cursor: crosshair;
+  max-height: calc(100vh - 180px);
+  max-width: 100%;
+  object-fit: contain;
 }
 
 /* 하단 툴바 */

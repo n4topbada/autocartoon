@@ -48,14 +48,10 @@ interface Props {
   onSave: () => void;
 }
 
-const CANVAS_W = 540;
+const MIN_CANVAS = 540;
 type AspectRatio = "1:1" | "4:5";
-const ASPECT_CONFIG = {
-  "1:1": { w: 540, h: 540, exportW: 1080, exportH: 1080 },
-  "4:5": { w: 540, h: 675, exportW: 1080, exportH: 1350 },
-};
 
-function createLayer(id?: string, w = CANVAS_W, h = CANVAS_W): Layer {
+function createLayer(id?: string, w = MIN_CANVAS, h = MIN_CANVAS): Layer {
   return {
     id: id || `layer_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     image: null,
@@ -89,8 +85,8 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
   const [saving, setSaving] = useState(false);
   const [bgThreshold, setBgThreshold] = useState(240);
   const [aspect, setAspect] = useState<AspectRatio>("1:1");
-  const canvasW = ASPECT_CONFIG[aspect].w;
-  const canvasH = ASPECT_CONFIG[aspect].h;
+  const [canvasW, setCanvasW] = useState(MIN_CANVAS);
+  const [canvasH, setCanvasH] = useState(MIN_CANVAS);
 
   // Undo: 이전 레이어 상태 1개 저장
   const undoSnapshot = useRef<Layer[] | null>(null);
@@ -142,29 +138,37 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
     (async () => {
       try {
         const img = await loadImage(initialImage.dataUrl);
+        // 원본 해상도 기준 캔버스 크기 (최소 MIN_CANVAS)
+        const cw = Math.max(img.width, MIN_CANVAS);
+        const ch = Math.max(img.height, MIN_CANVAS);
+        setCanvasW(cw);
+        setCanvasH(ch);
+
         const layerCanvas = document.createElement("canvas");
-        layerCanvas.width = canvasW;
-        layerCanvas.height = canvasH;
+        layerCanvas.width = cw;
+        layerCanvas.height = ch;
         const ctx = layerCanvas.getContext("2d")!;
-        const scale = Math.min(canvasW / img.width, canvasH / img.height);
-        const w = img.width * scale;
-        const h = img.height * scale;
-        const x = (canvasW - w) / 2;
-        const y = (canvasH - h) / 2;
-        ctx.drawImage(img, x, y, w, h);
+        // 원본 이미지를 캔버스 중앙에 원본 크기로
+        const x = (cw - img.width) / 2;
+        const y = (ch - img.height) / 2;
+        ctx.drawImage(img, x, y);
 
         const layer: Layer = {
-          ...createLayer("layer_initial", canvasW, canvasH),
+          ...createLayer("layer_initial", cw, ch),
           image: img,
           imageUrl: initialImage.dataUrl,
           canvas: layerCanvas,
-          width: canvasW,
-          height: canvasH,
+          width: cw,
+          height: ch,
         };
         setLayers([layer]);
         setActiveLayerId(layer.id);
+        // 1:1 여부 자동 판단
+        if (Math.abs(cw - ch) < 10) {
+          setAspect("1:1");
+        }
       } catch {
-        const layer = createLayer("layer_initial", canvasW, canvasH);
+        const layer = createLayer("layer_initial", MIN_CANVAS, MIN_CANVAS);
         setLayers([layer]);
         setActiveLayerId(layer.id);
       }
@@ -214,11 +218,21 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
     render();
   }, [render]);
 
+  // CSS 스케일 보정된 마우스 좌표
+  const getCanvasCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY,
+    };
+  };
+
   // 마우스 이벤트 (이동 / 크롭)
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    const { x: mx, y: my } = getCanvasCoords(e);
 
     if (tool === "move") {
       const activeLayer = layers.find((l) => l.id === activeLayerId);
@@ -234,9 +248,7 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    const { x: mx, y: my } = getCanvasCoords(e);
 
     if (tool === "move" && isDragging.current) {
       const dx = mx - dragStart.current.x;
@@ -377,28 +389,39 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
     );
   };
 
-  // 비율 변경
+  // 비율 변경: 현재 캔버스 크기 비례로 상하 패딩
   const handleAspectChange = (newAspect: AspectRatio) => {
     if (newAspect === aspect) return;
     saveUndo();
-    const newCfg = ASPECT_CONFIG[newAspect];
-    const oldH = canvasH;
-    const newH = newCfg.h;
-    const dy = (newH - oldH) / 2; // 상하 확장/축소 오프셋
+
+    // 새 캔버스 크기 계산
+    let newW = canvasW;
+    let newH: number;
+    if (newAspect === "4:5") {
+      // 4:5 = width:height → height = width * 5/4
+      newH = Math.round(canvasW * 5 / 4);
+    } else {
+      // 1:1 → height = width
+      newH = canvasW;
+    }
+
+    const dy = (newH - canvasH) / 2; // 상하 확장/축소 오프셋
 
     setAspect(newAspect);
+    setCanvasW(newW);
+    setCanvasH(newH);
+
     setLayers((prev) =>
       prev.map((l) => {
         if (l.canvas) {
-          // 기존 캔버스를 새 크기로 복사 (중앙 유지)
           const newCanvas = document.createElement("canvas");
-          newCanvas.width = newCfg.w;
-          newCanvas.height = newCfg.h;
+          newCanvas.width = newW;
+          newCanvas.height = newH;
           const ctx = newCanvas.getContext("2d")!;
           ctx.drawImage(l.canvas, 0, dy);
-          return { ...l, canvas: newCanvas, y: l.y + dy, width: newCfg.w, height: newCfg.h };
+          return { ...l, canvas: newCanvas, y: l.y + dy, width: newW, height: newH };
         }
-        return { ...l, width: newCfg.w, height: newCfg.h };
+        return { ...l, width: newW, height: newH };
       })
     );
   };
@@ -458,13 +481,15 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
   const handleSave = async () => {
     setSaving(true);
     try {
-      const cfg = ASPECT_CONFIG[aspect];
+      // 내보내기 해상도: 1:1=1080x1080, 4:5=1080x1350
+      const exportW = 1080;
+      const exportH = aspect === "4:5" ? 1350 : 1080;
       const exportCanvas = document.createElement("canvas");
-      exportCanvas.width = cfg.exportW;
-      exportCanvas.height = cfg.exportH;
+      exportCanvas.width = exportW;
+      exportCanvas.height = exportH;
       const ctx = exportCanvas.getContext("2d")!;
-      const scaleX = cfg.exportW / canvasW;
-      const scaleY = cfg.exportH / canvasH;
+      const scaleX = exportW / canvasW;
+      const scaleY = exportH / canvasH;
 
       for (const layer of layers) {
         if (!layer.visible) continue;
@@ -472,9 +497,9 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
         ctx.globalAlpha = layer.opacity;
         if (layer.fillColor && !layer.canvas) {
           ctx.fillStyle = layer.fillColor;
-          ctx.fillRect(0, 0, cfg.exportW, cfg.exportH);
+          ctx.fillRect(0, 0, exportW, exportH);
         } else if (layer.canvas) {
-          ctx.drawImage(layer.canvas, layer.x * scaleX, layer.y * scaleY, cfg.exportW, cfg.exportH);
+          ctx.drawImage(layer.canvas, layer.x * scaleX, layer.y * scaleY, exportW, exportH);
         }
         ctx.restore();
       }
@@ -710,7 +735,7 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
             disabled={saving}
           >
             <LuSave size={16} />
-            {saving ? "저장 중..." : `합치고 저장하기 (${ASPECT_CONFIG[aspect].exportW}×${ASPECT_CONFIG[aspect].exportH})`}
+            {saving ? "저장 중..." : `합치고 저장하기 (1080×${aspect === "4:5" ? "1350" : "1080"})`}
           </button>
         </div>
 
