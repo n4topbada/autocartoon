@@ -605,23 +605,6 @@ export default function Home() {
     }
   }, [expandedGroupId]);
 
-  // 캐릭터 선택 시 프롬프트에 트리거 워드 자동 삽입
-  const prevSelectedRef = useRef<string[]>([]);
-  useEffect(() => {
-    const prevIds = prevSelectedRef.current;
-    const currIds = selectedPresets.map((p) => p.id);
-    // 새로 추가된 캐릭터만
-    const added = selectedPresets.filter((p) => !prevIds.includes(p.id));
-    if (added.length > 0) {
-      setPrompt((prev) => {
-        const names = added.map((p) => p.name);
-        const addition = names.join(", ");
-        return prev ? prev + ", " + addition : addition;
-      });
-    }
-    prevSelectedRef.current = currIds;
-  }, [selectedPresets]);
-
   const handleGenerate = async () => {
     if (selectedPresets.length === 0) return;
     const hasImages = transformSlots.some((s) => s !== null);
@@ -897,28 +880,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* 선택된 캐릭터 태그 */}
-            {selectedPresets.length > 0 && (
-              <div className={styles.selectedTags}>
-                {selectedPresets.map((p) => (
-                  <span key={p.id} className={styles.selectedTag}>
-                    {p.name}
-                    <button
-                      className={styles.tagRemove}
-                      onClick={() => setSelectedPresets((prev) => prev.filter((s) => s.id !== p.id))}
-                    >
-                      <LuX size={10} />
-                    </button>
-                  </span>
-                ))}
-                <button
-                  className={styles.tagClearAll}
-                  onClick={() => setSelectedPresets([])}
-                >
-                  모두제거
-                </button>
-              </div>
-            )}
           </section>
 
           {/* 3) 배경 설정 */}
@@ -980,15 +941,32 @@ export default function Home() {
             )}
           </section>
 
-          {/* 5) 프롬프트 입력 */}
+          {/* 5) 프롬프트 입력 (캐릭터 태그 + 텍스트) */}
           <section className={styles.section}>
-            <textarea
-              className={styles.textarea}
-              placeholder="이곳에 프롬프트를 입력하세요"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={4}
-            />
+            <div className={styles.promptContainer}>
+              {selectedPresets.length > 0 && (
+                <div className={styles.promptTags}>
+                  {selectedPresets.map((p) => (
+                    <span key={p.id} className={styles.selectedTag}>
+                      {p.name}
+                      <button
+                        className={styles.tagRemove}
+                        onClick={() => setSelectedPresets((prev) => prev.filter((s) => s.id !== p.id))}
+                      >
+                        <LuX size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <textarea
+                className={styles.textarea}
+                placeholder={selectedPresets.length === 0 ? "이곳에 프롬프트를 입력하세요" : "장면을 설명하세요..."}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                rows={3}
+              />
+            </div>
           </section>
 
           {/* 6) 생성 버튼 */}
