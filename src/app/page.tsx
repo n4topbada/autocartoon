@@ -20,12 +20,14 @@ import {
   LuLayoutList,
   LuMessageCircle,
   LuPencil,
+  LuDownload,
 } from "react-icons/lu";
 import { resizeFromFile, fetchImageFromUrl, type ResizedImage } from "@/lib/image-resize";
 import Board from "@/components/Board";
 import ChatBot from "@/components/ChatBot";
 import CharacterManagementModal from "@/components/CharacterManagementModal";
 import PromptInput from "@/components/PromptInput";
+import CanvasEditor from "@/components/CanvasEditor";
 
 type Tab = "character" | "background" | "board";
 
@@ -193,6 +195,7 @@ export default function Home() {
   const [selectedPresets, setSelectedPresets] = useState<Preset[]>([]);
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [managingPreset, setManagingPreset] = useState<Preset | null>(null);
+  const [editingImage, setEditingImage] = useState<FlatImage | null>(null);
   const [prompt, setPrompt] = useState("");
   const [background, setBackground] = useState("없음");
   const [characterOnly, setCharacterOnly] = useState(false);
@@ -985,9 +988,6 @@ export default function Home() {
             {generating && (
               <div className={styles.galleryCard}>
                 <div className={styles.skeletonPulse} />
-                <div className={styles.galleryCaption}>
-                  <span className={styles.galleryCaptionText}>생성 중...</span>
-                </div>
               </div>
             )}
 
@@ -1000,20 +1000,30 @@ export default function Home() {
             {flatImages.map((img) => (
               <div key={img.id} className={styles.galleryCard}>
                 <img src={img.dataUrl} alt="generated" className={styles.galleryImg} />
-                <div className={styles.galleryCaption}>
-                  <span className={styles.galleryCaptionMode}>{img.mode}</span>
-                  <span className={styles.galleryCaptionText}>
-                    {img.presetName} &middot; {img.prompt.length > 20 ? img.prompt.slice(0, 20) + "..." : img.prompt}
-                  </span>
-                </div>
                 <div className={styles.galleryActions}>
                   <button
                     className={`${styles.galleryActionBtn} ${img.favorite ? styles.galleryFavorited : ""}`}
                     onClick={() => handleToggleFavorite(img.id)}
-                    title={img.favorite ? "즐겨찾기 해제" : "즐겨찾기"}
+                    title="즐겨찾기"
                   >
                     <LuHeart size={14} />
                   </button>
+                  <button
+                    className={styles.galleryActionBtn}
+                    onClick={() => setEditingImage(img)}
+                    title="편집"
+                  >
+                    <LuPencil size={14} />
+                  </button>
+                  <a
+                    className={styles.galleryActionBtn}
+                    href={img.dataUrl}
+                    download={`image_${img.id}.png`}
+                    onClick={(e) => e.stopPropagation()}
+                    title="다운로드"
+                  >
+                    <LuDownload size={14} />
+                  </a>
                   <button
                     className={`${styles.galleryActionBtn} ${styles.galleryDeleteBtn}`}
                     onClick={() => setDeletingImageId(img.id)}
@@ -1029,6 +1039,16 @@ export default function Home() {
         </>
         )}
       </main>
+
+      {/* 캔버스 편집 모드 */}
+      {editingImage && (
+        <CanvasEditor
+          initialImage={{ id: editingImage.id, dataUrl: editingImage.dataUrl }}
+          galleryImages={flatImages.map((img) => ({ id: img.id, dataUrl: img.dataUrl }))}
+          onClose={() => setEditingImage(null)}
+          onSave={() => { loadHistory(); }}
+        />
+      )}
 
       {/* 삭제 확인 모달 */}
       {deletingImageId && (

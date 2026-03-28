@@ -849,10 +849,6 @@
   border-color: var(--text-dim);
 }
 
-.galleryCard:hover .galleryActions {
-  opacity: 1;
-}
-
 .galleryImg {
   width: 256px;
   height: 256px;
@@ -861,70 +857,41 @@
   background: var(--bg);
 }
 
-/* 이미지 하단 캡션 */
-.galleryCaption {
-  padding: 8px 10px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-}
-
-.galleryCaptionMode {
-  padding: 2px 6px;
-  background: var(--accent);
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  color: white;
-  text-transform: uppercase;
-  flex-shrink: 0;
-}
-
-.galleryCaptionText {
-  font-size: 11px;
-  color: var(--text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 이미지 우하단 액션 버튼 */
+/* 이미지 하단 액션 바 */
 .galleryActions {
-  position: absolute;
-  bottom: 44px;
-  right: 6px;
   display: flex;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.15s;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px;
 }
 
 .galleryActionBtn {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
+  width: 32px;
+  height: 28px;
+  border-radius: 6px;
   border: none;
-  background: rgba(0, 0, 0, 0.6);
-  color: white;
+  background: transparent;
+  color: var(--text-dim);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s;
   padding: 0;
+  text-decoration: none;
 }
 
 .galleryActionBtn:hover {
-  background: rgba(0, 0, 0, 0.85);
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .galleryFavorited {
-  background: rgba(220, 38, 38, 0.8) !important;
+  color: #ef4444 !important;
 }
 
 .galleryDeleteBtn:hover {
-  background: var(--danger) !important;
+  color: var(--danger) !important;
 }
 
 /* 스켈레톤 로딩 */
