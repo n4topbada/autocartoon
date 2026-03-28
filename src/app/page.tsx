@@ -23,7 +23,7 @@ import {
   LuDownload,
   LuTag,
 } from "react-icons/lu";
-import { resizeFromFile, fetchImageFromUrl, type ResizedImage } from "@/lib/image-resize";
+import { resizeFromFile, fetchImageFromUrl } from "@/lib/image-resize";
 import Board from "@/components/Board";
 import ChatBot from "@/components/ChatBot";
 import CharacterManagementModal from "@/components/CharacterManagementModal";
@@ -290,13 +290,13 @@ export default function Home() {
           const ungrouped: Preset[] = data.ungrouped ?? [];
           setCharGroups(groups);
           setUngroupedPresets(ungrouped);
-          // 디폴트 선택
-          if (selectedPresets.length === 0) {
+          // 디폴트 선택 (함수형 업데이트로 stale closure 방지)
+          setSelectedPresets((prev) => {
+            if (prev.length > 0) return prev;
             const allPresets = [...ungrouped, ...groups.flatMap((g: CharacterGroupData) => g.presets)];
             const wony = allPresets.find((p: Preset) => p.alias === "wony");
-            if (wony) setSelectedPresets([wony]);
-            else if (allPresets.length > 0) setSelectedPresets([allPresets[0]]);
-          }
+            return wony ? [wony] : allPresets.length > 0 ? [allPresets[0]] : prev;
+          });
         } else if (Array.isArray(data)) {
           // 하위호환: 이전 flat 응답
           const mapped = data.map((p: Preset & { representativeImage?: PresetImageData | null }) => ({
@@ -305,10 +305,11 @@ export default function Home() {
           }));
           setUngroupedPresets(mapped);
           setCharGroups([]);
-          if (selectedPresets.length === 0 && mapped.length > 0) {
+          setSelectedPresets((prev) => {
+            if (prev.length > 0) return prev;
             const wony = mapped.find((p: Preset) => p.alias === "wony");
-            setSelectedPresets([wony ?? mapped[0]]);
-          }
+            return [wony ?? mapped[0]];
+          });
         }
       })
       .catch(() => { setCharGroups([]); setUngroupedPresets([]); })

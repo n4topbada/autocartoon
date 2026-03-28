@@ -58,6 +58,8 @@ model PresetImage {
   order    Int    @default(0)
 
   preset CharacterPreset @relation(fields: [presetId], references: [id], onDelete: Cascade)
+
+  @@index([presetId])
 }
 
 model SavedBackground {
@@ -87,6 +89,8 @@ model GenerationRequest {
   preset          CharacterPreset  @relation(fields: [presetId], references: [id])
   backgroundImage SavedBackground? @relation(fields: [backgroundImageId], references: [id])
   generatedImages GeneratedImage[]
+
+  @@index([userId, createdAt])
 }
 
 model User {
@@ -131,6 +135,8 @@ model BoardPost {
   user     User           @relation(fields: [userId], references: [id])
   comments BoardComment[]
   likes    BoardLike[]
+
+  @@index([userId, createdAt])
 }
 
 model BoardComment {

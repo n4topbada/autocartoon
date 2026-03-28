@@ -1363,11 +1363,26 @@
 }
 
 /* 반응형 */
-@media (max-width: 768px) {
-  .main {
-    flex-direction: column;
-  }
+/* 태블릿 */
+@media (max-width: 1024px) {
+  .header { padding: 8px 16px; gap: 8px; }
+  .tabNav { gap: 4px; }
+  .tab { padding: 5px 10px; font-size: 12px; }
+  .sidebar { min-width: 320px; width: 320px; }
+  .gallery { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .galleryCard { width: 100%; }
+  .galleryImg { width: 100%; height: auto; aspect-ratio: 1; }
+  .adminUserSelectCompact { max-width: 100px; }
+}
 
+/* 모바일 */
+@media (max-width: 768px) {
+  .header { flex-wrap: wrap; padding: 8px 12px; }
+  .logo { font-size: 14px; }
+  .tabNav { order: 3; width: 100%; justify-content: center; }
+  .headerRight { gap: 6px; }
+
+  .main { flex-direction: column; }
   .sidebar {
     width: 100%;
     min-width: 100%;
@@ -1375,34 +1390,17 @@
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
+  .content { max-height: none; }
 
-  .content {
-    max-height: none;
-  }
+  .presetGrid { grid-template-columns: repeat(3, 1fr); }
+  .transformGrid { grid-template-columns: repeat(3, 1fr); }
 
-  .presetGrid {
-    grid-template-columns: repeat(4, 1fr);
-  }
+  .gallery { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .galleryCard { width: 100%; }
+  .galleryImg { width: 100%; height: auto; aspect-ratio: 1; }
+  .skeletonPulse { width: 100%; aspect-ratio: 1; height: auto; }
 
-  .gallery {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  }
-
-  .galleryCard {
-    width: 100%;
-  }
-
-  .galleryImg {
-    width: 100%;
-    height: auto;
-    aspect-ratio: 1;
-  }
-
-  .skeletonPulse {
-    width: 100%;
-    aspect-ratio: 1;
-    height: auto;
-  }
+  .galleryFilters { flex-wrap: wrap; }
 }
 
 /* ─── Transform 모드 슬롯 ─── */
