@@ -22,6 +22,8 @@ import {
   LuPencil,
   LuDownload,
   LuTag,
+  LuShare2,
+  LuInstagram,
 } from "react-icons/lu";
 import { resizeFromFile, fetchImageFromUrl } from "@/lib/image-resize";
 import Board from "@/components/Board";
@@ -29,8 +31,9 @@ import ChatBot from "@/components/ChatBot";
 import CharacterManagementModal from "@/components/CharacterManagementModal";
 import PromptInput from "@/components/PromptInput";
 import CanvasEditor from "@/components/CanvasEditor";
+import InstagramTab from "@/components/InstagramTab";
 
-type Tab = "character" | "background" | "board";
+type Tab = "character" | "background" | "board" | "instagram";
 
 interface PresetImageData {
   id: string;
@@ -223,6 +226,8 @@ export default function Home() {
   const [tagMenuImageId, setTagMenuImageId] = useState<string | null>(null);
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("#3b82f6");
+
+  const [toast, setToast] = useState<string | null>(null);
 
   const [prompt, setPrompt] = useState("");
   const [background, setBackground] = useState("없음");
@@ -740,6 +745,25 @@ export default function Home() {
     } catch { /* ignore */ }
   };
 
+  // 이미지 공유 링크 복사
+  const handleShare = async (dataUrl: string) => {
+    try {
+      await navigator.clipboard.writeText(dataUrl);
+      setToast("링크가 복사되었습니다");
+      setTimeout(() => setToast(null), 2000);
+    } catch {
+      // fallback
+      const input = document.createElement("input");
+      input.value = dataUrl;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+      setToast("링크가 복사되었습니다");
+      setTimeout(() => setToast(null), 2000);
+    }
+  };
+
   const handleGenerate = async () => {
     if (selectedPresets.length === 0) return;
     const hasImages = transformSlots.some((s) => s !== null);
@@ -823,6 +847,13 @@ export default function Home() {
             <LuLayoutList size={14} />
             게시판
           </button>
+          <button
+            className={`${styles.tab} ${activeTab === "instagram" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("instagram")}
+          >
+            <LuInstagram size={14} />
+            인스타그램
+          </button>
         </nav>
         <div className={styles.headerRight}>
           {isAdmin && allUsers.length > 0 && (
@@ -854,6 +885,8 @@ export default function Home() {
           <BackgroundGenerator />
         ) : activeTab === "board" ? (
           <Board />
+        ) : activeTab === "instagram" ? (
+          <InstagramTab />
         ) : (
         <>
         {/* 좌측 패널 */}
@@ -1188,6 +1221,13 @@ export default function Home() {
                     >
                       <LuPencil size={14} />
                     </button>
+                    <button
+                      className={styles.galleryActionBtn}
+                      onClick={() => handleShare(img.dataUrl)}
+                      title="공유 링크 복사"
+                    >
+                      <LuShare2 size={14} />
+                    </button>
                     <a
                       className={styles.galleryActionBtn}
                       href={img.dataUrl}
@@ -1490,6 +1530,9 @@ export default function Home() {
       )}
       {/* 챗봇 패널 */}
       <ChatBot open={chatOpen} onClose={() => setChatOpen(false)} />
+
+      {/* Toast */}
+      {toast && <div className={styles.toast}>{toast}</div>}
     </div>
   );
 }
