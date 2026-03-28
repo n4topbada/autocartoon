@@ -280,6 +280,58 @@
   color: #ef4444;
 }
 
+/* 보기/안보기 버튼 */
+.layerVisBtn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.layerVisBtn:hover {
+  color: var(--text);
+}
+
+/* 색칠 아이콘 */
+.layerColorPicker {
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* 색상 팔레트 */
+.colorSwatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 4px 6px;
+}
+
+.colorSwatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s;
+}
+
+.colorSwatch:hover {
+  transform: scale(1.2);
+}
+
+.colorSwatchActive {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--accent);
+}
+
 /* 저장 버튼 */
 .saveBtn {
   margin-top: 12px;

@@ -12,6 +12,9 @@ import {
   LuSave,
   LuLayers,
   LuUndo2,
+  LuEye,
+  LuEyeOff,
+  LuPaintBucket,
 } from "react-icons/lu";
 
 interface GalleryImage {
@@ -28,8 +31,15 @@ interface Layer {
   y: number;
   width: number;
   height: number;
-  canvas: HTMLCanvasElement | null; // 개별 레이어 픽셀 데이터용
+  visible: boolean;
+  fillColor: string | null; // 단색 채우기 (빈 레이어용)
+  canvas: HTMLCanvasElement | null;
 }
+
+const FILL_COLORS = [
+  "#ffffff", "#000000", "#ef4444", "#f97316", "#eab308",
+  "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#6b7280",
+];
 
 interface Props {
   initialImage: GalleryImage;
@@ -50,6 +60,8 @@ function createLayer(id?: string): Layer {
     y: 0,
     width: CANVAS_SIZE,
     height: CANVAS_SIZE,
+    visible: true,
+    fillColor: null,
     canvas: null,
   };
 }
@@ -162,10 +174,16 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
 
     // 레이어 아래→위 순서로 합성
     for (const layer of layers) {
-      if (!layer.canvas) continue;
+      if (!layer.visible) continue;
       ctx.save();
       ctx.globalAlpha = layer.opacity;
-      ctx.drawImage(layer.canvas, layer.x, layer.y);
+      if (layer.fillColor && !layer.canvas) {
+        // 단색 채우기 레이어
+        ctx.fillStyle = layer.fillColor;
+        ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+      } else if (layer.canvas) {
+        ctx.drawImage(layer.canvas, layer.x, layer.y);
+      }
       ctx.restore();
     }
 
@@ -416,10 +434,15 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
       const scale = 1080 / CANVAS_SIZE;
 
       for (const layer of layers) {
-        if (!layer.canvas) continue;
+        if (!layer.visible) continue;
         ctx.save();
         ctx.globalAlpha = layer.opacity;
-        ctx.drawImage(layer.canvas, layer.x * scale, layer.y * scale, 1080, 1080);
+        if (layer.fillColor && !layer.canvas) {
+          ctx.fillStyle = layer.fillColor;
+          ctx.fillRect(0, 0, 1080, 1080);
+        } else if (layer.canvas) {
+          ctx.drawImage(layer.canvas, layer.x * scale, layer.y * scale, 1080, 1080);
+        }
         ctx.restore();
       }
 
@@ -580,14 +603,36 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
                     if (url) handleDropOnLayer(layer.id, url);
                   }}
                 >
+                  {/* 보기/안보기 */}
+                  <button
+                    className={styles.layerVisBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLayers((prev) => prev.map((l) => l.id === layer.id ? { ...l, visible: !l.visible } : l));
+                    }}
+                    title={layer.visible ? "숨기기" : "보이기"}
+                  >
+                    {layer.visible ? <LuEye size={12} /> : <LuEyeOff size={12} />}
+                  </button>
+
                   <div className={styles.layerThumb}>
-                    {layer.imageUrl ? (
+                    {layer.fillColor && !layer.imageUrl ? (
+                      <div style={{ width: "100%", height: "100%", background: layer.fillColor }} />
+                    ) : layer.imageUrl ? (
                       <img src={layer.imageUrl} alt="" />
                     ) : (
-                      <span className={styles.layerEmpty}>빈 레이어</span>
+                      <span className={styles.layerEmpty}>빈</span>
                     )}
                   </div>
-                  <span className={styles.layerName}>Layer {layers.length - ri}</span>
+                  <span className={styles.layerName}>L{layers.length - ri}</span>
+
+                  {/* 빈 레이어: 색칠 버튼 */}
+                  {!layer.imageUrl && !layer.canvas && (
+                    <div className={styles.layerColorPicker}>
+                      <LuPaintBucket size={10} />
+                    </div>
+                  )}
+
                   {layers.length > 1 && (
                     <button
                       className={styles.layerDeleteBtn}
@@ -597,6 +642,25 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
                     </button>
                   )}
                 </div>
+
+                {/* 빈 레이어 색상 선택 (활성 + 빈 레이어일 때) */}
+                {activeLayerId === layer.id && !layer.imageUrl && !layer.canvas && (
+                  <div className={styles.colorSwatches}>
+                    {FILL_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        className={`${styles.colorSwatch} ${layer.fillColor === color ? styles.colorSwatchActive : ""}`}
+                        style={{ background: color }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLayers((prev) => prev.map((l) =>
+                            l.id === layer.id ? { ...l, fillColor: l.fillColor === color ? null : color } : l
+                          ));
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
             <button
