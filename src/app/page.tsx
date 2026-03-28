@@ -822,24 +822,28 @@ export default function Home() {
                     )}
                   </div>
                 ))}
-                {/* 독립 캐릭터 (ungrouped) */}
-                {ungroupedPresets.map((p) => (
-                  <button
-                    key={p.id}
-                    className={`${styles.presetCard} ${styles.ungroupedCard} ${
-                      selectedPresets.find((s) => s.id === p.id) ? styles.presetSelected : ""
-                    }`}
-                    onClick={() => togglePresetSelection(p)}
-                    onContextMenu={(e) => { e.preventDefault(); setManagingPreset(p); }}
-                  >
-                    <div className={styles.presetThumbSingle}>
-                      {(p.representativeImage ?? p.images[0]) && (
-                        <img src={(p.representativeImage ?? p.images[0]).dataUrl} alt={p.name} />
-                      )}
-                    </div>
-                    <span className={styles.presetName}>{p.name}</span>
-                  </button>
-                ))}
+                {/* 독립 캐릭터 (ungrouped) - 기존 4열 그리드 */}
+                {ungroupedPresets.length > 0 && (
+                  <div className={styles.presetGrid}>
+                    {ungroupedPresets.map((p) => (
+                      <button
+                        key={p.id}
+                        className={`${styles.presetCard} ${
+                          selectedPresets.find((s) => s.id === p.id) ? styles.presetSelected : ""
+                        }`}
+                        onClick={() => togglePresetSelection(p)}
+                        onContextMenu={(e) => { e.preventDefault(); setManagingPreset(p); }}
+                      >
+                        <div className={styles.presetThumbSingle}>
+                          {(p.representativeImage ?? p.images[0]) && (
+                            <img src={(p.representativeImage ?? p.images[0]).dataUrl} alt={p.name} />
+                          )}
+                        </div>
+                        <span className={styles.presetName}>{p.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 

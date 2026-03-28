@@ -55,9 +55,19 @@ export async function GET(req: NextRequest) {
       };
     };
 
-    // 그룹 조회
+    // 그룹 조회: 유저 소유 + 구매한 프리셋이 속한 시스템 그룹
+    const purchasedGroupIds = presets
+      .filter((p) => p.groupId)
+      .map((p) => p.groupId!)
+      .filter((v, i, a) => a.indexOf(v) === i);
+
     const groups = await prisma.characterGroup.findMany({
-      where: { userId: targetUserId },
+      where: {
+        OR: [
+          { userId: targetUserId },
+          { id: { in: purchasedGroupIds } },
+        ],
+      },
       orderBy: { order: "asc" },
     });
 

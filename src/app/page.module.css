@@ -339,19 +339,6 @@
   min-width: 72px;
 }
 
-/* 독립 캐릭터 카드 (ungrouped) */
-.ungroupedCard {
-  flex-direction: row;
-  gap: 10px;
-  padding: 6px 10px;
-}
-
-.ungroupedCard .presetThumbSingle {
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
-}
-
 /* 선택 카운트 */
 .selectionCount {
   font-size: 11px;
