@@ -15,7 +15,17 @@
 .headerRight {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+}
+
+.adminUserSelectCompact {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 12px;
+  padding: 4px 8px;
+  max-width: 120px;
 }
 
 .chatToggleBtn {
@@ -1251,8 +1261,8 @@
 /* ─── Transform 모드 슬롯 ─── */
 .transformGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
 }
 
 .transformSlot {

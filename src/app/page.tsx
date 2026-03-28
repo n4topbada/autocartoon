@@ -707,6 +707,19 @@ export default function Home() {
           </button>
         </nav>
         <div className={styles.headerRight}>
+          {isAdmin && allUsers.length > 0 && (
+            <select
+              className={styles.adminUserSelectCompact}
+              value={viewingUserId || user?.id || ""}
+              onChange={(e) => handleUserSwitch(e.target.value)}
+            >
+              {allUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name || u.email.split("@")[0]}
+                </option>
+              ))}
+            </select>
+          )}
           <UserAvatar />
           <button
             className={styles.chatToggleBtn}
@@ -717,25 +730,6 @@ export default function Home() {
           </button>
         </div>
       </header>
-
-      {/* 관리자: 유저 전환 바 */}
-      {isAdmin && allUsers.length > 0 && activeTab === "character" && (
-        <div className={styles.adminBar}>
-          <LuUsers size={14} />
-          <span className={styles.adminBarLabel}>계정 보기:</span>
-          <select
-            className={styles.adminUserSelect}
-            value={viewingUserId || user?.id || ""}
-            onChange={(e) => handleUserSwitch(e.target.value)}
-          >
-            {allUsers.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name || u.email.split("@")[0]} ({u.email})
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
 
       <main className={styles.main}>
         {activeTab === "background" ? (
@@ -839,57 +833,66 @@ export default function Home() {
               </div>
             ) : (
               <div className={styles.charGroupList}>
-                {/* Depth_A 그룹들 */}
-                {charGroups.map((group) => (
-                  <div key={group.id} className={styles.charGroup}>
-                    <button
-                      className={`${styles.groupHeader} ${expandedGroupId === group.id ? styles.groupExpanded : ""}`}
-                      onClick={() => handleGroupSelect(group)}
-                    >
-                      <span className={styles.groupName}>{group.name}</span>
-                      <span className={styles.groupArrow}>{expandedGroupId === group.id ? "▾" : "▸"}</span>
-                    </button>
-                    {expandedGroupId === group.id && group.presets.length > 0 && (
-                      <DepthBScroller
-                        presets={group.presets}
-                        selectedPresets={selectedPresets}
-                        onToggle={togglePresetSelection}
-                        onManage={setManagingPreset}
-                        currentUserId={user?.id}
-                      />
-                    )}
-                  </div>
-                ))}
-                {/* 독립 캐릭터 (ungrouped) - 기존 4열 그리드 */}
-                {ungroupedPresets.length > 0 && (
-                  <div className={styles.presetGrid}>
-                    {ungroupedPresets.map((p) => {
-                      const isSelected = !!selectedPresets.find((s) => s.id === p.id);
-                      const isOwner = p.userId === user?.id;
-                      return (
-                        <button
-                          key={p.id}
-                          className={`${styles.presetCard} ${isSelected ? styles.presetSelected : ""}`}
-                          onClick={() => togglePresetSelection(p)}
-                        >
-                          <div className={styles.presetThumbSingle}>
-                            {(p.representativeImage ?? p.images[0]) && (
-                              <img src={(p.representativeImage ?? p.images[0]).dataUrl} alt={p.name} />
-                            )}
-                            {isSelected && isOwner && (
-                              <button
-                                className={styles.editBtn}
-                                onClick={(e) => { e.stopPropagation(); setManagingPreset(p); }}
-                              >
-                                <LuPencil size={10} />
-                              </button>
-                            )}
-                          </div>
-                          <span className={styles.presetName}>{p.name}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                {/* 모든 Depth_A를 동일한 그리드에 표시 */}
+                <div className={styles.presetGrid}>
+                  {/* 그룹 카드 */}
+                  {charGroups.map((group) => {
+                    const firstPreset = group.presets[0];
+                    const thumb = firstPreset?.representativeImage ?? firstPreset?.images[0];
+                    const isExpanded = expandedGroupId === group.id;
+                    return (
+                      <button
+                        key={group.id}
+                        className={`${styles.presetCard} ${isExpanded ? styles.presetSelected : ""}`}
+                        onClick={() => handleGroupSelect(group)}
+                      >
+                        <div className={styles.presetThumbSingle}>
+                          {thumb && <img src={thumb.dataUrl} alt={group.name} />}
+                        </div>
+                        <span className={styles.presetName}>{group.name}</span>
+                      </button>
+                    );
+                  })}
+                  {/* 독립 캐릭터 카드 */}
+                  {ungroupedPresets.map((p) => {
+                    const isSelected = !!selectedPresets.find((s) => s.id === p.id);
+                    const isOwner = p.userId === user?.id;
+                    return (
+                      <button
+                        key={p.id}
+                        className={`${styles.presetCard} ${isSelected ? styles.presetSelected : ""}`}
+                        onClick={() => togglePresetSelection(p)}
+                      >
+                        <div className={styles.presetThumbSingle}>
+                          {(p.representativeImage ?? p.images[0]) && (
+                            <img src={(p.representativeImage ?? p.images[0]).dataUrl} alt={p.name} />
+                          )}
+                          {isSelected && isOwner && (
+                            <button
+                              className={styles.editBtn}
+                              onClick={(e) => { e.stopPropagation(); setManagingPreset(p); }}
+                            >
+                              <LuPencil size={10} />
+                            </button>
+                          )}
+                        </div>
+                        <span className={styles.presetName}>{p.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* 확장된 그룹의 Depth_B (그리드 아래에 별도 행) */}
+                {charGroups.map((group) =>
+                  expandedGroupId === group.id && group.presets.length > 0 ? (
+                    <DepthBScroller
+                      key={`depthb-${group.id}`}
+                      presets={group.presets}
+                      selectedPresets={selectedPresets}
+                      onToggle={togglePresetSelection}
+                      onManage={setManagingPreset}
+                      currentUserId={user?.id}
+                    />
+                  ) : null
                 )}
               </div>
             )}
