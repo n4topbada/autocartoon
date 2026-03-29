@@ -10,13 +10,17 @@ const sessionOptions = {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 퍼블릭 경로
+  // 퍼블릭 경로 + 정적 파일
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/verify") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico"
+    pathname.startsWith("/presets/") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/robot-wony.png" ||
+    pathname === "/guide.html" ||
+    /\.(png|jpg|jpeg|gif|webp|svg|ico|css|js|woff2?)$/.test(pathname)
   ) {
     return NextResponse.next();
   }
