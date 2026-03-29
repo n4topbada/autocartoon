@@ -1076,6 +1076,79 @@
   cursor: pointer;
 }
 
+/* 프롬프트 프리셋 드롭다운 */
+.promptPresetBtn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 0;
+  margin-bottom: 4px;
+}
+
+.promptPresetBtn:hover {
+  color: var(--accent);
+}
+
+.promptPresetDropdown {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  transform: translateY(-100%);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 20;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.3);
+}
+
+.promptPresetItem {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.promptPresetItem:last-child {
+  border-bottom: none;
+}
+
+.promptPresetText {
+  flex: 1;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.promptPresetText:hover {
+  background: var(--surface-hover);
+}
+
+.promptPresetDelete {
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.promptPresetDelete:hover {
+  color: #ef4444;
+}
+
 /* Toast */
 .toast {
   position: fixed;

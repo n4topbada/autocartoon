@@ -120,6 +120,7 @@ model User {
   helpRequests       HelpRequest[]
   imageTags          ImageTag[]
   instagramAccount   InstagramAccount?
+  promptPresets      PromptPreset[]
 }
 
 model BoardPost {
@@ -219,6 +220,18 @@ model ImageTagLink {
   tag   ImageTag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@unique([imageId, tagId])
+}
+
+model PromptPreset {
+  id        String   @id @default(cuid())
+  userId    String
+  text      String
+  usedAt    DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, usedAt])
 }
 
 model InstagramAccount {

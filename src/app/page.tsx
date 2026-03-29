@@ -229,6 +229,10 @@ export default function Home() {
 
   const [toast, setToast] = useState<string | null>(null);
 
+  // 프롬프트 프리셋
+  const [promptPresets, setPromptPresets] = useState<{ id: string; text: string }[]>([]);
+  const [showPromptPresets, setShowPromptPresets] = useState(false);
+
   const [prompt, setPrompt] = useState("");
   const [background, setBackground] = useState("없음");
   const [characterOnly, setCharacterOnly] = useState(false);
@@ -322,6 +326,24 @@ export default function Home() {
   }, [userParam]);
 
   // 저장된 배경 로드
+  // 프롬프트 프리셋 로드
+  const loadPromptPresets = useCallback(() => {
+    fetch("/api/prompt-presets")
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setPromptPresets(data); })
+      .catch(() => setPromptPresets([]));
+  }, []);
+
+  // 프롬프트 자동 저장 (생성 시)
+  const savePromptPreset = useCallback((text: string) => {
+    if (!text.trim()) return;
+    fetch("/api/prompt-presets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: text.trim() }),
+    }).then(() => loadPromptPresets()).catch(() => {});
+  }, [loadPromptPresets]);
+
   // 태그 로드
   const loadTags = useCallback(() => {
     fetch("/api/tags")
@@ -341,7 +363,8 @@ export default function Home() {
   useEffect(() => {
     loadPresets();
     loadTags();
-  }, [loadPresets, loadTags]);
+    loadPromptPresets();
+  }, [loadPresets, loadTags, loadPromptPresets]);
 
   useEffect(() => {
     if (activeTab === "character") {
@@ -773,6 +796,9 @@ export default function Home() {
     // 자동 모드: 이미지 있으면 transform, 텍스트만이면 text
     const autoMode = hasImages ? "transform" : "text";
 
+    // 프롬프트 자동 저장
+    if (hasPrompt) savePromptPreset(prompt);
+
     setGenerating(true);
     setError(null);
 
@@ -847,13 +873,7 @@ export default function Home() {
             <LuLayoutList size={14} />
             게시판
           </button>
-          <button
-            className={`${styles.tab} ${activeTab === "instagram" ? styles.tabActive : ""}`}
-            onClick={() => setActiveTab("instagram")}
-          >
-            <LuInstagram size={14} />
-            인스타그램
-          </button>
+          {/* Instagram 탭: Meta App 설정 후 주석 해제 (INSTAGRAM_SETUP.md 참조) */}
         </nav>
         <div className={styles.headerRight}>
           {isAdmin && allUsers.length > 0 && (
@@ -1110,7 +1130,43 @@ export default function Home() {
           </section>
 
           {/* 5) 프롬프트 입력 (캐릭터 태그 인라인) */}
-          <section className={styles.section}>
+          <section className={styles.section} style={{ position: "relative" }}>
+            {promptPresets.length > 0 && (
+              <button
+                className={styles.promptPresetBtn}
+                onClick={() => setShowPromptPresets(!showPromptPresets)}
+                title="저장된 프롬프트"
+              >
+                ▾ 프롬프트 ({promptPresets.length})
+              </button>
+            )}
+            {showPromptPresets && (
+              <div className={styles.promptPresetDropdown}>
+                {promptPresets.map((p) => (
+                  <div key={p.id} className={styles.promptPresetItem}>
+                    <button
+                      className={styles.promptPresetText}
+                      onClick={() => { setPrompt(p.text); setShowPromptPresets(false); }}
+                    >
+                      {p.text.length > 60 ? p.text.slice(0, 60) + "..." : p.text}
+                    </button>
+                    <button
+                      className={styles.promptPresetDelete}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fetch("/api/prompt-presets", {
+                          method: "DELETE",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: p.id }),
+                        }).then(() => loadPromptPresets());
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <PromptInput
               tags={selectedPresets.map((p) => ({ id: p.id, name: p.name }))}
               text={prompt}
