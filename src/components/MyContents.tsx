@@ -95,12 +95,45 @@ export default function MyContents({ galleryImages }: Props) {
   const handleAddSlot = async (contentId: string, imageId: string, order?: number) => {
     const content = contents.find((c) => c.id === contentId);
     if (!content || content.slots.length >= 20) return;
-    await fetch(`/api/contents/${contentId}/slots`, {
+
+    const insertOrder = order ?? content.slots.length;
+    // 갤러리에서 이미지 URL 찾기 (낙관적 표시용)
+    const galleryImg = galleryImages.find((g) => g.id === imageId);
+    const tempId = `temp_${Date.now()}`;
+
+    // 낙관적 업데이트: 즉시 슬롯 추가
+    setContents((prev) => prev.map((c) => {
+      if (c.id !== contentId) return c;
+      const newSlots = [...c.slots];
+      newSlots.splice(insertOrder, 0, {
+        id: tempId,
+        imageId,
+        imageUrl: galleryImg?.dataUrl || null,
+        order: insertOrder,
+      });
+      return { ...c, slots: newSlots.map((s, i) => ({ ...s, order: i })) };
+    }));
+
+    // 서버 동기화 (백그라운드)
+    fetch(`/api/contents/${contentId}/slots`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imageId, order: order ?? content.slots.length }),
-    });
-    loadAll();
+      body: JSON.stringify({ imageId, order: insertOrder }),
+    }).then(() => {
+      // 서버에서 실제 ID를 가져오기 위해 해당 콘텐츠만 리로드
+      fetch(`/api/contents/${contentId}`).then((r) => r.json()).then((data) => {
+        setContents((prev) => prev.map((c) => {
+          if (c.id !== contentId) return c;
+          return {
+            ...c,
+            updatedAt: data.updatedAt,
+            slots: (data.slots || []).map((s: { id: string; imageId: string; blobUrl?: string; order: number }) => ({
+              id: s.id, imageId: s.imageId, imageUrl: s.blobUrl || null, order: s.order,
+            })),
+          };
+        }));
+      });
+    }).catch(() => loadAll());
   };
 
   const handleRemoveSlot = async (contentId: string, slotId: string) => {
