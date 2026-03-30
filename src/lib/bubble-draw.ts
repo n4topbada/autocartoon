@@ -29,7 +29,7 @@ export function createBubble(type: BubbleType, x: number, y: number): SpeechBubb
     width: 200, height: 140,
     fillColor: "#ffffff",
     strokeColor: "#000000",
-    strokeWidth: type === "needle" ? 3 : 2.5,
+    strokeWidth: type === "needle" ? 2 : 2.5,
     opacity: 1,
     tailEnabled: hasTail,
     tailTipX: x,
@@ -167,10 +167,11 @@ function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
       const startDist = tEdge + gap; // 바운딩 박스 바깥 + 간격
 
       const baseSize = Math.min(rx, ry);
+      // 원 크기: 메인 타원의 10% / 7% / 5% (최소 6/4/3px)
       const sizes = [
-        Math.max(14, baseSize * 0.22),
-        Math.max(10, baseSize * 0.15),
         Math.max(6, baseSize * 0.10),
+        Math.max(4, baseSize * 0.07),
+        Math.max(3, baseSize * 0.05),
       ];
 
       let currentDist = startDist;
@@ -181,7 +182,7 @@ function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
         ctx.arc(cx, cy, sizes[i], 0, Math.PI * 2);
         doFill(ctx, b);
         doStroke(ctx, b);
-        currentDist += sizes[i] * 2 + Math.max(4, sizes[i] * 0.8);
+        currentDist += sizes[i] * 2 + Math.max(3, sizes[i]);
       }
     }
   }
