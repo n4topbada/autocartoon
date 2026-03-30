@@ -166,10 +166,11 @@ function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
       const gap = Math.max(12, Math.min(rx, ry) * 0.15); // 크기 비례 간격
       const startDist = tEdge + gap; // 바운딩 박스 바깥 + 간격
 
+      const baseSize = Math.min(rx, ry);
       const sizes = [
-        Math.max(8, Math.min(rx, ry) * 0.12),
-        Math.max(5, Math.min(rx, ry) * 0.08),
-        Math.max(3, Math.min(rx, ry) * 0.05),
+        Math.max(14, baseSize * 0.22),
+        Math.max(10, baseSize * 0.15),
+        Math.max(6, baseSize * 0.10),
       ];
 
       let currentDist = startDist;
@@ -211,49 +212,52 @@ function drawSpiky(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   doStroke(ctx, b);
 }
 
-// ═══════════════ 4. angry (화남 — 꼭지점으로 뾰족, 곡선이 바깥으로 볼록) ═══════════════
+// ═══════════════ 4. angry (화남 — 모든 선이 안쪽 오목 곡선, 꼭지점 뾰족) ═══════════════
 
 function drawAngry(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   const spikes = 12;
   const rx = b.width / 2;
   const ry = b.height / 2;
 
-  ctx.beginPath();
+  // 뾰족 점과 골짜기 점을 교대로 배치
+  const points: { x: number; y: number; isTip: boolean }[] = [];
   for (let i = 0; i < spikes; i++) {
-    const a1 = (i / spikes) * Math.PI * 2 - Math.PI / 2;
-    const a2 = ((i + 1) / spikes) * Math.PI * 2 - Math.PI / 2;
-    const aMid = (a1 + a2) / 2;
-
     const seed = Math.sin(i * 91.7 + 43.1) * 0.5 + 0.5;
-
-    // 뾰족 끝점 (바깥)
-    const outerR = 1.0 + seed * 0.15;
-    const tipX = b.x + Math.cos(aMid) * rx * outerR;
-    const tipY = b.y + Math.sin(aMid) * ry * outerR;
-
-    // 골짜기 점 (안쪽)
-    const innerR = 0.7 + seed * 0.08;
-    const valleyX = b.x + Math.cos(a2) * rx * innerR;
-    const valleyY = b.y + Math.sin(a2) * ry * innerR;
-
-    // 시작점 (이전 골짜기)
-    const prevSeed = Math.sin((i - 1) * 91.7 + 43.1) * 0.5 + 0.5;
-    const startR = 0.7 + prevSeed * 0.08;
-    const startX = b.x + Math.cos(a1) * rx * startR;
-    const startY = b.y + Math.sin(a1) * ry * startR;
-
-    if (i === 0) ctx.moveTo(startX, startY);
-
-    // 곡선: 골짜기 → tip (control point를 바깥으로 밀어서 볼록하게)
-    // control point = tip에서 더 바깥으로
-    const cpR = outerR * 1.15;
-    const cpX = b.x + Math.cos(aMid) * rx * cpR;
-    const cpY = b.y + Math.sin(aMid) * ry * cpR;
-    ctx.quadraticCurveTo(cpX, cpY, tipX, tipY);
-
-    // tip → 다음 골짜기 (직선 또는 약간의 커브)
-    ctx.lineTo(valleyX, valleyY);
+    // 뾰족 끝 (바깥)
+    const tipAngle = ((i + 0.5) / spikes) * Math.PI * 2 - Math.PI / 2;
+    const tipR = 1.0 + seed * 0.15;
+    points.push({
+      x: b.x + Math.cos(tipAngle) * rx * tipR,
+      y: b.y + Math.sin(tipAngle) * ry * tipR,
+      isTip: true,
+    });
+    // 골짜기 (안쪽)
+    const valleyAngle = ((i + 1) / spikes) * Math.PI * 2 - Math.PI / 2;
+    const valleyR = 0.65 + seed * 0.1;
+    points.push({
+      x: b.x + Math.cos(valleyAngle) * rx * valleyR,
+      y: b.y + Math.sin(valleyAngle) * ry * valleyR,
+      isTip: false,
+    });
   }
+
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+
+  for (let i = 0; i < points.length; i++) {
+    const curr = points[i];
+    const next = points[(i + 1) % points.length];
+
+    // control point: 중심 쪽으로 당김 → 안쪽 오목 곡선
+    const midX = (curr.x + next.x) / 2;
+    const midY = (curr.y + next.y) / 2;
+    const pullStrength = 0.35;
+    const cpX = midX + (b.x - midX) * pullStrength;
+    const cpY = midY + (b.y - midY) * pullStrength;
+
+    ctx.quadraticCurveTo(cpX, cpY, next.x, next.y);
+  }
+
   ctx.closePath();
   doFill(ctx, b);
   doStroke(ctx, b);
@@ -264,7 +268,7 @@ function drawAngry(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
 function drawNeedle(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   const rx = b.width / 2;
   const ry = b.height / 2;
-  const n = 300;
+  const n = 600;
   // 크기에 비례하는 기본 길이 (확대해도 듬성듬성 안 됨)
   const baseLen = Math.min(rx, ry) * 0.35;
 

@@ -804,21 +804,37 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
               </button>
               {tool === "bubble" && (
                 <div className={styles.bubblePopup}>
-                  {([
-                    ["classic", "💬 말풍선"],
-                    ["thought", "💭 생각"],
-                    ["spiky", "💥 외침"],
-                    ["angry", "😤 화남"],
-                    ["needle", "✒️ 집중선"],
-                  ] as const).map(([bt, label]) => (
-                    <button
-                      key={bt}
-                      className={`${styles.bubblePopupItem} ${bubbleType === bt ? styles.bubblePopupItemActive : ""}`}
-                      onClick={() => { setBubbleType(bt as BubbleType); setSelectedBubbleId(null); }}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                  <div className={styles.bubblePopupGrid}>
+                    {(["classic", "thought", "spiky", "angry", "needle"] as const).map((bt) => (
+                      <button
+                        key={bt}
+                        className={`${styles.bubblePreviewBtn} ${bubbleType === bt ? styles.bubblePreviewBtnActive : ""}`}
+                        onClick={() => { setBubbleType(bt as BubbleType); setSelectedBubbleId(null); }}
+                        title={bt}
+                      >
+                        <canvas
+                          width={48}
+                          height={36}
+                          ref={(el) => {
+                            if (!el) return;
+                            const ctx = el.getContext("2d");
+                            if (!ctx) return;
+                            ctx.clearRect(0, 0, 48, 36);
+                            const preview: SpeechBubble = {
+                              id: "preview", type: bt, x: 24, y: 18,
+                              width: 38, height: 26,
+                              fillColor: "#ffffff", strokeColor: "#000000",
+                              strokeWidth: bt === "needle" ? 0.5 : 1.5,
+                              opacity: 1,
+                              tailEnabled: bt === "classic" || bt === "thought",
+                              tailTipX: 14, tailTipY: 34, tailWidth: 6,
+                            };
+                            drawBubble(ctx, preview);
+                          }}
+                        />
+                      </button>
+                    ))}
+                  </div>
                   {/* 선택된 말풍선 속성 */}
                   {selectedBubble && (
                     <>

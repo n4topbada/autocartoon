@@ -430,24 +430,35 @@
   gap: 2px;
 }
 
-.bubblePopupItem {
-  padding: 6px 10px;
-  background: none;
-  border: none;
-  color: var(--text);
-  font-size: 12px;
-  cursor: pointer;
-  border-radius: 4px;
-  text-align: left;
+.bubblePopupGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  padding: 2px;
 }
 
-.bubblePopupItem:hover {
+.bubblePreviewBtn {
+  padding: 4px;
+  background: var(--surface);
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bubblePreviewBtn:hover {
+  border-color: var(--border);
+}
+
+.bubblePreviewBtnActive {
+  border-color: var(--accent) !important;
   background: var(--surface-hover);
 }
 
-.bubblePopupItemActive {
-  background: var(--accent) !important;
-  color: #fff !important;
+.bubblePreviewBtn canvas {
+  display: block;
 }
 
 .bubblePopupDivider {
