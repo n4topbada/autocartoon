@@ -413,6 +413,106 @@
   cursor: not-allowed;
 }
 
+/* 말풍선 팝업 */
+.bubblePopup {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px;
+  min-width: 160px;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.3);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bubblePopupItem {
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.bubblePopupItem:hover {
+  background: var(--surface-hover);
+}
+
+.bubblePopupItemActive {
+  background: var(--accent) !important;
+  color: #fff !important;
+}
+
+.bubblePopupDivider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.bubblePopupProps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 2px;
+}
+
+.bubblePopupRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bubblePopupLabel {
+  font-size: 10px;
+  color: var(--text-sub);
+  width: 32px;
+  flex-shrink: 0;
+}
+
+.bubbleColorBtn {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s;
+}
+
+.bubbleColorBtn:hover {
+  transform: scale(1.2);
+}
+
+.bubbleColorActive {
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.bubbleDeleteBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: #ef4444;
+  font-size: 11px;
+  cursor: pointer;
+  margin-top: 2px;
+}
+
+.bubbleDeleteBtn:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
 /* 반응형 */
 @media (max-width: 1024px) {
   .imageList { width: 160px; }

@@ -790,68 +790,81 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
                 <LuUndo2 size={16} /> Undo
               </button>
             </div>
-            {/* 말풍선 도구 */}
-            <div className={styles.toolGroup}>
-              {([
-                ["classic", LuMessageCircle, "말풍선"],
-                ["thought", LuCloud, "생각"],
-                ["spiky", LuZap, "외침"],
-                ["ellipse", LuCircle, "타원"],
-                ["needle", LuPenTool, "바늘"],
-              ] as const).map(([bt, Icon, label]) => (
-                <button
-                  key={bt}
-                  className={`${styles.toolBtn} ${tool === "bubble" && bubbleType === bt ? styles.toolActive : ""}`}
-                  onClick={() => { setTool("bubble"); setBubbleType(bt as BubbleType); setSelectedBubbleId(null); }}
-                  title={label}
-                >
-                  <Icon size={14} />
-                </button>
-              ))}
+            {/* 말풍선 도구 (1개 버튼 + 팝업) */}
+            <div className={styles.toolGroup} style={{ position: "relative" }}>
+              <button
+                className={`${styles.toolBtn} ${tool === "bubble" ? styles.toolActive : ""}`}
+                onClick={() => {
+                  if (tool === "bubble") { setTool("move"); setSelectedBubbleId(null); }
+                  else setTool("bubble");
+                }}
+                title="말풍선"
+              >
+                <LuMessageCircle size={16} /> 말풍선
+              </button>
+              {tool === "bubble" && (
+                <div className={styles.bubblePopup}>
+                  {([
+                    ["classic", "💬 말풍선"],
+                    ["thought", "💭 생각"],
+                    ["spiky", "💥 외침"],
+                    ["ellipse", "⭕ 타원"],
+                    ["needle", "✒️ 집중선"],
+                  ] as const).map(([bt, label]) => (
+                    <button
+                      key={bt}
+                      className={`${styles.bubblePopupItem} ${bubbleType === bt ? styles.bubblePopupItemActive : ""}`}
+                      onClick={() => { setBubbleType(bt as BubbleType); setSelectedBubbleId(null); }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  {/* 선택된 말풍선 속성 */}
+                  {selectedBubble && (
+                    <>
+                      <div className={styles.bubblePopupDivider} />
+                      <div className={styles.bubblePopupProps}>
+                        <div className={styles.bubblePopupRow}>
+                          <span className={styles.bubblePopupLabel}>배경</span>
+                          {["#ffffff", "transparent", "#000000", "#ef4444", "#3b82f6", "#22c55e", "#eab308", "#ec4899"].map((c) => (
+                            <button
+                              key={c}
+                              className={`${styles.bubbleColorBtn} ${selectedBubble.fillColor === c ? styles.bubbleColorActive : ""}`}
+                              style={{ background: c === "transparent" ? "linear-gradient(45deg, #999 25%, transparent 25%, transparent 75%, #999 75%), linear-gradient(45deg, #999 25%, transparent 25%, transparent 75%, #999 75%)" : c, backgroundSize: "6px 6px", backgroundPosition: "0 0, 3px 3px" }}
+                              onClick={() => updateBubble(selectedBubble.id, { fillColor: c })}
+                              title={c === "transparent" ? "투명" : c}
+                            />
+                          ))}
+                        </div>
+                        <div className={styles.bubblePopupRow}>
+                          <span className={styles.bubblePopupLabel}>선색</span>
+                          {["#000000", "#ffffff", "#ef4444", "#3b82f6", "#22c55e", "#6b7280"].map((c) => (
+                            <button
+                              key={c}
+                              className={`${styles.bubbleColorBtn} ${selectedBubble.strokeColor === c ? styles.bubbleColorActive : ""}`}
+                              style={{ background: c }}
+                              onClick={() => updateBubble(selectedBubble.id, { strokeColor: c })}
+                            />
+                          ))}
+                        </div>
+                        <div className={styles.bubblePopupRow}>
+                          <span className={styles.bubblePopupLabel}>두께</span>
+                          <input type="range" min={1} max={8} value={selectedBubble.strokeWidth} onChange={(e) => updateBubble(selectedBubble.id, { strokeWidth: Number(e.target.value) })} style={{ width: 80 }} />
+                        </div>
+                        <div className={styles.bubblePopupRow}>
+                          <span className={styles.bubblePopupLabel}>투명도</span>
+                          <input type="range" min={0} max={100} value={Math.round(selectedBubble.opacity * 100)} onChange={(e) => updateBubble(selectedBubble.id, { opacity: Number(e.target.value) / 100 })} style={{ width: 80 }} />
+                        </div>
+                        <button className={styles.bubbleDeleteBtn} onClick={() => deleteBubble(selectedBubble.id)}>
+                          <LuTrash2 size={12} /> 삭제
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-          {/* 말풍선 속성 패널 */}
-          {selectedBubble && tool === "bubble" && (
-            <div className={styles.toolbar} style={{ gap: 8 }}>
-              <div className={styles.toolGroup}>
-                <span style={{ fontSize: 11, color: "var(--text-sub)" }}>배경</span>
-                {["#ffffff", "#000000", "#ef4444", "#3b82f6", "#22c55e", "#eab308", "#ec4899", "#f97316"].map((c) => (
-                  <button
-                    key={c}
-                    style={{
-                      width: 16, height: 16, borderRadius: 3, background: c, border: selectedBubble.fillColor === c ? "2px solid var(--accent)" : "1px solid var(--border)",
-                      cursor: "pointer", padding: 0,
-                    }}
-                    onClick={() => updateBubble(selectedBubble.id, { fillColor: c })}
-                  />
-                ))}
-              </div>
-              <div className={styles.toolGroup}>
-                <span style={{ fontSize: 11, color: "var(--text-sub)" }}>선</span>
-                {["#000000", "#ffffff", "#ef4444", "#3b82f6", "#22c55e", "#6b7280"].map((c) => (
-                  <button
-                    key={c}
-                    style={{
-                      width: 16, height: 16, borderRadius: 3, background: c, border: selectedBubble.strokeColor === c ? "2px solid var(--accent)" : "1px solid var(--border)",
-                      cursor: "pointer", padding: 0,
-                    }}
-                    onClick={() => updateBubble(selectedBubble.id, { strokeColor: c })}
-                  />
-                ))}
-              </div>
-              <label className={styles.opacityLabel}>
-                두께
-                <input type="range" min={1} max={8} value={selectedBubble.strokeWidth} onChange={(e) => updateBubble(selectedBubble.id, { strokeWidth: Number(e.target.value) })} className={styles.opacitySlider} style={{ width: 60 }} />
-              </label>
-              <label className={styles.opacityLabel}>
-                투명도
-                <input type="range" min={0} max={100} value={Math.round(selectedBubble.opacity * 100)} onChange={(e) => updateBubble(selectedBubble.id, { opacity: Number(e.target.value) / 100 })} className={styles.opacitySlider} style={{ width: 60 }} />
-              </label>
-              <button className={styles.toolBtn} onClick={() => deleteBubble(selectedBubble.id)} style={{ color: "#ef4444" }}>
-                <LuTrash2 size={14} />
-              </button>
-            </div>
-          )}
         </div>
 
         {/* 우측: 레이어 패널 */}

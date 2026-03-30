@@ -11,7 +11,7 @@ export interface SpeechBubble {
   y: number;
   width: number;
   height: number;
-  fillColor: string;
+  fillColor: string;   // "transparent" 지원
   strokeColor: string;
   strokeWidth: number;
   opacity: number;
@@ -32,15 +32,15 @@ export function createBubble(
     type,
     x,
     y,
-    width: type === "needle" ? 180 : 200,
-    height: type === "needle" ? 140 : 120,
+    width: 200,
+    height: 140,
     fillColor: "#ffffff",
     strokeColor: "#000000",
-    strokeWidth: type === "needle" ? 1 : 3,
+    strokeWidth: type === "needle" ? 1 : 2.5,
     opacity: 1,
     tailEnabled: hasTail,
     tailTipX: x,
-    tailTipY: y + 100,
+    tailTipY: y + 120,
     tailWidth: 20,
   };
 }
@@ -51,27 +51,17 @@ export function drawBubble(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   ctx.globalAlpha *= b.opacity;
 
   switch (b.type) {
-    case "classic":
-      drawClassic(ctx, b);
-      break;
-    case "thought":
-      drawThought(ctx, b);
-      break;
-    case "spiky":
-      drawSpiky(ctx, b);
-      break;
-    case "ellipse":
-      drawEllipse(ctx, b);
-      break;
-    case "needle":
-      drawNeedle(ctx, b);
-      break;
+    case "classic": drawClassic(ctx, b); break;
+    case "thought": drawThought(ctx, b); break;
+    case "spiky":   drawSpiky(ctx, b); break;
+    case "ellipse": drawEllipseShape(ctx, b); break;
+    case "needle":  drawNeedle(ctx, b); break;
   }
 
   ctx.restore();
 }
 
-/** 선택 오버레이 (바운딩 박스 + 핸들) */
+/** 선택 오버레이 */
 export function drawBubbleSelection(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   const left = b.x - b.width / 2;
   const top = b.y - b.height / 2;
@@ -83,7 +73,6 @@ export function drawBubbleSelection(ctx: CanvasRenderingContext2D, b: SpeechBubb
   ctx.strokeRect(left, top, b.width, b.height);
   ctx.setLineDash([]);
 
-  // 8개 리사이즈 핸들
   const handles = getHandlePositions(b);
   for (const h of handles) {
     ctx.fillStyle = "#fff";
@@ -93,7 +82,6 @@ export function drawBubbleSelection(ctx: CanvasRenderingContext2D, b: SpeechBubb
     ctx.strokeRect(h.x - 4, h.y - 4, 8, 8);
   }
 
-  // 꼬리 핸들
   if (b.tailEnabled) {
     ctx.beginPath();
     ctx.arc(b.tailTipX, b.tailTipY, 6, 0, Math.PI * 2);
@@ -103,204 +91,186 @@ export function drawBubbleSelection(ctx: CanvasRenderingContext2D, b: SpeechBubb
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
-
   ctx.restore();
 }
 
-/** 핸들 위치 (8개) */
 export function getHandlePositions(b: SpeechBubble) {
   const l = b.x - b.width / 2;
   const r = b.x + b.width / 2;
   const t = b.y - b.height / 2;
   const bt = b.y + b.height / 2;
   return [
-    { id: "nw", x: l, y: t },
-    { id: "n", x: b.x, y: t },
-    { id: "ne", x: r, y: t },
-    { id: "e", x: r, y: b.y },
-    { id: "se", x: r, y: bt },
-    { id: "s", x: b.x, y: bt },
-    { id: "sw", x: l, y: bt },
-    { id: "w", x: l, y: b.y },
+    { id: "nw", x: l, y: t }, { id: "n", x: b.x, y: t },
+    { id: "ne", x: r, y: t }, { id: "e", x: r, y: b.y },
+    { id: "se", x: r, y: bt }, { id: "s", x: b.x, y: bt },
+    { id: "sw", x: l, y: bt }, { id: "w", x: l, y: b.y },
   ];
 }
 
-/** 히트 테스트 */
-export function hitTestBubble(
-  mx: number,
-  my: number,
-  b: SpeechBubble
-): "body" | "tail" | string | null {
-  // 꼬리 핸들
+export function hitTestBubble(mx: number, my: number, b: SpeechBubble): "body" | "tail" | string | null {
   if (b.tailEnabled) {
-    const dt = Math.hypot(mx - b.tailTipX, my - b.tailTipY);
-    if (dt < 12) return "tail";
+    if (Math.hypot(mx - b.tailTipX, my - b.tailTipY) < 12) return "tail";
   }
-
-  // 리사이즈 핸들
   for (const h of getHandlePositions(b)) {
     if (Math.abs(mx - h.x) < 8 && Math.abs(my - h.y) < 8) return h.id;
   }
-
-  // 본체 (바운딩 박스)
   const l = b.x - b.width / 2;
   const t = b.y - b.height / 2;
   if (mx >= l && mx <= l + b.width && my >= t && my <= t + b.height) return "body";
-
   return null;
 }
 
-// ─────────── 개별 드로잉 ───────────
+// ═══════════════ 개별 드로잉 ═══════════════
 
+function applyFillStroke(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
+  if (b.fillColor !== "transparent") {
+    ctx.fillStyle = b.fillColor;
+    ctx.fill();
+  }
+  ctx.strokeStyle = b.strokeColor;
+  ctx.lineWidth = b.strokeWidth;
+  ctx.stroke();
+}
+
+/**
+ * 1. classic — 타원형 본체 + 삼각형 꼬리
+ */
 function drawClassic(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
-  const l = b.x - b.width / 2;
-  const t = b.y - b.height / 2;
-  const r = Math.min(b.width, b.height) * 0.2;
+  const rx = b.width / 2;
+  const ry = b.height / 2;
 
-  // 꼬리 (fill만, 본체 아래에 깔림)
+  // 꼬리 먼저 (fill만, 본체가 위에 덮음)
   if (b.tailEnabled) {
     const angle = Math.atan2(b.tailTipY - b.y, b.tailTipX - b.x);
     const perpX = -Math.sin(angle) * b.tailWidth / 2;
     const perpY = Math.cos(angle) * b.tailWidth / 2;
-    // 본체 경계 교차점
-    const edgeDist = Math.min(b.width, b.height) * 0.4;
-    const baseX = b.x + Math.cos(angle) * edgeDist;
-    const baseY = b.y + Math.sin(angle) * edgeDist;
+    // 타원 경계 위의 꼬리 시작점
+    const edgeX = b.x + Math.cos(angle) * rx * 0.85;
+    const edgeY = b.y + Math.sin(angle) * ry * 0.85;
 
     ctx.beginPath();
-    ctx.moveTo(baseX + perpX, baseY + perpY);
+    ctx.moveTo(edgeX + perpX, edgeY + perpY);
     ctx.lineTo(b.tailTipX, b.tailTipY);
-    ctx.lineTo(baseX - perpX, baseY - perpY);
+    ctx.lineTo(edgeX - perpX, edgeY - perpY);
     ctx.closePath();
-    ctx.fillStyle = b.fillColor;
-    ctx.fill();
+    if (b.fillColor !== "transparent") {
+      ctx.fillStyle = b.fillColor;
+      ctx.fill();
+    }
     ctx.strokeStyle = b.strokeColor;
     ctx.lineWidth = b.strokeWidth;
     ctx.stroke();
   }
 
-  // 본체 (둥근 사각형)
+  // 본체: 타원
   ctx.beginPath();
-  ctx.moveTo(l + r, t);
-  ctx.arcTo(l + b.width, t, l + b.width, t + b.height, r);
-  ctx.arcTo(l + b.width, t + b.height, l, t + b.height, r);
-  ctx.arcTo(l, t + b.height, l, t, r);
-  ctx.arcTo(l, t, l + b.width, t, r);
-  ctx.closePath();
-  ctx.fillStyle = b.fillColor;
-  ctx.fill();
-  ctx.strokeStyle = b.strokeColor;
-  ctx.lineWidth = b.strokeWidth;
-  ctx.stroke();
+  ctx.ellipse(b.x, b.y, rx, ry, 0, 0, Math.PI * 2);
+  applyFillStroke(ctx, b);
 }
 
+/**
+ * 2. thought — 큰 타원 본체 + 작은 원 3개 꼬리 (생각 말풍선)
+ */
 function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   const rx = b.width / 2;
   const ry = b.height / 2;
-  const n = 8;
-  const bumpR = Math.min(rx, ry) * 0.35;
 
-  // 본체: 구름 (원 여러 개)
-  ctx.fillStyle = b.fillColor;
-  for (let i = 0; i < n; i++) {
-    const angle = (i / n) * Math.PI * 2;
-    const cx = b.x + Math.cos(angle) * (rx - bumpR * 0.5);
-    const cy = b.y + Math.sin(angle) * (ry - bumpR * 0.5);
-    ctx.beginPath();
-    ctx.arc(cx, cy, bumpR, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // 중앙 채우기
+  // 본체: 타원
   ctx.beginPath();
-  ctx.ellipse(b.x, b.y, rx - bumpR * 0.3, ry - bumpR * 0.3, 0, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.ellipse(b.x, b.y, rx, ry, 0, 0, Math.PI * 2);
+  applyFillStroke(ctx, b);
 
-  // 외곽선
-  ctx.strokeStyle = b.strokeColor;
-  ctx.lineWidth = b.strokeWidth;
-  for (let i = 0; i < n; i++) {
-    const angle = (i / n) * Math.PI * 2;
-    const cx = b.x + Math.cos(angle) * (rx - bumpR * 0.5);
-    const cy = b.y + Math.sin(angle) * (ry - bumpR * 0.5);
-    ctx.beginPath();
-    ctx.arc(cx, cy, bumpR, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  // 꼬리: 작은 원 3개
+  // 꼬리: 점점 작아지는 원 3개
   if (b.tailEnabled) {
     const dx = b.tailTipX - b.x;
     const dy = b.tailTipY - b.y;
-    for (let i = 0; i < 3; i++) {
-      const t = 0.4 + i * 0.2;
-      const cx = b.x + dx * t;
-      const cy = b.y + dy * t;
-      const cr = bumpR * (0.5 - i * 0.12);
-      ctx.beginPath();
-      ctx.arc(cx, cy, Math.max(cr, 4), 0, Math.PI * 2);
-      ctx.fillStyle = b.fillColor;
-      ctx.fill();
-      ctx.strokeStyle = b.strokeColor;
-      ctx.lineWidth = b.strokeWidth;
-      ctx.stroke();
+    const dist = Math.hypot(dx, dy);
+    if (dist > 0) {
+      const sizes = [14, 10, 6]; // 원 크기
+      const positions = [0.55, 0.72, 0.88]; // 본체→꼬리끝 비율
+
+      for (let i = 0; i < 3; i++) {
+        const cx = b.x + dx * positions[i];
+        const cy = b.y + dy * positions[i];
+        ctx.beginPath();
+        ctx.arc(cx, cy, sizes[i], 0, Math.PI * 2);
+        if (b.fillColor !== "transparent") {
+          ctx.fillStyle = b.fillColor;
+          ctx.fill();
+        }
+        ctx.strokeStyle = b.strokeColor;
+        ctx.lineWidth = b.strokeWidth;
+        ctx.stroke();
+      }
     }
   }
 }
 
+/**
+ * 3. spiky — 뾰족뾰족 별폭발 타원 (밤송이)
+ */
 function drawSpiky(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
-  const points = 14;
+  const spikes = 16;
   const rx = b.width / 2;
   const ry = b.height / 2;
 
   ctx.beginPath();
-  for (let i = 0; i < points * 2; i++) {
-    const angle = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+  for (let i = 0; i < spikes * 2; i++) {
+    const angle = (i / (spikes * 2)) * Math.PI * 2 - Math.PI / 2;
     const isOuter = i % 2 === 0;
-    const r = isOuter ? 1.0 : 0.65;
-    const px = b.x + Math.cos(angle) * rx * r;
-    const py = b.y + Math.sin(angle) * ry * r;
+    const ratio = isOuter ? 1.0 : 0.7;
+    const px = b.x + Math.cos(angle) * rx * ratio;
+    const py = b.y + Math.sin(angle) * ry * ratio;
     if (i === 0) ctx.moveTo(px, py);
     else ctx.lineTo(px, py);
   }
   ctx.closePath();
-  ctx.fillStyle = b.fillColor;
-  ctx.fill();
-  ctx.strokeStyle = b.strokeColor;
-  ctx.lineWidth = b.strokeWidth;
-  ctx.stroke();
+  applyFillStroke(ctx, b);
 }
 
-function drawEllipse(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
+/**
+ * 4. ellipse — 단순 타원
+ */
+function drawEllipseShape(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   ctx.beginPath();
   ctx.ellipse(b.x, b.y, b.width / 2, b.height / 2, 0, 0, Math.PI * 2);
-  ctx.fillStyle = b.fillColor;
-  ctx.fill();
-  ctx.strokeStyle = b.strokeColor;
-  ctx.lineWidth = b.strokeWidth;
-  ctx.stroke();
+  applyFillStroke(ctx, b);
 }
 
+/**
+ * 5. needle (바늘 말풍선)
+ * 타원 바깥에서 중심을 향해 직선을 촘촘하게 그어서
+ * 중앙에 빈 타원 공간이 자연스럽게 생기는 집중선 효과
+ */
 function drawNeedle(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   const rx = b.width / 2;
   const ry = b.height / 2;
-  const n = 250; // 직선 수
-  const offset = Math.floor(n * 0.35); // 반대편 offset → 빈 공간 크기 결정
+  const n = 300; // 직선 수
+  const innerRatio = 0.45; // 내부 빈 공간 비율 (0.45 = 타원의 45% 지점에서 끝남)
 
   ctx.strokeStyle = b.strokeColor;
-  ctx.lineWidth = Math.max(b.strokeWidth * 0.5, 0.5);
 
   for (let i = 0; i < n; i++) {
-    const a1 = (i / n) * Math.PI * 2;
-    const a2 = ((i + offset) / n) * Math.PI * 2;
+    const angle = (i / n) * Math.PI * 2;
+    // 약간의 랜덤 편차 (시드 기반으로 결정적)
+    const seed = Math.sin(i * 127.1 + 311.7) * 0.5 + 0.5;
+    const outerJitter = 0.95 + seed * 0.1; // 0.95~1.05
+    const innerJitter = innerRatio + (seed - 0.5) * 0.15; // 내부 끝점 편차
 
-    const x1 = b.x + Math.cos(a1) * rx;
-    const y1 = b.y + Math.sin(a1) * ry;
-    const x2 = b.x + Math.cos(a2) * rx;
-    const y2 = b.y + Math.sin(a2) * ry;
+    // 바깥점 (타원 경계 + 약간 바깥)
+    const outerX = b.x + Math.cos(angle) * rx * outerJitter;
+    const outerY = b.y + Math.sin(angle) * ry * outerJitter;
+
+    // 안쪽 끝점 (중심 방향, innerRatio 지점에서 끝남)
+    const innerX = b.x + Math.cos(angle) * rx * innerJitter;
+    const innerY = b.y + Math.sin(angle) * ry * innerJitter;
+
+    // 선 두께: 바깥에서 얇게 시작 → 안쪽에서 더 얇게
+    ctx.lineWidth = Math.max(b.strokeWidth * (0.5 + seed * 0.8), 0.3);
 
     ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
+    ctx.moveTo(outerX, outerY);
+    ctx.lineTo(innerX, innerY);
     ctx.stroke();
   }
 }
