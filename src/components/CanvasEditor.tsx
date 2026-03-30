@@ -808,7 +808,7 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
                     ["classic", "💬 말풍선"],
                     ["thought", "💭 생각"],
                     ["spiky", "💥 외침"],
-                    ["ellipse", "⭕ 타원"],
+                    ["angry", "😤 화남"],
                     ["needle", "✒️ 집중선"],
                   ] as const).map(([bt, label]) => (
                     <button

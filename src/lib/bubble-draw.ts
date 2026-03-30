@@ -2,7 +2,7 @@
  * 말풍선 Canvas 2D 드로잉 함수 (5종)
  */
 
-export type BubbleType = "classic" | "thought" | "spiky" | "ellipse" | "needle";
+export type BubbleType = "classic" | "thought" | "spiky" | "angry" | "needle";
 
 export interface SpeechBubble {
   id: string;
@@ -45,7 +45,7 @@ export function drawBubble(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
     case "classic": drawClassic(ctx, b); break;
     case "thought": drawThought(ctx, b); break;
     case "spiky":   drawSpiky(ctx, b); break;
-    case "ellipse": drawEllipseShape(ctx, b); break;
+    case "angry":   drawAngry(ctx, b); break;
     case "needle":  drawNeedle(ctx, b); break;
   }
   ctx.restore();
@@ -100,7 +100,7 @@ export function hitTestBubble(mx: number, my: number, b: SpeechBubble): "body" |
   return null;
 }
 
-// ═══════════════ 개별 드로잉 ═══════════════
+// ═══════════════ 유틸 ═══════════════
 
 function doFill(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   if (b.fillColor !== "transparent") { ctx.fillStyle = b.fillColor; ctx.fill(); }
@@ -109,37 +109,22 @@ function doStroke(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   ctx.strokeStyle = b.strokeColor; ctx.lineWidth = b.strokeWidth; ctx.stroke();
 }
 
-/**
- * 1. classic — 타원 본체 + 꼬리 (연결부분 선 없음)
- * 꼬리와 타원이 하나의 path로 합쳐져서 연결부 stroke 없음
- */
+// ═══════════════ 1. classic (타원 + 꼬리, 연결부 선 없음) ═══════════════
+
 function drawClassic(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   const rx = b.width / 2;
   const ry = b.height / 2;
 
   if (b.tailEnabled) {
-    // 꼬리 방향 각도
     const angle = Math.atan2(b.tailTipY - b.y, b.tailTipX - b.x);
-    const perpX = -Math.sin(angle) * b.tailWidth / 2;
-    const perpY = Math.cos(angle) * b.tailWidth / 2;
-
-    // 타원 위의 꼬리 시작점 2개 (각도 ± offset)
     const spread = Math.atan2(b.tailWidth, Math.hypot(b.tailTipX - b.x, b.tailTipY - b.y)) * 1.2;
     const a1 = angle - spread;
     const a2 = angle + spread;
-    const p1x = b.x + Math.cos(a1) * rx;
-    const p1y = b.y + Math.sin(a1) * ry;
-    const p2x = b.x + Math.cos(a2) * rx;
-    const p2y = b.y + Math.sin(a2) * ry;
 
-    // 하나의 path: 타원(꼬리 갈라진 부분 제외) + 꼬리
     ctx.beginPath();
-    // 타원을 a2 → (한 바퀴 돌아서) → a1 까지 그림
     ctx.ellipse(b.x, b.y, rx, ry, 0, a2, a1 + Math.PI * 2);
-    // 꼬리 삼각형
     ctx.lineTo(b.tailTipX, b.tailTipY);
     ctx.closePath();
-
     doFill(ctx, b);
     doStroke(ctx, b);
   } else {
@@ -150,9 +135,8 @@ function drawClassic(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   }
 }
 
-/**
- * 2. thought — 큰 타원 + 작은 원 3개 꼬리 (겹치지 않음)
- */
+// ═══════════════ 2. thought (타원 + 원 3개 꼬리, 바운딩 박스 바깥) ═══════════════
+
 function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   const rx = b.width / 2;
   const ry = b.height / 2;
@@ -163,7 +147,7 @@ function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   doFill(ctx, b);
   doStroke(ctx, b);
 
-  // 꼬리: 작은 원 3개 (겹치지 않게 간격 조절)
+  // 꼬리: 작은 원 3개 (바운딩 박스 바깥에서 시작)
   if (b.tailEnabled) {
     const dx = b.tailTipX - b.x;
     const dy = b.tailTipY - b.y;
@@ -171,13 +155,23 @@ function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
     if (dist > 10) {
       const nx = dx / dist;
       const ny = dy / dist;
-      // 타원 경계에서 시작
-      const edgeDist = Math.sqrt((rx * ny) ** 2 + (ry * nx) ** 2);
-      const startDist = Math.min(edgeDist * 0.95, dist * 0.5);
 
-      const sizes = [10, 7, 4];
-      let currentDist = startDist + 8;
+      // 바운딩 박스 경계에서 시작 (타원이 아닌 사각형 경계)
+      const halfW = b.width / 2;
+      const halfH = b.height / 2;
+      // 방향 벡터가 사각형 경계와 만나는 점 계산
+      const tx = nx !== 0 ? Math.abs(halfW / nx) : Infinity;
+      const ty = ny !== 0 ? Math.abs(halfH / ny) : Infinity;
+      const tEdge = Math.min(tx, ty);
+      const startDist = tEdge + 8; // 바운딩 박스 8px 바깥
 
+      const sizes = [
+        Math.max(8, Math.min(rx, ry) * 0.12),
+        Math.max(5, Math.min(rx, ry) * 0.08),
+        Math.max(3, Math.min(rx, ry) * 0.05),
+      ];
+
+      let currentDist = startDist;
       for (let i = 0; i < 3; i++) {
         const cx = b.x + nx * currentDist;
         const cy = b.y + ny * currentDist;
@@ -185,29 +179,26 @@ function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
         ctx.arc(cx, cy, sizes[i], 0, Math.PI * 2);
         doFill(ctx, b);
         doStroke(ctx, b);
-        currentDist += sizes[i] * 2 + 4; // 원 지름 + 간격
+        currentDist += sizes[i] * 2 + Math.max(4, sizes[i] * 0.8);
       }
     }
   }
 }
 
-/**
- * 3. spiky — 비대칭 뾰족 외침 말풍선
- */
+// ═══════════════ 3. spiky (비대칭 뾰족 외침) ═══════════════
+
 function drawSpiky(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   const spikes = 14;
   const rx = b.width / 2;
   const ry = b.height / 2;
 
-  // 비대칭을 위한 시드 기반 편차
   ctx.beginPath();
   for (let i = 0; i < spikes * 2; i++) {
     const angle = (i / (spikes * 2)) * Math.PI * 2 - Math.PI / 2;
     const isOuter = i % 2 === 0;
-    // 비대칭: 각 spike마다 약간 다른 비율
     const seed = Math.sin(i * 73.1 + 17.3) * 0.5 + 0.5;
-    const outerR = 0.95 + seed * 0.15; // 0.95~1.10
-    const innerR = 0.55 + seed * 0.15;  // 0.55~0.70
+    const outerR = 0.95 + seed * 0.15;
+    const innerR = 0.55 + seed * 0.15;
     const ratio = isOuter ? outerR : innerR;
     const px = b.x + Math.cos(angle) * rx * ratio;
     const py = b.y + Math.sin(angle) * ry * ratio;
@@ -219,56 +210,88 @@ function drawSpiky(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   doStroke(ctx, b);
 }
 
-/**
- * 4. ellipse — 단순 타원
- */
-function drawEllipseShape(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
+// ═══════════════ 4. angry (화남 — 곡선 뾰족, 안쪽으로 오목) ═══════════════
+
+function drawAngry(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
+  const spikes = 12;
+  const rx = b.width / 2;
+  const ry = b.height / 2;
+
   ctx.beginPath();
-  ctx.ellipse(b.x, b.y, b.width / 2, b.height / 2, 0, 0, Math.PI * 2);
+  for (let i = 0; i < spikes; i++) {
+    const a1 = (i / spikes) * Math.PI * 2 - Math.PI / 2;
+    const a2 = ((i + 1) / spikes) * Math.PI * 2 - Math.PI / 2;
+    const aMid = (a1 + a2) / 2;
+
+    const seed = Math.sin(i * 91.7 + 43.1) * 0.5 + 0.5;
+
+    // 바깥 뾰족 점 (spike tip)
+    const outerR = 1.0 + seed * 0.12;
+    const tipX = b.x + Math.cos(aMid) * rx * outerR;
+    const tipY = b.y + Math.sin(aMid) * ry * outerR;
+
+    // 안쪽 오목 점 (spike valley) — 안쪽으로 곡선
+    const innerR = 0.65 + seed * 0.1;
+    const valleyX = b.x + Math.cos(a2) * rx * innerR;
+    const valleyY = b.y + Math.sin(a2) * ry * innerR;
+
+    // 시작점
+    const startR = 0.65 + Math.sin((i - 1) * 91.7 + 43.1) * 0.05 + 0.05;
+    const startX = b.x + Math.cos(a1) * rx * startR;
+    const startY = b.y + Math.sin(a1) * ry * startR;
+
+    if (i === 0) ctx.moveTo(startX, startY);
+
+    // 곡선: 시작 → tip (quadratic curve, 안쪽으로 오목)
+    ctx.quadraticCurveTo(tipX, tipY, valleyX, valleyY);
+  }
+  ctx.closePath();
   doFill(ctx, b);
   doStroke(ctx, b);
 }
 
-/**
- * 5. needle (집중선)
- * 바깥에서 안쪽으로 뾰족하게 가늘어지는 직선들
- * 끝이 뾰족 (lineWidth가 바깥→안쪽으로 줄어듦 = 삼각형으로 그림)
- */
+// ═══════════════ 5. needle (집중선 — 가상 타원 테두리 기준 안팎으로 뾰족) ═══════════════
+
 function drawNeedle(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   const rx = b.width / 2;
   const ry = b.height / 2;
-  const n = 200;
-  const innerRatio = 0.42;
+  const n = 300;
 
-  ctx.fillStyle = b.strokeColor; // 삼각형으로 그리므로 fill 사용
+  ctx.fillStyle = b.strokeColor;
 
   for (let i = 0; i < n; i++) {
     const angle = (i / n) * Math.PI * 2;
-    // 시드 기반 랜덤 편차
-    const seed = Math.sin(i * 127.1 + 311.7) * 0.5 + 0.5;
+
+    // 시드 기반 랜덤
+    const seed1 = Math.sin(i * 127.1 + 311.7) * 0.5 + 0.5;
     const seed2 = Math.sin(i * 269.5 + 183.3) * 0.5 + 0.5;
+    const seed3 = Math.sin(i * 419.2 + 67.1) * 0.5 + 0.5;
 
-    const outerJitter = 0.97 + seed * 0.06;
-    const innerJitter = innerRatio + (seed2 - 0.5) * 0.12;
+    // 가상 타원 테두리 위의 중심점
+    const centerX = b.x + Math.cos(angle) * rx;
+    const centerY = b.y + Math.sin(angle) * ry;
 
-    // 바깥점
-    const outerX = b.x + Math.cos(angle) * rx * outerJitter;
-    const outerY = b.y + Math.sin(angle) * ry * outerJitter;
+    // 바깥쪽 끝 (뾰족, 타원 바깥)
+    const outerLen = 15 + seed1 * 25; // 15~40px 바깥으로
+    const outerX = centerX + Math.cos(angle) * outerLen;
+    const outerY = centerY + Math.sin(angle) * outerLen;
 
-    // 안쪽 끝점 (뾰족한 끝)
-    const innerX = b.x + Math.cos(angle) * rx * innerJitter;
-    const innerY = b.y + Math.sin(angle) * ry * innerJitter;
+    // 안쪽 끝 (뾰족, 타원 안쪽)
+    const innerLen = 15 + seed2 * 25; // 15~40px 안쪽으로
+    const innerX = centerX - Math.cos(angle) * innerLen;
+    const innerY = centerY - Math.sin(angle) * innerLen;
 
-    // 바깥 폭 (삼각형 밑변)
-    const baseWidth = (1.5 + seed * 2.0) * (b.strokeWidth * 0.5);
-    const perpX = -Math.sin(angle) * baseWidth;
-    const perpY = Math.cos(angle) * baseWidth;
+    // 중심부 폭 (가상 타원 테두리 위치에서 가장 넓음)
+    const midWidth = (0.8 + seed3 * 1.5) * b.strokeWidth;
+    const perpX = -Math.sin(angle) * midWidth;
+    const perpY = Math.cos(angle) * midWidth;
 
-    // 뾰족한 삼각형: 바깥 넓고 → 안쪽 점 (폭 0)
+    // 다이아몬드/방추형: 바깥 뾰족 → 중앙 넓음 → 안쪽 뾰족
     ctx.beginPath();
-    ctx.moveTo(outerX + perpX, outerY + perpY);
-    ctx.lineTo(outerX - perpX, outerY - perpY);
-    ctx.lineTo(innerX, innerY); // 뾰족한 끝
+    ctx.moveTo(outerX, outerY); // 바깥 뾰족 끝
+    ctx.lineTo(centerX + perpX, centerY + perpY); // 중앙 좌
+    ctx.lineTo(innerX, innerY); // 안쪽 뾰족 끝
+    ctx.lineTo(centerX - perpX, centerY - perpY); // 중앙 우
     ctx.closePath();
     ctx.fill();
   }
