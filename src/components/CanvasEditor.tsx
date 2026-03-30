@@ -273,7 +273,24 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
     const { x: mx, y: my } = getCanvasCoords(e);
 
     if (tool === "move") {
+      // 먼저 활성 레이어의 말풍선 히트 테스트
       const activeLayer = layers.find((l) => l.id === activeLayerId);
+      if (activeLayer) {
+        for (const bubble of [...activeLayer.bubbles].reverse()) {
+          const hit = hitTestBubble(mx, my, bubble);
+          if (hit) {
+            setSelectedBubbleId(bubble.id);
+            bubbleDragStart.current = { x: mx, y: my };
+            bubbleOriginal.current = { ...bubble };
+            if (hit === "body") bubbleDragMode.current = "move";
+            else if (hit === "tail") bubbleDragMode.current = "tail";
+            else { bubbleDragMode.current = "resize"; bubbleDragHandle.current = hit; }
+            return;
+          }
+        }
+      }
+      // 말풍선 안 맞으면 레이어 이동
+      setSelectedBubbleId(null);
       if (!activeLayer) return;
       isDragging.current = true;
       dragStart.current = { x: mx, y: my };
@@ -323,6 +340,41 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const { x: mx, y: my } = getCanvasCoords(e);
 
+    // move 도구에서도 말풍선 드래그 처리
+    if ((tool === "move" || tool === "bubble") && bubbleDragMode.current !== "none" && selectedBubbleId) {
+      const dx = mx - bubbleDragStart.current.x;
+      const dy = my - bubbleDragStart.current.y;
+      const orig = bubbleOriginal.current;
+      setLayers((prev) =>
+        prev.map((l) => ({
+          ...l,
+          bubbles: l.bubbles.map((bb) => {
+            if (bb.id !== selectedBubbleId) return bb;
+            if (bubbleDragMode.current === "move") {
+              return { ...bb, x: (orig.x ?? bb.x) + dx, y: (orig.y ?? bb.y) + dy };
+            }
+            if (bubbleDragMode.current === "tail") {
+              return { ...bb, tailTipX: mx, tailTipY: my };
+            }
+            if (bubbleDragMode.current === "resize") {
+              const h = bubbleDragHandle.current;
+              let nw = orig.width ?? bb.width;
+              let nh = orig.height ?? bb.height;
+              let nx = orig.x ?? bb.x;
+              let ny = orig.y ?? bb.y;
+              if (h.includes("e")) { nw += dx; nx += dx / 2; }
+              if (h.includes("w")) { nw -= dx; nx += dx / 2; }
+              if (h.includes("s")) { nh += dy; ny += dy / 2; }
+              if (h.includes("n")) { nh -= dy; ny += dy / 2; }
+              return { ...bb, width: Math.max(40, nw), height: Math.max(30, nh), x: nx, y: ny };
+            }
+            return bb;
+          }),
+        }))
+      );
+      return;
+    }
+
     if (tool === "move" && isDragging.current) {
       const dx = mx - dragStart.current.x;
       const dy = my - dragStart.current.y;
@@ -339,38 +391,6 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
       const w = Math.abs(mx - cropStart.current.x);
       const h = Math.abs(my - cropStart.current.y);
       setCropRect({ x, y, w, h });
-    } else if (tool === "bubble" && bubbleDragMode.current !== "none" && selectedBubbleId) {
-      const dx = mx - bubbleDragStart.current.x;
-      const dy = my - bubbleDragStart.current.y;
-      const orig = bubbleOriginal.current;
-
-      setLayers((prev) =>
-        prev.map((l) => ({
-          ...l,
-          bubbles: l.bubbles.map((b) => {
-            if (b.id !== selectedBubbleId) return b;
-            if (bubbleDragMode.current === "move") {
-              return { ...b, x: (orig.x ?? b.x) + dx, y: (orig.y ?? b.y) + dy };
-            }
-            if (bubbleDragMode.current === "tail") {
-              return { ...b, tailTipX: mx, tailTipY: my };
-            }
-            if (bubbleDragMode.current === "resize") {
-              const h = bubbleDragHandle.current;
-              let nw = orig.width ?? b.width;
-              let nh = orig.height ?? b.height;
-              let nx = orig.x ?? b.x;
-              let ny = orig.y ?? b.y;
-              if (h.includes("e")) { nw += dx; nx += dx / 2; }
-              if (h.includes("w")) { nw -= dx; nx += dx / 2; }
-              if (h.includes("s")) { nh += dy; ny += dy / 2; }
-              if (h.includes("n")) { nh -= dy; ny += dy / 2; }
-              return { ...b, width: Math.max(40, nw), height: Math.max(30, nh), x: nx, y: ny };
-            }
-            return b;
-          }),
-        }))
-      );
     }
   };
 
@@ -820,14 +840,20 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
                             const ctx = el.getContext("2d");
                             if (!ctx) return;
                             ctx.clearRect(0, 0, 48, 36);
+                            const isThought = bt === "thought";
                             const preview: SpeechBubble = {
-                              id: "preview", type: bt, x: 24, y: 18,
-                              width: 38, height: 26,
+                              id: "preview", type: bt,
+                              x: isThought ? 26 : 24,
+                              y: isThought ? 14 : 18,
+                              width: isThought ? 28 : 38,
+                              height: isThought ? 20 : 26,
                               fillColor: "#ffffff", strokeColor: "#000000",
-                              strokeWidth: bt === "needle" ? 0.5 : 1.5,
+                              strokeWidth: bt === "needle" ? 0.8 : 1.5,
                               opacity: 1,
                               tailEnabled: bt === "classic" || bt === "thought",
-                              tailTipX: 14, tailTipY: 34, tailWidth: 6,
+                              tailTipX: isThought ? 10 : 14,
+                              tailTipY: 34,
+                              tailWidth: 6,
                             };
                             drawBubble(ctx, preview);
                           }}

@@ -29,7 +29,7 @@ export function createBubble(type: BubbleType, x: number, y: number): SpeechBubb
     width: 200, height: 140,
     fillColor: "#ffffff",
     strokeColor: "#000000",
-    strokeWidth: type === "needle" ? 1 : 2.5,
+    strokeWidth: type === "needle" ? 3 : 2.5,
     opacity: 1,
     tailEnabled: hasTail,
     tailTipX: x,
