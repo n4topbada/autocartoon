@@ -163,7 +163,8 @@ function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
       const tx = nx !== 0 ? Math.abs(halfW / nx) : Infinity;
       const ty = ny !== 0 ? Math.abs(halfH / ny) : Infinity;
       const tEdge = Math.min(tx, ty);
-      const startDist = tEdge + 8; // 바운딩 박스 8px 바깥
+      const gap = Math.max(12, Math.min(rx, ry) * 0.15); // 크기 비례 간격
+      const startDist = tEdge + gap; // 바운딩 박스 바깥 + 간격
 
       const sizes = [
         Math.max(8, Math.min(rx, ry) * 0.12),
@@ -210,7 +211,7 @@ function drawSpiky(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   doStroke(ctx, b);
 }
 
-// ═══════════════ 4. angry (화남 — 곡선 뾰족, 안쪽으로 오목) ═══════════════
+// ═══════════════ 4. angry (화남 — 꼭지점으로 뾰족, 곡선이 바깥으로 볼록) ═══════════════
 
 function drawAngry(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   const spikes = 12;
@@ -225,25 +226,33 @@ function drawAngry(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
 
     const seed = Math.sin(i * 91.7 + 43.1) * 0.5 + 0.5;
 
-    // 바깥 뾰족 점 (spike tip)
-    const outerR = 1.0 + seed * 0.12;
+    // 뾰족 끝점 (바깥)
+    const outerR = 1.0 + seed * 0.15;
     const tipX = b.x + Math.cos(aMid) * rx * outerR;
     const tipY = b.y + Math.sin(aMid) * ry * outerR;
 
-    // 안쪽 오목 점 (spike valley) — 안쪽으로 곡선
-    const innerR = 0.65 + seed * 0.1;
+    // 골짜기 점 (안쪽)
+    const innerR = 0.7 + seed * 0.08;
     const valleyX = b.x + Math.cos(a2) * rx * innerR;
     const valleyY = b.y + Math.sin(a2) * ry * innerR;
 
-    // 시작점
-    const startR = 0.65 + Math.sin((i - 1) * 91.7 + 43.1) * 0.05 + 0.05;
+    // 시작점 (이전 골짜기)
+    const prevSeed = Math.sin((i - 1) * 91.7 + 43.1) * 0.5 + 0.5;
+    const startR = 0.7 + prevSeed * 0.08;
     const startX = b.x + Math.cos(a1) * rx * startR;
     const startY = b.y + Math.sin(a1) * ry * startR;
 
     if (i === 0) ctx.moveTo(startX, startY);
 
-    // 곡선: 시작 → tip (quadratic curve, 안쪽으로 오목)
-    ctx.quadraticCurveTo(tipX, tipY, valleyX, valleyY);
+    // 곡선: 골짜기 → tip (control point를 바깥으로 밀어서 볼록하게)
+    // control point = tip에서 더 바깥으로
+    const cpR = outerR * 1.15;
+    const cpX = b.x + Math.cos(aMid) * rx * cpR;
+    const cpY = b.y + Math.sin(aMid) * ry * cpR;
+    ctx.quadraticCurveTo(cpX, cpY, tipX, tipY);
+
+    // tip → 다음 골짜기 (직선 또는 약간의 커브)
+    ctx.lineTo(valleyX, valleyY);
   }
   ctx.closePath();
   doFill(ctx, b);
@@ -256,42 +265,45 @@ function drawNeedle(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   const rx = b.width / 2;
   const ry = b.height / 2;
   const n = 300;
+  // 크기에 비례하는 기본 길이 (확대해도 듬성듬성 안 됨)
+  const baseLen = Math.min(rx, ry) * 0.35;
 
   ctx.fillStyle = b.strokeColor;
 
   for (let i = 0; i < n; i++) {
     const angle = (i / n) * Math.PI * 2;
 
-    // 시드 기반 랜덤
     const seed1 = Math.sin(i * 127.1 + 311.7) * 0.5 + 0.5;
     const seed2 = Math.sin(i * 269.5 + 183.3) * 0.5 + 0.5;
     const seed3 = Math.sin(i * 419.2 + 67.1) * 0.5 + 0.5;
+    const seed4 = Math.sin(i * 337.9 + 521.3) * 0.5 + 0.5;
 
-    // 가상 타원 테두리 위의 중심점
-    const centerX = b.x + Math.cos(angle) * rx;
-    const centerY = b.y + Math.sin(angle) * ry;
+    // 중심점을 타원 테두리에서 ±10% 랜덤 오프셋
+    const centerOffset = 1.0 + (seed4 - 0.5) * 0.2; // 0.9~1.1
+    const centerX = b.x + Math.cos(angle) * rx * centerOffset;
+    const centerY = b.y + Math.sin(angle) * ry * centerOffset;
 
-    // 바깥쪽 끝 (뾰족, 타원 바깥)
-    const outerLen = 15 + seed1 * 25; // 15~40px 바깥으로
+    // 바깥쪽 끝 (크기 비례 + ±10% 랜덤)
+    const outerLen = baseLen * (0.6 + seed1 * 0.8); // 0.6~1.4 × baseLen
     const outerX = centerX + Math.cos(angle) * outerLen;
     const outerY = centerY + Math.sin(angle) * outerLen;
 
-    // 안쪽 끝 (뾰족, 타원 안쪽)
-    const innerLen = 15 + seed2 * 25; // 15~40px 안쪽으로
+    // 안쪽 끝 (크기 비례 + ±10% 랜덤)
+    const innerLen = baseLen * (0.6 + seed2 * 0.8);
     const innerX = centerX - Math.cos(angle) * innerLen;
     const innerY = centerY - Math.sin(angle) * innerLen;
 
-    // 중심부 폭 (가상 타원 테두리 위치에서 가장 넓음)
-    const midWidth = (0.8 + seed3 * 1.5) * b.strokeWidth;
+    // 중심부 폭 (크기에 비례)
+    const midWidth = (0.4 + seed3 * 0.8) * b.strokeWidth * (Math.min(rx, ry) / 70);
     const perpX = -Math.sin(angle) * midWidth;
     const perpY = Math.cos(angle) * midWidth;
 
-    // 다이아몬드/방추형: 바깥 뾰족 → 중앙 넓음 → 안쪽 뾰족
+    // 방추형: 바깥 뾰족 → 중앙 넓음 → 안쪽 뾰족
     ctx.beginPath();
-    ctx.moveTo(outerX, outerY); // 바깥 뾰족 끝
-    ctx.lineTo(centerX + perpX, centerY + perpY); // 중앙 좌
-    ctx.lineTo(innerX, innerY); // 안쪽 뾰족 끝
-    ctx.lineTo(centerX - perpX, centerY - perpY); // 중앙 우
+    ctx.moveTo(outerX, outerY);
+    ctx.lineTo(centerX + perpX, centerY + perpY);
+    ctx.lineTo(innerX, innerY);
+    ctx.lineTo(centerX - perpX, centerY - perpY);
     ctx.closePath();
     ctx.fill();
   }
