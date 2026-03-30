@@ -13,11 +13,24 @@ import {
   LuLayers,
   LuUndo2,
   LuEye,
+  LuMessageCircle,
+  LuCloud,
+  LuZap,
+  LuCircle,
+  LuPenTool,
   LuEyeOff,
   LuPaintBucket,
   LuChevronUp,
   LuChevronDown,
 } from "react-icons/lu";
+import {
+  type SpeechBubble,
+  type BubbleType,
+  createBubble,
+  drawBubble,
+  drawBubbleSelection,
+  hitTestBubble,
+} from "@/lib/bubble-draw";
 
 interface GalleryImage {
   id: string;
@@ -34,8 +47,9 @@ interface Layer {
   width: number;
   height: number;
   visible: boolean;
-  fillColor: string | null; // 단색 채우기 (빈 레이어용)
+  fillColor: string | null;
   canvas: HTMLCanvasElement | null;
+  bubbles: SpeechBubble[];
 }
 
 const FILL_COLORS = [
@@ -66,6 +80,7 @@ function createLayer(id?: string, w = MIN_CANVAS, h = MIN_CANVAS): Layer {
     visible: true,
     fillColor: null,
     canvas: null,
+    bubbles: [],
   };
 }
 
@@ -83,7 +98,13 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [layers, setLayers] = useState<Layer[]>([]);
   const [activeLayerId, setActiveLayerId] = useState<string>("");
-  const [tool, setTool] = useState<"move" | "crop">("move");
+  const [tool, setTool] = useState<"move" | "crop" | "bubble">("move");
+  const [bubbleType, setBubbleType] = useState<BubbleType>("classic");
+  const [selectedBubbleId, setSelectedBubbleId] = useState<string | null>(null);
+  const bubbleDragMode = useRef<"none" | "move" | "resize" | "tail">("none");
+  const bubbleDragHandle = useRef("");
+  const bubbleDragStart = useRef({ x: 0, y: 0 });
+  const bubbleOriginal = useRef<Partial<SpeechBubble>>({});
   const [saving, setSaving] = useState(false);
   const [bgThreshold, setBgThreshold] = useState(240);
   const [aspect, setAspect] = useState<AspectRatio>("1:1");
@@ -103,7 +124,7 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
         clonedCanvas.height = l.canvas.height;
         clonedCanvas.getContext("2d")!.drawImage(l.canvas, 0, 0);
       }
-      return { ...l, canvas: clonedCanvas };
+      return { ...l, canvas: clonedCanvas, bubbles: l.bubbles.map((b) => ({ ...b })) };
     });
   }, [layers]);
 
@@ -196,7 +217,22 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
       } else if (layer.canvas) {
         ctx.drawImage(layer.canvas, layer.x, layer.y);
       }
+      // 말풍선 렌더링
+      for (const bubble of layer.bubbles) {
+        drawBubble(ctx, bubble);
+      }
       ctx.restore();
+    }
+
+    // 선택된 말풍선 오버레이
+    if (selectedBubbleId) {
+      for (const layer of layers) {
+        const bubble = layer.bubbles.find((b) => b.id === selectedBubbleId);
+        if (bubble) {
+          drawBubbleSelection(ctx, bubble);
+          break;
+        }
+      }
     }
 
     // 크롭 영역 표시
@@ -246,6 +282,41 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
       setCropping(true);
       cropStart.current = { x: mx, y: my };
       setCropRect({ x: mx, y: my, w: 0, h: 0 });
+    } else if (tool === "bubble") {
+      // 활성 레이어의 말풍선 히트 테스트
+      const activeLayer = layers.find((l) => l.id === activeLayerId);
+      if (!activeLayer) return;
+
+      // 선택된 말풍선부터 체크
+      for (const bubble of [...activeLayer.bubbles].reverse()) {
+        const hit = hitTestBubble(mx, my, bubble);
+        if (hit) {
+          saveUndo();
+          setSelectedBubbleId(bubble.id);
+          bubbleDragStart.current = { x: mx, y: my };
+          bubbleOriginal.current = { ...bubble };
+
+          if (hit === "body") {
+            bubbleDragMode.current = "move";
+          } else if (hit === "tail") {
+            bubbleDragMode.current = "tail";
+          } else {
+            bubbleDragMode.current = "resize";
+            bubbleDragHandle.current = hit;
+          }
+          return;
+        }
+      }
+
+      // 아무것도 안 맞으면 새 말풍선 생성
+      saveUndo();
+      const newBubble = createBubble(bubbleType, mx, my);
+      setLayers((prev) =>
+        prev.map((l) =>
+          l.id === activeLayerId ? { ...l, bubbles: [...l.bubbles, newBubble] } : l
+        )
+      );
+      setSelectedBubbleId(newBubble.id);
     }
   };
 
@@ -268,11 +339,44 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
       const w = Math.abs(mx - cropStart.current.x);
       const h = Math.abs(my - cropStart.current.y);
       setCropRect({ x, y, w, h });
+    } else if (tool === "bubble" && bubbleDragMode.current !== "none" && selectedBubbleId) {
+      const dx = mx - bubbleDragStart.current.x;
+      const dy = my - bubbleDragStart.current.y;
+      const orig = bubbleOriginal.current;
+
+      setLayers((prev) =>
+        prev.map((l) => ({
+          ...l,
+          bubbles: l.bubbles.map((b) => {
+            if (b.id !== selectedBubbleId) return b;
+            if (bubbleDragMode.current === "move") {
+              return { ...b, x: (orig.x ?? b.x) + dx, y: (orig.y ?? b.y) + dy };
+            }
+            if (bubbleDragMode.current === "tail") {
+              return { ...b, tailTipX: mx, tailTipY: my };
+            }
+            if (bubbleDragMode.current === "resize") {
+              const h = bubbleDragHandle.current;
+              let nw = orig.width ?? b.width;
+              let nh = orig.height ?? b.height;
+              let nx = orig.x ?? b.x;
+              let ny = orig.y ?? b.y;
+              if (h.includes("e")) { nw += dx; nx += dx / 2; }
+              if (h.includes("w")) { nw -= dx; nx += dx / 2; }
+              if (h.includes("s")) { nh += dy; ny += dy / 2; }
+              if (h.includes("n")) { nh -= dy; ny += dy / 2; }
+              return { ...b, width: Math.max(40, nw), height: Math.max(30, nh), x: nx, y: ny };
+            }
+            return b;
+          }),
+        }))
+      );
     }
   };
 
   const handleMouseUp = () => {
     isDragging.current = false;
+    bubbleDragMode.current = "none";
     if (tool === "crop" && cropping && cropRect && cropRect.w > 5 && cropRect.h > 5) {
       applyCrop();
     }
@@ -428,6 +532,30 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
     );
   };
 
+  // 말풍선 속성 변경
+  const updateBubble = (id: string, updates: Partial<SpeechBubble>) => {
+    setLayers((prev) =>
+      prev.map((l) => ({
+        ...l,
+        bubbles: l.bubbles.map((b) => (b.id === id ? { ...b, ...updates } : b)),
+      }))
+    );
+  };
+
+  // 말풍선 삭제
+  const deleteBubble = (id: string) => {
+    saveUndo();
+    setLayers((prev) =>
+      prev.map((l) => ({ ...l, bubbles: l.bubbles.filter((b) => b.id !== id) }))
+    );
+    setSelectedBubbleId(null);
+  };
+
+  // 선택된 말풍선 가져오기
+  const selectedBubble = selectedBubbleId
+    ? layers.flatMap((l) => l.bubbles).find((b) => b.id === selectedBubbleId) ?? null
+    : null;
+
   // 레이어 추가
   const addLayer = (position: "above" | "below") => {
     const idx = layers.findIndex((l) => l.id === activeLayerId);
@@ -517,6 +645,20 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
           ctx.fillRect(0, 0, exportW, exportH);
         } else if (layer.canvas) {
           ctx.drawImage(layer.canvas, layer.x * scaleX, layer.y * scaleY, exportW, exportH);
+        }
+        // 말풍선 내보내기
+        for (const bubble of layer.bubbles) {
+          drawBubble(ctx, {
+            ...bubble,
+            x: bubble.x * scaleX,
+            y: bubble.y * scaleY,
+            width: bubble.width * scaleX,
+            height: bubble.height * scaleY,
+            tailTipX: bubble.tailTipX * scaleX,
+            tailTipY: bubble.tailTipY * scaleY,
+            tailWidth: bubble.tailWidth * scaleX,
+            strokeWidth: bubble.strokeWidth * Math.max(scaleX, scaleY),
+          });
         }
         ctx.restore();
       }
@@ -648,7 +790,68 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
                 <LuUndo2 size={16} /> Undo
               </button>
             </div>
+            {/* 말풍선 도구 */}
+            <div className={styles.toolGroup}>
+              {([
+                ["classic", LuMessageCircle, "말풍선"],
+                ["thought", LuCloud, "생각"],
+                ["spiky", LuZap, "외침"],
+                ["ellipse", LuCircle, "타원"],
+                ["needle", LuPenTool, "바늘"],
+              ] as const).map(([bt, Icon, label]) => (
+                <button
+                  key={bt}
+                  className={`${styles.toolBtn} ${tool === "bubble" && bubbleType === bt ? styles.toolActive : ""}`}
+                  onClick={() => { setTool("bubble"); setBubbleType(bt as BubbleType); setSelectedBubbleId(null); }}
+                  title={label}
+                >
+                  <Icon size={14} />
+                </button>
+              ))}
+            </div>
           </div>
+          {/* 말풍선 속성 패널 */}
+          {selectedBubble && tool === "bubble" && (
+            <div className={styles.toolbar} style={{ gap: 8 }}>
+              <div className={styles.toolGroup}>
+                <span style={{ fontSize: 11, color: "var(--text-sub)" }}>배경</span>
+                {["#ffffff", "#000000", "#ef4444", "#3b82f6", "#22c55e", "#eab308", "#ec4899", "#f97316"].map((c) => (
+                  <button
+                    key={c}
+                    style={{
+                      width: 16, height: 16, borderRadius: 3, background: c, border: selectedBubble.fillColor === c ? "2px solid var(--accent)" : "1px solid var(--border)",
+                      cursor: "pointer", padding: 0,
+                    }}
+                    onClick={() => updateBubble(selectedBubble.id, { fillColor: c })}
+                  />
+                ))}
+              </div>
+              <div className={styles.toolGroup}>
+                <span style={{ fontSize: 11, color: "var(--text-sub)" }}>선</span>
+                {["#000000", "#ffffff", "#ef4444", "#3b82f6", "#22c55e", "#6b7280"].map((c) => (
+                  <button
+                    key={c}
+                    style={{
+                      width: 16, height: 16, borderRadius: 3, background: c, border: selectedBubble.strokeColor === c ? "2px solid var(--accent)" : "1px solid var(--border)",
+                      cursor: "pointer", padding: 0,
+                    }}
+                    onClick={() => updateBubble(selectedBubble.id, { strokeColor: c })}
+                  />
+                ))}
+              </div>
+              <label className={styles.opacityLabel}>
+                두께
+                <input type="range" min={1} max={8} value={selectedBubble.strokeWidth} onChange={(e) => updateBubble(selectedBubble.id, { strokeWidth: Number(e.target.value) })} className={styles.opacitySlider} style={{ width: 60 }} />
+              </label>
+              <label className={styles.opacityLabel}>
+                투명도
+                <input type="range" min={0} max={100} value={Math.round(selectedBubble.opacity * 100)} onChange={(e) => updateBubble(selectedBubble.id, { opacity: Number(e.target.value) / 100 })} className={styles.opacitySlider} style={{ width: 60 }} />
+              </label>
+              <button className={styles.toolBtn} onClick={() => deleteBubble(selectedBubble.id)} style={{ color: "#ef4444" }}>
+                <LuTrash2 size={14} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* 우측: 레이어 패널 */}
