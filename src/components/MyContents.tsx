@@ -68,12 +68,29 @@ export default function MyContents({ galleryImages }: Props) {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   const handleCreate = async () => {
+    // 낙관적: 즉시 빈 행 추가
+    const tempId = `temp_${Date.now()}`;
+    const newRow: ContentRow = {
+      id: tempId,
+      title: "새 콘텐츠",
+      comment: "",
+      updatedAt: new Date().toISOString(),
+      slots: [],
+    };
+    setContents((prev) => [newRow, ...prev]);
+
+    // 서버 생성 후 실제 ID로 교체
     const res = await fetch("/api/contents", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     });
-    if (res.ok) loadAll();
+    if (res.ok) {
+      const created = await res.json();
+      setContents((prev) => prev.map((c) => c.id === tempId ? { ...newRow, id: created.id } : c));
+    } else {
+      setContents((prev) => prev.filter((c) => c.id !== tempId));
+    }
   };
 
   const handleDelete = async (id: string) => {
