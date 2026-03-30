@@ -32,8 +32,9 @@ import CharacterManagementModal from "@/components/CharacterManagementModal";
 import PromptInput from "@/components/PromptInput";
 import CanvasEditor from "@/components/CanvasEditor";
 import InstagramTab from "@/components/InstagramTab";
+import MyContents from "@/components/MyContents";
 
-type Tab = "character" | "background" | "board" | "instagram";
+type Tab = "character" | "background" | "board" | "instagram" | "contents";
 
 interface PresetImageData {
   id: string;
@@ -873,6 +874,13 @@ export default function Home() {
             <LuLayoutList size={14} />
             게시판
           </button>
+          <button
+            className={`${styles.tab} ${activeTab === "contents" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("contents")}
+          >
+            <LuLayoutList size={14} />
+            My Contents
+          </button>
           {/* Instagram 탭: Meta App 설정 후 주석 해제 (INSTAGRAM_SETUP.md 참조) */}
         </nav>
         <div className={styles.headerRight}>
@@ -907,6 +915,8 @@ export default function Home() {
           <Board />
         ) : activeTab === "instagram" ? (
           <InstagramTab />
+        ) : activeTab === "contents" ? (
+          <MyContents galleryImages={flatImages.map((img) => ({ id: img.id, dataUrl: img.dataUrl }))} />
         ) : (
         <>
         {/* 좌측 패널 */}
@@ -1246,7 +1256,13 @@ export default function Home() {
 
             {flatImages.map((img) => (
               <div key={img.id} className={styles.galleryCard}>
-                <img src={img.dataUrl} alt="generated" className={styles.galleryImg} />
+                <img
+                  src={img.dataUrl}
+                  alt="generated"
+                  className={styles.galleryImg}
+                  onClick={() => window.open(img.dataUrl, "_blank")}
+                  style={{ cursor: "pointer" }}
+                />
                 <div className={styles.galleryActions}>
                   {/* 좌측: 태그 아이콘들 */}
                   <div className={styles.tagIcons}>

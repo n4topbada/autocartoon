@@ -121,6 +121,7 @@ model User {
   imageTags          ImageTag[]
   instagramAccount   InstagramAccount?
   promptPresets      PromptPreset[]
+  contents           Content[]
 }
 
 model BoardPost {
@@ -220,6 +221,27 @@ model ImageTagLink {
   tag   ImageTag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@unique([imageId, tagId])
+}
+
+model Content {
+  id        String        @id @default(cuid())
+  userId    String
+  title     String        @default("새 콘텐츠")
+  comment   String        @default("")
+  updatedAt DateTime      @updatedAt
+  createdAt DateTime      @default(now())
+  user      User          @relation(fields: [userId], references: [id])
+  slots     ContentSlot[]
+  @@index([userId, updatedAt])
+}
+
+model ContentSlot {
+  id        String  @id @default(cuid())
+  contentId String
+  imageId   String
+  order     Int
+  content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  @@index([contentId, order])
 }
 
 model PromptPreset {

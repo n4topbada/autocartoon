@@ -1,0 +1,353 @@
+.container {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.mainPanel {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+/* 갤러리 사이드 패널 */
+.galleryPanel {
+  width: 200px;
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 8px;
+  flex-shrink: 0;
+}
+
+.galleryTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-sub);
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+
+.galleryList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.galleryItem {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  cursor: grab;
+}
+
+.galleryItem:active { cursor: grabbing; }
+
+.galleryItem img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 목록 뷰 */
+.listHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.listTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.createBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.createBtn:hover { opacity: 0.9; }
+
+.loading, .empty {
+  text-align: center;
+  padding: 48px;
+  color: var(--text-dim);
+}
+
+.empty p { margin-bottom: 16px; }
+
+.contentGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.contentCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.contentCard:hover {
+  border-color: var(--accent);
+}
+
+.contentThumb {
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+}
+
+.contentThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.contentInfo {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.contentTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contentMeta {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* 상세 뷰 */
+.detailHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.backBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.backBtn:hover { background: var(--surface-hover); }
+
+.titleInput {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  outline: none;
+}
+
+.titleInput:focus { border-color: var(--accent); }
+
+.deleteBtn {
+  padding: 8px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.deleteBtn:hover { color: #ef4444; border-color: #ef4444; }
+
+/* 슬롯 영역 */
+.slotsArea {
+  margin-bottom: 16px;
+}
+
+.slotsScroll {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 8px 0;
+  scrollbar-width: thin;
+}
+
+.slot {
+  position: relative;
+  width: 160px;
+  min-width: 160px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  overflow: hidden;
+  background: var(--surface);
+  cursor: grab;
+  transition: border-color 0.15s;
+}
+
+.slot:hover { border-color: var(--accent); }
+
+.slotDragging {
+  opacity: 0.5;
+  border-color: var(--accent);
+}
+
+.slotNumber {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  z-index: 1;
+}
+
+.slotImg {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+  cursor: pointer;
+}
+
+.slotEmpty {
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.slotRemove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.slot:hover .slotRemove { opacity: 1; }
+.slotRemove:hover { background: #ef4444; }
+
+.slotGrip {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255,255,255,0.5);
+}
+
+.addSlot {
+  width: 120px;
+  min-width: 120px;
+  aspect-ratio: 1;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.addSlot:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* 코멘트 */
+.commentSection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.commentInput {
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px;
+  resize: vertical;
+  outline: none;
+  line-height: 1.5;
+}
+
+.commentInput:focus { border-color: var(--accent); }
+
+.timestamp {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: right;
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+  .container { flex-direction: column; }
+  .galleryPanel {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    max-height: 200px;
+  }
+  .galleryList { flex-direction: row; overflow-x: auto; }
+  .galleryItem { width: 80px; min-width: 80px; }
+  .contentGrid { grid-template-columns: repeat(2, 1fr); }
+}
