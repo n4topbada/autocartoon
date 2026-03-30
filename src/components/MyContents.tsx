@@ -14,7 +14,7 @@ import {
 interface SlotData {
   id: string;
   imageId: string;
-  imageUrl: string | null;
+  imageUrl: string | null; // mapped from API's blobUrl
   order: number;
 }
 
@@ -64,7 +64,19 @@ export default function MyContents({ galleryImages }: Props) {
   const loadDetail = useCallback(async (id: string) => {
     try {
       const res = await fetch(`/api/contents/${id}`);
-      if (res.ok) setDetail(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        // API returns blobUrl, map to imageUrl for component
+        setDetail({
+          ...data,
+          slots: (data.slots || []).map((s: { id: string; imageId: string; blobUrl?: string; order: number }) => ({
+            id: s.id,
+            imageId: s.imageId,
+            imageUrl: s.blobUrl || null,
+            order: s.order,
+          })),
+        });
+      }
     } catch { /* ignore */ }
   }, []);
 
@@ -183,8 +195,8 @@ export default function MyContents({ galleryImages }: Props) {
                   onDrop={(e) => {
                     e.preventDefault();
                     // 갤러리에서 드롭
-                    const imgUrl = e.dataTransfer.getData("text/plain");
-                    const galleryImg = galleryImages.find((g) => g.dataUrl === imgUrl);
+                    const imgId = e.dataTransfer.getData("text/plain");
+                    const galleryImg = galleryImages.find((g) => g.id === imgId);
                     if (galleryImg) {
                       handleAddSlot(galleryImg.id, idx);
                       return;
@@ -224,8 +236,8 @@ export default function MyContents({ galleryImages }: Props) {
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault();
-                    const imgUrl = e.dataTransfer.getData("text/plain");
-                    const galleryImg = galleryImages.find((g) => g.dataUrl === imgUrl);
+                    const imgId = e.dataTransfer.getData("text/plain");
+                    const galleryImg = galleryImages.find((g) => g.id === imgId);
                     if (galleryImg) handleAddSlot(galleryImg.id);
                   }}
                 >
@@ -262,8 +274,7 @@ export default function MyContents({ galleryImages }: Props) {
                 className={styles.galleryItem}
                 draggable
                 onDragStart={(e) => {
-                  e.dataTransfer.setData("text/plain", img.dataUrl);
-                  e.dataTransfer.setData("imageId", img.id);
+                  e.dataTransfer.setData("text/plain", img.id);
                 }}
               >
                 <img src={img.dataUrl} alt="" />

@@ -13,10 +13,10 @@
 
 /* 갤러리 사이드 패널 */
 .galleryPanel {
-  width: 200px;
+  width: 160px;
   border-left: 1px solid var(--border);
   overflow-y: auto;
-  padding: 8px;
+  padding: 6px;
   flex-shrink: 0;
 }
 
