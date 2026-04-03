@@ -8,7 +8,7 @@ export async function GET() {
 
     // 1. 마켓플레이스 그룹 (Depth_A with children) - 본인 소유가 아닌 모든 그룹
     const groups = await prisma.characterGroup.findMany({
-      where: { NOT: { userId: session.userId } },
+      where: { NOT: { userId: session.userId }, presets: { some: { isPublic: true } } },
       include: {
         presets: {
           include: {
@@ -26,7 +26,7 @@ export async function GET() {
 
     // 2. 독립 프리셋 (groupId=null, 본인 소유 아닌 것)
     const standalone = await prisma.characterPreset.findMany({
-      where: { groupId: null, NOT: { userId: session.userId } },
+      where: { groupId: null, isPublic: true, NOT: { userId: session.userId } },
       include: {
         images: { orderBy: { order: "asc" }, take: 1 },
         purchasedBy: {

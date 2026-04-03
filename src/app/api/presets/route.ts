@@ -94,10 +94,11 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth();
     const body = await req.json();
-    const { name, images, groupId } = body as {
+    const { name, images, groupId, isPublic } = body as {
       name: string;
       images: { base64: string; mimeType: string }[];
       groupId?: string;
+      isPublic?: boolean;
     };
 
     if (!name?.trim()) {
@@ -132,6 +133,7 @@ export async function POST(req: NextRequest) {
         name: name.trim(),
         userId: session.userId,
         groupId: groupId || null,
+        isPublic: isPublic ?? false,
         images: {
           create: images.map((img, i) => ({
             blobUrl: blobUrls[i],

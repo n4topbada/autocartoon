@@ -24,7 +24,8 @@ model CharacterPreset {
   alias                 String   @unique
   name                  String
   userId                String?
-  price                 Int      @default(0) // 바나나(크레딧) 가격. 0=무료
+  price                 Int      @default(0)
+  isPublic              Boolean  @default(false)
   groupId               String?
   representativeImageId String?
   order                 Int      @default(0)

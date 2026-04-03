@@ -238,6 +238,7 @@ export default function Home() {
   const [background, setBackground] = useState("없음");
   const [characterOnly, setCharacterOnly] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [genElapsed, setGenElapsed] = useState(0);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -247,6 +248,7 @@ export default function Home() {
   // 캐릭터 업로드 상태
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [newCharName, setNewCharName] = useState("");
+  const [newCharPublic, setNewCharPublic] = useState(false);
   const [uploadingImages, setUploadingImages] = useState<UploadingImage[]>([]);
   const [uploading, setUploading] = useState(false);
   const charFileRef = useRef<HTMLInputElement>(null);
@@ -535,6 +537,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newCharName.trim(),
+          isPublic: newCharPublic,
           images: uploadingImages.map((img) => ({
             base64: img.base64,
             mimeType: img.mimeType,
@@ -551,6 +554,7 @@ export default function Home() {
       setSelectedPresets((prev) => prev.length < 4 ? [...prev, newPreset] : prev);
       setShowUploadModal(false);
       setNewCharName("");
+      setNewCharPublic(false);
       setUploadingImages([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "오류 발생");
@@ -801,7 +805,18 @@ export default function Home() {
     if (hasPrompt) savePromptPreset(prompt);
 
     setGenerating(true);
+    setGenElapsed(0);
     setError(null);
+
+    // 경과 시간 타이머
+    const startTime = Date.now();
+    const timer = setInterval(() => {
+      setGenElapsed(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+
+    // 120초 타임아웃
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000);
 
     try {
       let finalPrompt = hasPrompt ? prompt.trim() : "캐릭터 스타일로 변환";
@@ -828,15 +843,28 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "생성 실패");
       loadHistory();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "오류 발생");
+      const isTimeout = err instanceof DOMException && err.name === "AbortError";
+      if (isTimeout) {
+        // 타임아웃: 크레딧 환불
+        fetch("/api/credits/refund", { method: "POST" }).catch(() => {});
+        setError("생성 시간이 초과되었습니다 (120초). 크레딧이 환불됩니다. 잠시 후 갤러리를 확인해주세요.");
+        // 서버에서 이미 생성됐을 수 있으므로 갤러리 새로고침
+        setTimeout(() => loadHistory(), 5000);
+      } else {
+        setError(err instanceof Error ? err.message : "오류 발생");
+      }
     } finally {
+      clearInterval(timer);
+      clearTimeout(timeout);
       setGenerating(false);
+      setGenElapsed(0);
     }
   };
 
@@ -1244,7 +1272,15 @@ export default function Home() {
             {/* 생성 중 스켈레톤 */}
             {generating && (
               <div className={styles.galleryCard}>
-                <div className={styles.skeletonPulse} />
+                <div className={styles.skeletonPulse}>
+                  <span className={styles.skeletonText}>
+                    {genElapsed < 30
+                      ? `생성 중... ${genElapsed}초`
+                      : genElapsed < 90
+                        ? `조금 더 걸릴 수 있습니다... ${genElapsed}초`
+                        : `거의 완료... ${genElapsed}초`}
+                  </span>
+                </div>
               </div>
             )}
 
@@ -1533,6 +1569,20 @@ export default function Home() {
                 value={newCharName}
                 onChange={(e) => setNewCharName(e.target.value)}
               />
+            </div>
+
+            <div className={styles.modalField}>
+              <label className={styles.checkboxLabel}>
+                <input
+                  type="checkbox"
+                  checked={newCharPublic}
+                  onChange={(e) => setNewCharPublic(e.target.checked)}
+                />
+                <span>캐릭터 샵에 공개</span>
+              </label>
+              <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
+                비공개 시 본인만 사용 가능합니다
+              </span>
             </div>
 
             <div className={styles.modalField}>
