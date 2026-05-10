@@ -26,11 +26,11 @@ export async function GET() {
       firstImageIds.length > 0
         ? await prisma.generatedImage.findMany({
             where: { id: { in: firstImageIds } },
-            select: { id: true, blobUrl: true },
+            select: { id: true, blobUrl: true, thumbnailUrl: true },
           })
         : [];
 
-    const imageMap = new Map(images.map((img) => [img.id, img.blobUrl]));
+    const imageMap = new Map(images.map((img) => [img.id, img.thumbnailUrl ?? img.blobUrl]));
 
     return NextResponse.json(
       contents.map((c) => ({

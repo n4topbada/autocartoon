@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { generateContent } from "./gemini";
-import { fetchBlobAsBase64, uploadBase64ToBlob } from "./blob";
+import { fetchBlobAsBase64, uploadBase64ImageWithThumbnail } from "./blob";
 import {
   buildTextPrompt,
   buildSketchPrompt,
@@ -177,11 +177,16 @@ export async function generate(input: GenerateInput) {
 
   const savedImages = await Promise.all(
     result.images.map(async (img) => {
-      const blobUrl = await uploadBase64ToBlob(img.base64, img.mimeType, "generated");
+      const { blobUrl, thumbnailUrl } = await uploadBase64ImageWithThumbnail(
+        img.base64,
+        img.mimeType,
+        "generated"
+      );
       const saved = await prisma.generatedImage.create({
         data: {
           requestId: genRequest.id,
           blobUrl,
+          thumbnailUrl,
           mimeType: img.mimeType,
         },
       });
@@ -196,6 +201,7 @@ export async function generate(input: GenerateInput) {
       id: img.id,
       mimeType: img.mimeType,
       dataUrl: img.blobUrl,
+      thumbnailUrl: img.thumbnailUrl ?? img.blobUrl,
     })),
   };
 }

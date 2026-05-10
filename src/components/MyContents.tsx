@@ -22,6 +22,7 @@ interface ContentRow {
 interface GalleryImage {
   id: string;
   dataUrl: string;
+  thumbnailUrl?: string;
 }
 
 interface Props {
@@ -286,7 +287,7 @@ export default function MyContents({ galleryImages }: Props) {
                 e.dataTransfer.setData("text/plain", img.id);
               }}
             >
-              <img src={img.dataUrl} alt="" />
+              <img src={img.thumbnailUrl ?? img.dataUrl} alt="" />
             </div>
           ))}
         </div>

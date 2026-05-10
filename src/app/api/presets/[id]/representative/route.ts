@@ -30,7 +30,11 @@ export async function PATCH(
     });
 
     return NextResponse.json({
-      representativeImage: { id: targetImage.id, dataUrl: targetImage.blobUrl },
+      representativeImage: {
+        id: targetImage.id,
+        dataUrl: targetImage.blobUrl,
+        thumbnailUrl: targetImage.thumbnailUrl ?? targetImage.blobUrl,
+      },
     });
   } catch (error) {
     if (error instanceof AuthError) {

@@ -1,6 +1,7 @@
 import { put, del } from "@vercel/blob";
 import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import path from "path";
+import sharp from "sharp";
 
 const MIME_TO_EXT: Record<string, string> = {
   "image/png": ".png",
@@ -27,6 +28,66 @@ export async function uploadBase64ToBlob(
       contentType: mimeType,
     });
 
+    return blob.url;
+  } catch (error) {
+    if (process.env.NODE_ENV === "production") {
+      throw error;
+    }
+
+    console.warn("Vercel Blob upload failed. Falling back to local public/uploads.", error);
+    const uploadPath = path.join(process.cwd(), "public", "uploads", filename);
+    await mkdir(path.dirname(uploadPath), { recursive: true });
+    await writeFile(uploadPath, buffer);
+    return `/uploads/${filename.replace(/\\/g, "/")}`;
+  }
+}
+
+export async function uploadBase64ImageWithThumbnail(
+  base64: string,
+  mimeType: string,
+  folder: string = "images"
+): Promise<{ blobUrl: string; thumbnailUrl: string }> {
+  const buffer = Buffer.from(base64, "base64");
+  const thumbnailBuffer = await createThumbnailBuffer(buffer);
+
+  const [blobUrl, thumbnailUrl] = await Promise.all([
+    uploadBase64ToBlob(base64, mimeType, folder),
+    uploadBufferToBlob(thumbnailBuffer, "image/webp", `${folder}/thumbs`),
+  ]);
+
+  return { blobUrl, thumbnailUrl };
+}
+
+export async function uploadThumbnailForBlobUrl(
+  blobUrl: string,
+  folder: string = "images"
+): Promise<string> {
+  const image = await fetchBlobAsBase64(blobUrl);
+  const thumbnailBuffer = await createThumbnailBuffer(Buffer.from(image.base64, "base64"));
+  return uploadBufferToBlob(thumbnailBuffer, "image/webp", `${folder}/thumbs`);
+}
+
+async function createThumbnailBuffer(buffer: Buffer): Promise<Buffer> {
+  return sharp(buffer)
+    .rotate()
+    .resize({ width: 512, height: 512, fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 72 })
+    .toBuffer();
+}
+
+async function uploadBufferToBlob(
+  buffer: Buffer,
+  mimeType: string,
+  folder: string
+): Promise<string> {
+  const ext = MIME_TO_EXT[mimeType] || ".webp";
+  const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+
+  try {
+    const blob = await put(filename, buffer, {
+      access: "public",
+      contentType: mimeType,
+    });
     return blob.url;
   } catch (error) {
     if (process.env.NODE_ENV === "production") {
@@ -93,6 +154,7 @@ export async function fetchBlobAsBase64(
  * Vercel Blob 삭제
  */
 export async function deleteBlob(blobUrl: string): Promise<void> {
+  if (!blobUrl) return;
   try {
     if (blobUrl.startsWith("/uploads/")) {
       const filePath = path.join(process.cwd(), "public", blobUrl);

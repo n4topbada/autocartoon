@@ -39,6 +39,7 @@ type Tab = "character" | "background" | "board" | "instagram" | "contents";
 interface PresetImageData {
   id: string;
   dataUrl: string;
+  thumbnailUrl?: string;
 }
 
 interface Preset {
@@ -73,6 +74,7 @@ interface GeneratedImageData {
   id: string;
   mimeType: string;
   dataUrl: string;
+  thumbnailUrl?: string;
   favorite?: boolean;
   tags?: TagData[];
 }
@@ -92,6 +94,7 @@ interface SavedBg {
   id: string;
   name: string;
   dataUrl: string;
+  thumbnailUrl?: string;
 }
 
 interface TagData {
@@ -104,6 +107,7 @@ interface TagData {
 interface FlatImage {
   id: string;
   dataUrl: string;
+  thumbnailUrl?: string;
   favorite: boolean;
   mode: string;
   presetName: string;
@@ -177,7 +181,7 @@ function DepthBScroller({
             >
               <div className={styles.presetThumbSingle}>
                 {(p.representativeImage ?? p.images[0]) && (
-                  <img src={(p.representativeImage ?? p.images[0]).dataUrl} alt={p.name} />
+                  <img src={(p.representativeImage ?? p.images[0]).thumbnailUrl ?? (p.representativeImage ?? p.images[0]).dataUrl} alt={p.name} />
                 )}
                 {isSelected && isOwner && (
                   <button
@@ -239,6 +243,7 @@ export default function Home() {
   const [characterOnly, setCharacterOnly] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [genElapsed, setGenElapsed] = useState(0);
+  const [generationStatus, setGenerationStatus] = useState("");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -397,6 +402,7 @@ export default function Home() {
       item.images.map((img) => ({
         id: img.id,
         dataUrl: img.dataUrl,
+        thumbnailUrl: img.thumbnailUrl,
         favorite: !!img.favorite,
         mode: item.mode,
         presetName: item.presetName,
@@ -811,6 +817,24 @@ export default function Home() {
     }
   };
 
+  const notifyGenerationDone = useCallback((message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 3000);
+
+    if (!("Notification" in window)) return;
+    if (Notification.permission === "granted") {
+      new Notification("AutoCartoon", { body: message });
+      return;
+    }
+    if (Notification.permission === "default") {
+      Notification.requestPermission().then((permission) => {
+        if (permission === "granted") {
+          new Notification("AutoCartoon", { body: message });
+        }
+      });
+    }
+  }, []);
+
   const handleGenerate = async () => {
     if (selectedPresets.length === 0) return;
     const hasImages = transformSlots.some((s) => s !== null);
@@ -825,12 +849,23 @@ export default function Home() {
 
     setGenerating(true);
     setGenElapsed(0);
+    setGenerationStatus("요청을 준비하고 있습니다.");
     setError(null);
 
     // 경과 시간 타이머
     const startTime = Date.now();
     const timer = setInterval(() => {
-      setGenElapsed(Math.floor((Date.now() - startTime) / 1000));
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      setGenElapsed(elapsed);
+      if (elapsed < 5) {
+        setGenerationStatus("참조 이미지와 프롬프트를 정리하고 있습니다.");
+      } else if (elapsed < 20) {
+        setGenerationStatus("AI가 장면을 그리고 있습니다.");
+      } else if (elapsed < 60) {
+        setGenerationStatus("이미지 품질을 다듬는 중입니다.");
+      } else {
+        setGenerationStatus("완료되는 즉시 갤러리에 자동 반영됩니다.");
+      }
     }, 1000);
 
     // 120초 타임아웃
@@ -867,7 +902,8 @@ export default function Home() {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "생성 실패");
-      loadHistory();
+      await loadHistory();
+      notifyGenerationDone("이미지 생성이 완료되었습니다.");
     } catch (err) {
       const isTimeout = err instanceof DOMException && err.name === "AbortError";
       if (isTimeout) {
@@ -875,7 +911,10 @@ export default function Home() {
         fetch("/api/credits/refund", { method: "POST" }).catch(() => {});
         setError("생성 시간이 초과되었습니다 (120초). 크레딧이 환불됩니다. 잠시 후 갤러리를 확인해주세요.");
         // 서버에서 이미 생성됐을 수 있으므로 갤러리 새로고침
-        setTimeout(() => loadHistory(), 5000);
+        setTimeout(() => {
+          loadHistory();
+          notifyGenerationDone("갤러리를 다시 확인했습니다.");
+        }, 5000);
       } else {
         setError(err instanceof Error ? err.message : "오류 발생");
       }
@@ -884,6 +923,7 @@ export default function Home() {
       clearTimeout(timeout);
       setGenerating(false);
       setGenElapsed(0);
+      setGenerationStatus("");
     }
   };
 
@@ -963,7 +1003,7 @@ export default function Home() {
         ) : activeTab === "instagram" ? (
           <InstagramTab />
         ) : activeTab === "contents" ? (
-          <MyContents galleryImages={flatImages.map((img) => ({ id: img.id, dataUrl: img.dataUrl }))} />
+          <MyContents galleryImages={flatImages.map((img) => ({ id: img.id, dataUrl: img.dataUrl, thumbnailUrl: img.thumbnailUrl }))} />
         ) : (
         <>
         {/* 좌측 패널 */}
@@ -1075,7 +1115,7 @@ export default function Home() {
                         onClick={() => handleGroupSelect(group)}
                       >
                         <div className={styles.presetThumbSingle}>
-                          {thumb && <img src={thumb.dataUrl} alt={group.name} />}
+                          {thumb && <img src={thumb.thumbnailUrl ?? thumb.dataUrl} alt={group.name} />}
                         </div>
                         <span className={styles.presetName}>{group.name}</span>
                       </button>
@@ -1093,7 +1133,7 @@ export default function Home() {
                       >
                         <div className={styles.presetThumbSingle}>
                           {(p.representativeImage ?? p.images[0]) && (
-                            <img src={(p.representativeImage ?? p.images[0]).dataUrl} alt={p.name} />
+                            <img src={(p.representativeImage ?? p.images[0]).thumbnailUrl ?? (p.representativeImage ?? p.images[0]).dataUrl} alt={p.name} />
                           )}
                           {isSelected && isOwner && (
                             <button
@@ -1170,7 +1210,7 @@ export default function Home() {
                       onClick={() => handleBgImageSelect(bg.id)}
                       title={bg.name}
                     >
-                      <img src={bg.dataUrl} alt={bg.name} />
+                      <img src={bg.thumbnailUrl ?? bg.dataUrl} alt={bg.name} />
                       <span className={styles.bgThumbName}>{bg.name}</span>
                       <button
                         className={styles.bgThumbDelete}
@@ -1293,11 +1333,7 @@ export default function Home() {
               <div className={styles.galleryCard}>
                 <div className={styles.skeletonPulse}>
                   <span className={styles.skeletonText}>
-                    {genElapsed < 30
-                      ? `생성 중... ${genElapsed}초`
-                      : genElapsed < 90
-                        ? `조금 더 걸릴 수 있습니다... ${genElapsed}초`
-                        : `거의 완료... ${genElapsed}초`}
+                    {generationStatus || `생성 중... ${genElapsed}초`}
                   </span>
                 </div>
               </div>
@@ -1312,7 +1348,7 @@ export default function Home() {
             {flatImages.map((img) => (
               <div key={img.id} className={styles.galleryCard}>
                 <img
-                  src={img.dataUrl}
+                  src={img.thumbnailUrl ?? img.dataUrl}
                   alt="generated"
                   className={styles.galleryImg}
                   onClick={() => window.open(img.dataUrl, "_blank")}

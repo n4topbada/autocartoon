@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       generatedImages: {
         where: favoritesOnly ? { favorite: true } : {},
         select: {
-          id: true, mimeType: true, blobUrl: true, favorite: true,
+          id: true, mimeType: true, blobUrl: true, thumbnailUrl: true, favorite: true,
           tagLinks: { include: { tag: { select: { id: true, name: true, color: true } } } },
         },
       },
@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
         id: img.id,
         mimeType: img.mimeType,
         dataUrl: img.blobUrl,
+        thumbnailUrl: img.thumbnailUrl ?? img.blobUrl,
         favorite: img.favorite,
         tags: img.tagLinks.map((tl) => ({ id: tl.tag.id, name: tl.tag.name, color: tl.tag.color })),
       })),

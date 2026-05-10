@@ -16,6 +16,9 @@ export async function DELETE(
     if (bg?.blobUrl) {
       await deleteBlob(bg.blobUrl);
     }
+    if (bg?.thumbnailUrl) {
+      await deleteBlob(bg.thumbnailUrl);
+    }
 
     await prisma.savedBackground.delete({ where: { id } });
     return NextResponse.json({ ok: true });

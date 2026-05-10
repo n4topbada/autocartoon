@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, AuthError } from "@/lib/auth";
-import { uploadBase64ToBlob } from "@/lib/blob";
+import { deleteBlob, uploadBase64ImageWithThumbnail } from "@/lib/blob";
 
 const MAX_PRESET_IMAGES = 4;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -55,11 +55,16 @@ export async function GET(
     return NextResponse.json({
       id: preset.id,
       representativeImage: representativeImage
-        ? { id: representativeImage.id, dataUrl: representativeImage.blobUrl }
+        ? {
+            id: representativeImage.id,
+            dataUrl: representativeImage.blobUrl,
+            thumbnailUrl: representativeImage.thumbnailUrl ?? representativeImage.blobUrl,
+          }
         : null,
       images: preset.images.map((img) => ({
         id: img.id,
         dataUrl: img.blobUrl,
+        thumbnailUrl: img.thumbnailUrl ?? img.blobUrl,
       })),
     });
   } catch (error) {
@@ -102,8 +107,8 @@ export async function POST(
 
     const maxOrder = preset.images.reduce((m, img) => Math.max(m, img.order), -1);
 
-    const blobUrls = await Promise.all(
-      images.map((img) => uploadBase64ToBlob(img.base64, img.mimeType, "presets"))
+    const uploads = await Promise.all(
+      images.map((img) => uploadBase64ImageWithThumbnail(img.base64, img.mimeType, "presets"))
     );
 
     const created = [];
@@ -111,12 +116,13 @@ export async function POST(
       const img = await prisma.presetImage.create({
         data: {
           presetId: id,
-          blobUrl: blobUrls[i],
+          blobUrl: uploads[i].blobUrl,
+          thumbnailUrl: uploads[i].thumbnailUrl,
           mimeType: images[i].mimeType,
           order: maxOrder + 1 + i,
         },
       });
-      created.push({ id: img.id, dataUrl: img.blobUrl });
+      created.push({ id: img.id, dataUrl: img.blobUrl, thumbnailUrl: img.thumbnailUrl ?? img.blobUrl });
     }
 
     return NextResponse.json({ images: created, total: currentCount + images.length });
@@ -155,7 +161,10 @@ export async function DELETE(
       return NextResponse.json({ error: "최소 1개의 이미지는 유지해야 합니다." }, { status: 400 });
     }
 
+    const target = preset.images.find((img) => img.id === imageId);
     await prisma.presetImage.delete({ where: { id: imageId } });
+    if (target?.blobUrl) await deleteBlob(target.blobUrl);
+    if (target?.thumbnailUrl) await deleteBlob(target.thumbnailUrl);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

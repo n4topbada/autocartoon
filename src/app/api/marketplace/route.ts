@@ -49,7 +49,7 @@ export async function GET() {
           price: p.price,
           owned: p.purchasedBy.length > 0,
           characterCount: 1,
-          thumbnail: repImage ? repImage.blobUrl : null,
+          thumbnail: repImage ? (repImage.thumbnailUrl ?? repImage.blobUrl) : null,
         };
       }),
       // 그룹 → type: "group"
@@ -70,7 +70,7 @@ export async function GET() {
           price,
           owned,
           characterCount: g.presets.length,
-          thumbnail: repImage ? repImage.blobUrl : null,
+          thumbnail: repImage ? (repImage.thumbnailUrl ?? repImage.blobUrl) : null,
         };
       }),
     ];

@@ -40,11 +40,11 @@ export async function GET(req: NextRequest) {
     const previewImages = firstImageIds.length > 0
       ? await prisma.generatedImage.findMany({
           where: { id: { in: firstImageIds } },
-          select: { id: true, blobUrl: true },
+          select: { id: true, blobUrl: true, thumbnailUrl: true },
         })
       : [];
 
-    const previewMap = new Map(previewImages.map((img) => [img.id, img.blobUrl]));
+    const previewMap = new Map(previewImages.map((img) => [img.id, img.thumbnailUrl ?? img.blobUrl]));
 
     const postsWithPreview = posts.map((post) => ({
       id: post.id,

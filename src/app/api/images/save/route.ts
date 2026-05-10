@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, AuthError } from "@/lib/auth";
-import { uploadBase64ToBlob } from "@/lib/blob";
+import { uploadBase64ImageWithThumbnail } from "@/lib/blob";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,7 +16,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Blob에 업로드
-    const blobUrl = await uploadBase64ToBlob(base64, mimeType || "image/png", "edited");
+    const { blobUrl, thumbnailUrl } = await uploadBase64ImageWithThumbnail(
+      base64,
+      mimeType || "image/png",
+      "edited"
+    );
 
     // 유저의 첫 번째 프리셋 찾기 (GenerationRequest에 presetId 필수)
     const firstPreset = await prisma.characterPreset.findFirst({
@@ -47,6 +51,7 @@ export async function POST(req: NextRequest) {
       data: {
         requestId: genRequest.id,
         blobUrl,
+        thumbnailUrl,
         mimeType: mimeType || "image/png",
       },
     });
@@ -54,6 +59,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       id: image.id,
       dataUrl: blobUrl,
+      thumbnailUrl,
       mimeType: image.mimeType,
     });
   } catch (error) {

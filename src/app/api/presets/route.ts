@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, AuthError } from "@/lib/auth";
-import { uploadBase64ToBlob } from "@/lib/blob";
+import { uploadBase64ImageWithThumbnail } from "@/lib/blob";
 
 const MAX_PRESET_IMAGES = 4;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -78,9 +78,11 @@ export async function GET(req: NextRequest) {
         order: p.order,
         userId: p.userId,
         representativeImage: repImage
-          ? { id: repImage.id, dataUrl: repImage.blobUrl }
+          ? { id: repImage.id, dataUrl: repImage.blobUrl, thumbnailUrl: repImage.thumbnailUrl ?? repImage.blobUrl }
           : null,
-        images: repImage ? [{ id: repImage.id, dataUrl: repImage.blobUrl }] : [],
+        images: repImage
+          ? [{ id: repImage.id, dataUrl: repImage.blobUrl, thumbnailUrl: repImage.thumbnailUrl ?? repImage.blobUrl }]
+          : [],
       };
     };
 
@@ -157,8 +159,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Blob에 업로드
-    const blobUrls = await Promise.all(
-      images.map((img) => uploadBase64ToBlob(img.base64, img.mimeType, "presets"))
+    const uploads = await Promise.all(
+      images.map((img) => uploadBase64ImageWithThumbnail(img.base64, img.mimeType, "presets"))
     );
 
     const alias = `${name.trim()}_${Date.now()}`;
@@ -172,7 +174,8 @@ export async function POST(req: NextRequest) {
         isPublic: isPublic ?? false,
         images: {
           create: images.map((img, i) => ({
-            blobUrl: blobUrls[i],
+            blobUrl: uploads[i].blobUrl,
+            thumbnailUrl: uploads[i].thumbnailUrl,
             mimeType: img.mimeType,
             order: i,
           })),
@@ -191,11 +194,16 @@ export async function POST(req: NextRequest) {
       order: preset.order,
       userId: preset.userId,
       representativeImage: preset.images[0]
-        ? { id: preset.images[0].id, dataUrl: preset.images[0].blobUrl }
+        ? {
+            id: preset.images[0].id,
+            dataUrl: preset.images[0].blobUrl,
+            thumbnailUrl: preset.images[0].thumbnailUrl ?? preset.images[0].blobUrl,
+          }
         : null,
       images: preset.images.map((img) => ({
         id: img.id,
         dataUrl: img.blobUrl,
+        thumbnailUrl: img.thumbnailUrl ?? img.blobUrl,
       })),
     });
   } catch (error) {

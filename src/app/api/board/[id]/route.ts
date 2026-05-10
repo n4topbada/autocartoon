@@ -42,11 +42,11 @@ export async function GET(
     }
 
     // Resolve imageIds to actual image URLs
-    let images: { id: string; blobUrl: string; mimeType: string }[] = [];
+    let images: { id: string; blobUrl: string; thumbnailUrl: string | null; mimeType: string }[] = [];
     if (post.imageIds.length > 0) {
       images = await prisma.generatedImage.findMany({
         where: { id: { in: post.imageIds } },
-        select: { id: true, blobUrl: true, mimeType: true },
+        select: { id: true, blobUrl: true, thumbnailUrl: true, mimeType: true },
       });
     }
 

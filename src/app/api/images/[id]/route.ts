@@ -66,6 +66,9 @@ export async function DELETE(
     if (image.blobUrl) {
       await deleteBlob(image.blobUrl);
     }
+    if (image.thumbnailUrl) {
+      await deleteBlob(image.thumbnailUrl);
+    }
 
     // DB 레코드 삭제
     await prisma.generatedImage.delete({ where: { id } });

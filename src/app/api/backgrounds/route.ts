@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, AuthError } from "@/lib/auth";
-import { uploadBase64ToBlob } from "@/lib/blob";
+import { uploadBase64ImageWithThumbnail } from "@/lib/blob";
 
 export async function GET(req: NextRequest) {
   try {
@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
         name: bg.name,
         mimeType: bg.mimeType,
         dataUrl: bg.blobUrl,
+        thumbnailUrl: bg.thumbnailUrl ?? bg.blobUrl,
         createdAt: bg.createdAt.toISOString(),
       }))
     );
@@ -52,12 +53,13 @@ export async function POST(req: NextRequest) {
     }
 
     const mime = mimeType || "image/png";
-    const blobUrl = await uploadBase64ToBlob(imageData, mime, "backgrounds");
+    const { blobUrl, thumbnailUrl } = await uploadBase64ImageWithThumbnail(imageData, mime, "backgrounds");
 
     const bg = await prisma.savedBackground.create({
       data: {
         name: name.trim(),
         blobUrl,
+        thumbnailUrl,
         mimeType: mime,
         userId: session.userId,
       },
@@ -68,6 +70,7 @@ export async function POST(req: NextRequest) {
       name: bg.name,
       mimeType: bg.mimeType,
       dataUrl: bg.blobUrl,
+      thumbnailUrl: bg.thumbnailUrl ?? bg.blobUrl,
       createdAt: bg.createdAt.toISOString(),
     });
   } catch (error) {

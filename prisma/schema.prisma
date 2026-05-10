@@ -58,11 +58,12 @@ model PurchasedPreset {
 }
 
 model PresetImage {
-  id       String @id @default(cuid())
-  presetId String
-  blobUrl  String // Vercel Blob URL
-  mimeType String @default("image/png")
-  order    Int    @default(0)
+  id           String  @id @default(cuid())
+  presetId     String
+  blobUrl      String // Vercel Blob URL
+  thumbnailUrl String?
+  mimeType     String  @default("image/png")
+  order        Int     @default(0)
 
   preset CharacterPreset @relation(fields: [presetId], references: [id], onDelete: Cascade)
 
@@ -70,12 +71,13 @@ model PresetImage {
 }
 
 model SavedBackground {
-  id        String   @id @default(cuid())
-  name      String
-  blobUrl   String // Vercel Blob URL
-  mimeType  String   @default("image/png")
-  userId    String?
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  name         String
+  blobUrl      String // Vercel Blob URL
+  thumbnailUrl String?
+  mimeType     String   @default("image/png")
+  userId       String?
+  createdAt    DateTime @default(now())
 
   user               User?               @relation(fields: [userId], references: [id])
   generationRequests GenerationRequest[]
@@ -198,12 +200,13 @@ model HelpRequest {
 }
 
 model GeneratedImage {
-  id        String   @id @default(cuid())
-  requestId String
-  blobUrl   String // Vercel Blob URL
-  mimeType  String   @default("image/png")
-  favorite  Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  requestId    String
+  blobUrl      String // Vercel Blob URL
+  thumbnailUrl String?
+  mimeType     String   @default("image/png")
+  favorite     Boolean  @default(false)
+  createdAt    DateTime @default(now())
 
   request  GenerationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   tagLinks ImageTagLink[]

@@ -8,6 +8,7 @@ import { resizeFromFile } from "@/lib/image-resize";
 interface PresetImageData {
   id: string;
   dataUrl: string;
+  thumbnailUrl?: string;
 }
 
 interface ManagedPreset {
@@ -141,7 +142,7 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate }: 
               className={`${styles.imageCard} ${img.id === repId ? styles.representative : ""}`}
               onClick={() => handleSetRepresentative(img.id)}
             >
-              <img src={img.dataUrl} alt="캐릭터 이미지" />
+              <img src={img.thumbnailUrl ?? img.dataUrl} alt="캐릭터 이미지" />
               {img.id === repId && (
                 <span className={styles.repBadge}>
                   <LuStar size={12} />
