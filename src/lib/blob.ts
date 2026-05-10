@@ -1,5 +1,5 @@
 import { put, del } from "@vercel/blob";
-import { readFile } from "fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import path from "path";
 
 const MIME_TO_EXT: Record<string, string> = {
@@ -21,12 +21,24 @@ export async function uploadBase64ToBlob(
   const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
   const buffer = Buffer.from(base64, "base64");
 
-  const blob = await put(filename, buffer, {
-    access: "public",
-    contentType: mimeType,
-  });
+  try {
+    const blob = await put(filename, buffer, {
+      access: "public",
+      contentType: mimeType,
+    });
 
-  return blob.url;
+    return blob.url;
+  } catch (error) {
+    if (process.env.NODE_ENV === "production") {
+      throw error;
+    }
+
+    console.warn("Vercel Blob upload failed. Falling back to local public/uploads.", error);
+    const uploadPath = path.join(process.cwd(), "public", "uploads", filename);
+    await mkdir(path.dirname(uploadPath), { recursive: true });
+    await writeFile(uploadPath, buffer);
+    return `/uploads/${filename.replace(/\\/g, "/")}`;
+  }
 }
 
 /**
@@ -82,6 +94,12 @@ export async function fetchBlobAsBase64(
  */
 export async function deleteBlob(blobUrl: string): Promise<void> {
   try {
+    if (blobUrl.startsWith("/uploads/")) {
+      const filePath = path.join(process.cwd(), "public", blobUrl);
+      await unlink(filePath);
+      return;
+    }
+
     await del(blobUrl);
   } catch (err) {
     console.error("Blob delete error:", err);

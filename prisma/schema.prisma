@@ -17,6 +17,8 @@ model CharacterGroup {
 
   user    User?             @relation(fields: [userId], references: [id])
   presets CharacterPreset[]
+
+  @@index([userId, order])
 }
 
 model CharacterPreset {
@@ -32,11 +34,15 @@ model CharacterPreset {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  user               User?              @relation(fields: [userId], references: [id])
-  group              CharacterGroup?    @relation(fields: [groupId], references: [id])
+  user               User?               @relation(fields: [userId], references: [id])
+  group              CharacterGroup?     @relation(fields: [groupId], references: [id])
   images             PresetImage[]
   generationRequests GenerationRequest[]
   purchasedBy        PurchasedPreset[]
+
+  @@index([userId, order])
+  @@index([groupId, order])
+  @@index([isPublic, groupId, createdAt])
 }
 
 model PurchasedPreset {
@@ -66,13 +72,15 @@ model PresetImage {
 model SavedBackground {
   id        String   @id @default(cuid())
   name      String
-  blobUrl   String   // Vercel Blob URL
+  blobUrl   String // Vercel Blob URL
   mimeType  String   @default("image/png")
   userId    String?
   createdAt DateTime @default(now())
 
-  user               User?              @relation(fields: [userId], references: [id])
+  user               User?               @relation(fields: [userId], references: [id])
   generationRequests GenerationRequest[]
+
+  @@index([userId, createdAt])
 }
 
 model GenerationRequest {
@@ -80,10 +88,10 @@ model GenerationRequest {
   presetId          String
   presetIds         String[] // 다중 캐릭터 선택
   userId            String?
-  mode              String   // "text" | "sketch" | "edit"
+  mode              String // "text" | "sketch" | "edit"
   prompt            String
-  background        String?  // 텍스트 배경 이름
-  backgroundImageId String?  // 저장된 배경 이미지 FK
+  background        String? // 텍스트 배경 이름
+  backgroundImageId String? // 저장된 배경 이미지 FK
   createdAt         DateTime @default(now())
 
   user            User?            @relation(fields: [userId], references: [id])
@@ -172,7 +180,7 @@ model BoardLike {
 
 model ChatKnowledge {
   id        String   @id @default(cuid())
-  category  String   // "guide" | "faq" | "persona" | "custom"
+  category  String // "guide" | "faq" | "persona" | "custom"
   title     String
   content   String
   createdAt DateTime @default(now())
@@ -192,13 +200,15 @@ model HelpRequest {
 model GeneratedImage {
   id        String   @id @default(cuid())
   requestId String
-  blobUrl   String   // Vercel Blob URL
+  blobUrl   String // Vercel Blob URL
   mimeType  String   @default("image/png")
   favorite  Boolean  @default(false)
   createdAt DateTime @default(now())
 
   request  GenerationRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   tagLinks ImageTagLink[]
+
+  @@index([requestId])
 }
 
 model ImageTag {
@@ -233,6 +243,7 @@ model Content {
   createdAt DateTime      @default(now())
   user      User          @relation(fields: [userId], references: [id])
   slots     ContentSlot[]
+
   @@index([userId, updatedAt])
 }
 
@@ -242,6 +253,7 @@ model ContentSlot {
   imageId   String
   order     Int
   content   Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
   @@index([contentId, order])
 }
 

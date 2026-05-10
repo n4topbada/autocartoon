@@ -3,6 +3,37 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { uploadBase64ToBlob } from "@/lib/blob";
 
+const MAX_PRESET_IMAGES = 4;
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+function validatePresetImages(images: { base64: string; mimeType: string }[] | undefined) {
+  if (!images || images.length === 0) {
+    return "최소 1장의 이미지가 필요합니다.";
+  }
+  if (images.length > MAX_PRESET_IMAGES) {
+    return "최대 4장까지 업로드할 수 있습니다.";
+  }
+
+  for (const image of images) {
+    if (!image.base64 || !image.mimeType) {
+      return "이미지 데이터가 올바르지 않습니다.";
+    }
+    if (!ALLOWED_IMAGE_TYPES.has(image.mimeType)) {
+      return "PNG, JPG, WEBP, GIF 이미지만 업로드할 수 있습니다.";
+    }
+    if (Buffer.byteLength(image.base64, "base64") > MAX_IMAGE_BYTES) {
+      return "이미지 용량이 너무 큽니다. 더 작은 이미지로 다시 시도해주세요.";
+    }
+  }
+
+  return null;
+}
+
+function isBlobUnavailableError(error: unknown) {
+  return error instanceof Error && /Vercel Blob|store has been suspended|Blob/i.test(error.message);
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth();
@@ -49,10 +80,7 @@ export async function GET(req: NextRequest) {
         representativeImage: repImage
           ? { id: repImage.id, dataUrl: repImage.blobUrl }
           : null,
-        images: p.images.map((img) => ({
-          id: img.id,
-          dataUrl: img.blobUrl,
-        })),
+        images: repImage ? [{ id: repImage.id, dataUrl: repImage.blobUrl }] : [],
       };
     };
 
@@ -72,11 +100,19 @@ export async function GET(req: NextRequest) {
       orderBy: { order: "asc" },
     });
 
+    const presetsByGroupId = new Map<string, typeof presets>();
+    for (const preset of presets) {
+      if (!preset.groupId) continue;
+      const groupPresets = presetsByGroupId.get(preset.groupId) ?? [];
+      groupPresets.push(preset);
+      presetsByGroupId.set(preset.groupId, groupPresets);
+    }
+
     const grouped = groups.map((g) => ({
       id: g.id,
       name: g.name,
       order: g.order,
-      presets: presets.filter((p) => p.groupId === g.id).map(mapPreset),
+      presets: (presetsByGroupId.get(g.id) ?? []).map(mapPreset),
     }));
 
     const ungrouped = presets.filter((p) => !p.groupId).map(mapPreset);
@@ -102,22 +138,22 @@ export async function POST(req: NextRequest) {
     };
 
     if (!name?.trim()) {
-      return NextResponse.json(
-        { error: "캐릭터 이름을 입력해주세요." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "캐릭터 이름을 입력해주세요." }, { status: 400 });
     }
-    if (!images || images.length === 0) {
-      return NextResponse.json(
-        { error: "최소 1장의 이미지가 필요합니다." },
-        { status: 400 }
-      );
+
+    const imageError = validatePresetImages(images);
+    if (imageError) {
+      return NextResponse.json({ error: imageError }, { status: 400 });
     }
-    if (images.length > 4) {
-      return NextResponse.json(
-        { error: "최대 4장까지 업로드할 수 있습니다." },
-        { status: 400 }
-      );
+
+    if (groupId) {
+      const group = await prisma.characterGroup.findUnique({
+        where: { id: groupId },
+        select: { userId: true },
+      });
+      if (!group || group.userId !== session.userId) {
+        return NextResponse.json({ error: "캐릭터 그룹을 찾을 수 없습니다." }, { status: 404 });
+      }
     }
 
     // Blob에 업로드
@@ -151,6 +187,12 @@ export async function POST(req: NextRequest) {
       id: preset.id,
       alias: preset.alias,
       name: preset.name,
+      groupId: preset.groupId,
+      order: preset.order,
+      userId: preset.userId,
+      representativeImage: preset.images[0]
+        ? { id: preset.images[0].id, dataUrl: preset.images[0].blobUrl }
+        : null,
       images: preset.images.map((img) => ({
         id: img.id,
         dataUrl: img.blobUrl,
@@ -161,8 +203,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("Preset creation error:", error);
+    if (isBlobUnavailableError(error)) {
+      return NextResponse.json(
+        { error: "이미지 저장소를 사용할 수 없습니다. 관리자에게 문의해주세요." },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
-      { error: "프리셋 생성 실패" },
+      { error: "캐릭터 등록에 실패했습니다. 잠시 후 다시 시도해주세요." },
       { status: 500 }
     );
   }

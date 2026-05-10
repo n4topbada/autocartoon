@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import styles from "./CharacterManagementModal.module.css";
 import { LuStar, LuX, LuUpload, LuTrash2 } from "react-icons/lu";
+import { resizeFromFile } from "@/lib/image-resize";
 
 interface PresetImageData {
   id: string;
@@ -30,6 +31,11 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate }: 
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    setImages(preset.images);
+    setRepId(preset.representativeImage?.id ?? preset.images[0]?.id ?? null);
+  }, [preset]);
+
   const handleSetRepresentative = async (imageId: string) => {
     setRepId(imageId);
     try {
@@ -47,16 +53,15 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate }: 
   };
 
   const handleFileUpload = useCallback(async (files: FileList | File[]) => {
-    const fileArray = Array.from(files);
+    const remaining = Math.max(0, 4 - images.length);
+    const fileArray = Array.from(files).slice(0, remaining);
     if (fileArray.length === 0) return;
 
     setUploading(true);
     try {
-      const imageData: { base64: string; mimeType: string }[] = [];
-      for (const file of fileArray) {
-        const base64 = await fileToBase64(file);
-        imageData.push({ base64, mimeType: file.type });
-      }
+      const imageData = await Promise.all(
+        fileArray.map((file) => resizeFromFile(file))
+      );
 
       const res = await fetch(`/api/presets/${preset.id}/images`, {
         method: "POST",
@@ -172,7 +177,7 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate }: 
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
+          accept="image/png,image/jpeg,image/webp,image/gif"
           multiple
           style={{ display: "none" }}
           onChange={(e) => {
@@ -183,16 +188,4 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate }: 
       </div>
     </div>
   );
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(",")[1]);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }

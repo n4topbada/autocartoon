@@ -251,6 +251,7 @@ export default function Home() {
   const [newCharPublic, setNewCharPublic] = useState(false);
   const [uploadingImages, setUploadingImages] = useState<UploadingImage[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [processingCharImages, setProcessingCharImages] = useState(false);
   const charFileRef = useRef<HTMLInputElement>(null);
 
   // 저장된 배경 이미지
@@ -452,6 +453,22 @@ export default function Home() {
     }
   };
 
+  const handleManagePreset = async (preset: Preset) => {
+    setManagingPreset(preset);
+    try {
+      const res = await fetch(`/api/presets/${preset.id}/images`);
+      const data = await res.json();
+      if (!res.ok) return;
+      setManagingPreset({
+        ...preset,
+        images: data.images ?? preset.images,
+        representativeImage: data.representativeImage ?? preset.representativeImage,
+      });
+    } catch {
+      // Keep the lightweight preset open if detail loading fails.
+    }
+  };
+
   // 관리자: 유저 전환
   const handleUserSwitch = (userId: string) => {
     setViewingUserId(userId === user?.id ? null : userId);
@@ -501,25 +518,27 @@ export default function Home() {
   };
 
   // 캐릭터 이미지 추가 (업로드 모달)
-  const handleCharImageAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCharImageAdd = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
     const remaining = 4 - uploadingImages.length;
     const toProcess = Array.from(files).slice(0, remaining);
-    toProcess.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        const [header, base64] = dataUrl.split(",");
-        const mimeType = header.match(/data:(.*?);/)?.[1] || "image/png";
-        setUploadingImages((prev) => {
-          if (prev.length >= 4) return prev;
-          return [...prev, { base64, mimeType, preview: dataUrl }];
-        });
-      };
-      reader.readAsDataURL(file);
-    });
-    e.target.value = "";
+    if (toProcess.length === 0) {
+      e.target.value = "";
+      return;
+    }
+
+    setProcessingCharImages(true);
+    setError(null);
+    try {
+      const resized = await Promise.all(toProcess.map((file) => resizeFromFile(file)));
+      setUploadingImages((prev) => [...prev, ...resized].slice(0, 4));
+    } catch {
+      setError("이미지를 처리하지 못했습니다. 다른 이미지 파일로 다시 시도해주세요.");
+    } finally {
+      setProcessingCharImages(false);
+      e.target.value = "";
+    }
   };
 
   const removeUploadingImage = (index: number) => {
@@ -1079,7 +1098,7 @@ export default function Home() {
                           {isSelected && isOwner && (
                             <button
                               className={styles.editBtn}
-                              onClick={(e) => { e.stopPropagation(); setManagingPreset(p); }}
+                              onClick={(e) => { e.stopPropagation(); handleManagePreset(p); }}
                             >
                               <LuPencil size={10} />
                             </button>
@@ -1098,7 +1117,7 @@ export default function Home() {
                       presets={group.presets}
                       selectedPresets={selectedPresets}
                       onToggle={togglePresetSelection}
-                      onManage={setManagingPreset}
+                      onManage={handleManagePreset}
                       currentUserId={user?.id}
                     />
                   ) : null
@@ -1607,6 +1626,7 @@ export default function Home() {
                   <button
                     className={styles.uploadGridAdd}
                     onClick={() => charFileRef.current?.click()}
+                    disabled={processingCharImages}
                   >
                     <LuPlus size={24} />
                     <span className={styles.uploadGridAddText}>추가</span>
@@ -1617,7 +1637,7 @@ export default function Home() {
               <input
                 ref={charFileRef}
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/webp,image/gif"
                 multiple
                 onChange={handleCharImageAdd}
                 className={styles.fileInput}
@@ -1640,6 +1660,7 @@ export default function Home() {
                 onClick={handleCreatePreset}
                 disabled={
                   uploading ||
+                  processingCharImages ||
                   !newCharName.trim() ||
                   uploadingImages.length === 0
                 }

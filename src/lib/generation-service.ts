@@ -52,20 +52,22 @@ export async function generate(input: GenerateInput) {
   }
 
   // 2. 각 캐릭터의 대표이미지 로드
-  const characterImages: { name: string; base64: string; mimeType: string }[] = [];
-  for (const preset of presets) {
-    const repImage =
-      preset.images.find((img) => img.id === preset.representativeImageId) ??
-      preset.images[0];
-    if (repImage) {
-      const data = await fetchBlobAsBase64(repImage.blobUrl);
-      characterImages.push({
-        name: preset.name,
-        base64: data.base64,
-        mimeType: repImage.mimeType,
-      });
-    }
-  }
+  const characterImages = (
+    await Promise.all(
+      presets.map(async (preset) => {
+        const repImage =
+          preset.images.find((img) => img.id === preset.representativeImageId) ??
+          preset.images[0];
+        if (!repImage) return null;
+        const data = await fetchBlobAsBase64(repImage.blobUrl);
+        return {
+          name: preset.name,
+          base64: data.base64,
+          mimeType: repImage.mimeType,
+        };
+      })
+    )
+  ).filter((img): img is { name: string; base64: string; mimeType: string } => img !== null);
 
   // 3. 배경 이미지 로드 (이미지 모드)
   const referenceImages: { base64: string; mimeType: string }[] = [];
@@ -173,18 +175,19 @@ export async function generate(input: GenerateInput) {
     },
   });
 
-  const savedImages = [];
-  for (const img of result.images) {
-    const blobUrl = await uploadBase64ToBlob(img.base64, img.mimeType, "generated");
-    const saved = await prisma.generatedImage.create({
-      data: {
-        requestId: genRequest.id,
-        blobUrl,
-        mimeType: img.mimeType,
-      },
-    });
-    savedImages.push({ ...saved, blobUrl });
-  }
+  const savedImages = await Promise.all(
+    result.images.map(async (img) => {
+      const blobUrl = await uploadBase64ToBlob(img.base64, img.mimeType, "generated");
+      const saved = await prisma.generatedImage.create({
+        data: {
+          requestId: genRequest.id,
+          blobUrl,
+          mimeType: img.mimeType,
+        },
+      });
+      return { ...saved, blobUrl };
+    })
+  );
 
   return {
     requestId: genRequest.id,
