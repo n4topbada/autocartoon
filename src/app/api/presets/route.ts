@@ -80,9 +80,11 @@ export async function GET(req: NextRequest) {
         representativeImage: repImage
           ? { id: repImage.id, dataUrl: repImage.blobUrl, thumbnailUrl: repImage.thumbnailUrl ?? repImage.blobUrl }
           : null,
-        images: repImage
-          ? [{ id: repImage.id, dataUrl: repImage.blobUrl, thumbnailUrl: repImage.thumbnailUrl ?? repImage.blobUrl }]
-          : [],
+        images: p.images.map((img) => ({
+          id: img.id,
+          dataUrl: img.blobUrl,
+          thumbnailUrl: img.thumbnailUrl ?? img.blobUrl,
+        })),
       };
     };
 

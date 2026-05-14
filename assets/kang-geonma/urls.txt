@@ -1,0 +1,6 @@
+# Authorized demo sources for the Kang Geonma character preset.
+# Source article: https://ditoday.com/모두가-아는-그림을-그린-만화가-김성모/
+https://ditoday.com/wp-content/uploads/2022/07/%EA%B0%95%EA%B1%B4%EB%A7%88_%EB%8F%8C%EC%95%84%EC%98%A8%EB%9F%AD%ED%82%A4%EC%A7%B1.jpg
+https://ditoday.com/wp-content/uploads/2022/07/%EC%87%BC%EB%AF%B8%EB%8D%94%EB%9F%AD%ED%82%A4%EC%A7%B1-2.jpg
+https://ditoday.com/wp-content/uploads/2022/07/%EA%B9%80%EC%84%B1%EB%AA%A8-%EB%A1%A4%EC%A7%B1.jpg
+https://ditoday.com/wp-content/uploads/2022/07/%EC%87%BC%EB%AF%B8%EB%8D%94%EB%9F%AD%ED%82%A4%EC%A7%B1-1.jpg

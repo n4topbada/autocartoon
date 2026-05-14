@@ -10,3 +10,9 @@ prisma/dev.db
 tsconfig.tsbuildinfo
 .claude/
 .vercel
+
+assets/kang-geonma/*.jpg
+assets/kang-geonma/*.jpeg
+assets/kang-geonma/*.png
+assets/kang-geonma/*.webp
+assets/kang-geonma/*.gif

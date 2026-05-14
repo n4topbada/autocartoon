@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { readFile, readdir } from "fs/promises";
 import path from "path";
-import { uploadBase64ImageWithThumbnail } from "../src/lib/blob";
+import { deleteBlob, uploadBase64ImageWithThumbnail } from "../src/lib/blob";
 
 const prisma = new PrismaClient();
 
@@ -36,10 +36,11 @@ async function main() {
   const email = getArg("email") ?? "n4topbada@gmail.com";
   const alias = getArg("alias") ?? `${slugify(name ?? "character")}-${Date.now()}`;
   const isPublic = hasFlag("public");
+  const replace = hasFlag("replace");
 
   if (!name || !folder) {
     throw new Error(
-      "Usage: npm run import:character -- --name=\"캐릭터명\" --folder=\"assets/character-folder\" [--email=user@example.com] [--alias=alias] [--public]"
+      "Usage: npm run import:character -- --name=\"캐릭터명\" --folder=\"assets/character-folder\" [--email=user@example.com] [--alias=alias] [--public] [--replace]"
     );
   }
 
@@ -60,6 +61,24 @@ async function main() {
   });
   if (!user) {
     throw new Error(`User not found: ${email}`);
+  }
+
+  const existing = await prisma.characterPreset.findUnique({
+    where: { alias },
+    include: { images: true },
+  });
+  if (existing && !replace) {
+    throw new Error(`Character alias already exists: ${alias}. Re-run with --replace to update it.`);
+  }
+  if (existing && replace) {
+    for (const image of existing.images) {
+      await Promise.all([
+        deleteBlob(image.blobUrl),
+        image.thumbnailUrl ? deleteBlob(image.thumbnailUrl) : Promise.resolve(),
+      ]);
+    }
+    await prisma.characterPreset.delete({ where: { id: existing.id } });
+    console.log(`replaced existing character ${alias}`);
   }
 
   const uploads = [];
