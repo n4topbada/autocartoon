@@ -69,6 +69,22 @@ npm run db:push
 npm run db:seed
 ```
 
+## 캐릭터 폴더 등록
+
+합법적으로 확보한 캐릭터 참조 이미지를 폴더에 넣고 프리셋으로 등록할 수 있습니다. PNG/JPG/WEBP/GIF를 지원하며 파일명 순서 기준 첫 4장만 등록합니다.
+
+권한 있는 직접 이미지 URL 목록이 있으면 먼저 폴더로 내려받을 수 있습니다.
+
+```bash
+npm run download:images -- --folder="assets/kang-geonma" --manifest="assets/kang-geonma/urls.txt"
+```
+
+```bash
+npm run import:character -- --name="강건마" --alias="kang-geonma" --folder="assets/kang-geonma" --email="n4topbada@gmail.com"
+```
+
+캐릭터 샵에 공개하려면 `--public`을 추가합니다.
+
 ## 성능 메모
 
 - 캐릭터 목록 API는 첫 화면 속도를 위해 대표 이미지 1장만 내려줍니다.

@@ -11,7 +11,9 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
-    "backfill:thumbnails": "tsx scripts/backfill-thumbnails.ts"
+    "backfill:thumbnails": "tsx scripts/backfill-thumbnails.ts",
+    "import:character": "tsx scripts/import-character-folder.ts",
+    "download:images": "tsx scripts/download-authorized-images.ts"
   },
   "engines": {
     "node": "20.x"
