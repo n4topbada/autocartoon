@@ -3,7 +3,7 @@ import { TIER_LIMITS } from "./tier-config";
 
 export async function checkAndDeductCredit(
   userId: string
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; source?: "tier" | "credit" }> {
   return await prisma.$transaction(async (tx) => {
     const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
 
@@ -31,7 +31,7 @@ export async function checkAndDeductCredit(
         where: { id: userId },
         data: { tierUsedThisMonth: { increment: 1 } },
       });
-      return { ok: true };
+      return { ok: true, source: "tier" };
     }
 
     // 2) 크레딧 차감
@@ -40,12 +40,32 @@ export async function checkAndDeductCredit(
         where: { id: userId },
         data: { credits: { decrement: 1 } },
       });
-      return { ok: true };
+      return { ok: true, source: "credit" };
     }
 
     return {
       ok: false,
       error: "크레딧이 부족합니다. 관리자에게 문의하세요.",
     };
+  });
+}
+
+export async function refundDeductedCredit(
+  userId: string,
+  source: "tier" | "credit" | undefined
+): Promise<void> {
+  if (!source) return;
+
+  if (source === "tier") {
+    await prisma.user.updateMany({
+      where: { id: userId, tierUsedThisMonth: { gt: 0 } },
+      data: { tierUsedThisMonth: { decrement: 1 } },
+    });
+    return;
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { credits: { increment: 1 } },
   });
 }
