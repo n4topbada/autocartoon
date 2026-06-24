@@ -7,12 +7,19 @@ export function buildCleanupPrompt(userPrompt?: string): string {
   return BG_CLEANUP.default;
 }
 
-export const DEFAULT_STYLIZE_PROMPT = `${BG_STYLIZE.default}\n\n${BG_STYLIZE.lowDensity}`;
+export const DEFAULT_STYLIZE_PROMPT = [
+  BG_STYLIZE.default,
+  BG_STYLIZE.lowDensity,
+  BG_STYLIZE.guardrails,
+].join("\n\n");
 
 export function buildStylizePrompt(userPrompt?: string): string {
   const basePrompt = userPrompt?.trim() || DEFAULT_STYLIZE_PROMPT;
-  if (basePrompt.includes(BG_STYLIZE.lowDensity)) return basePrompt;
-  return `${basePrompt}\n\n${BG_STYLIZE.lowDensity}`;
+  const additions = [BG_STYLIZE.lowDensity, BG_STYLIZE.guardrails].filter(
+    (text) => !basePrompt.includes(text)
+  );
+  if (additions.length === 0) return basePrompt;
+  return [basePrompt, ...additions].join("\n\n");
 }
 
 export function buildAnglesPrompt(

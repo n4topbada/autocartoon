@@ -73,17 +73,22 @@ export const BG_CLEANUP = {
 };
 
 export const BG_STYLIZE = {
-  default: `이 배경 이미지를 검고 굵은 아웃라인을 사용하는 아동용 일러스트 스타일로 바꿔줘.
-2D 카툰 배경으로 사용.
-최대한 단순한 이미지로 바꿔줘.`,
-  lowDensity: `배경 밀도를 아주 낮게 유지해줘.
-빈 공간과 넓은 단색 면을 많이 남기고, 작은 소품/패턴/질감/선/장식 요소를 최소화해줘.
-배경은 캐릭터 뒤에서 조용히 받쳐주는 수준이어야 하며, 시선이 분산될 만큼 복잡하면 안 돼.
-원본에 사물이 많더라도 핵심 구조만 남기고 디테일 수를 과감히 줄여줘.`,
+  default: `Convert the image into a quiet, simple 2D cartoon background for character compositing.
+Use clean thick outlines, soft flat colors, and broad simple shapes.
+Keep the scene calm and uncluttered.`,
+  lowDensity: `Keep the background density extremely low.
+Leave large empty areas and broad flat color surfaces.
+Minimize small props, patterns, textures, line details, decorations, and visual noise.
+If the source has many objects, keep only the core large structures and remove most details.`,
+  guardrails: `Do NOT make an educational poster, infographic, diagram, UI screen, map, worksheet, or presentation slide.
+Do NOT add any text, letters, labels, captions, arrows, icons, speech bubbles, signs, watermarks, numbers, or UI elements.
+Do NOT invent extra objects that are not needed for the background.
+The result must be a plain background image only, with no explanatory content.`,
 };
 
 export const BG_ANGLES = {
   template: `이 일러스트를 "{{angles}}" 관점에서 새로 그려줘.
-배경 밀도는 아주 낮게 유지하고, 넓은 빈 공간과 단순한 큰 형태 위주로 구성해줘.
-작은 사물, 패턴, 질감, 선, 장식 디테일은 최소화해줘.`,
+Keep the background density extremely low, with large empty areas and simple large shapes.
+Minimize small props, patterns, textures, line details, decorations, and visual noise.
+Do NOT add text, labels, arrows, icons, signs, watermarks, numbers, or UI elements.`,
 };
