@@ -3,7 +3,7 @@ import { issueTemporaryPassword } from "@/lib/password-reset";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GENERIC_MESSAGE =
-  "등록된 계정이면 임시 비밀번호를 이메일로 보냈습니다. 메일함을 확인해주세요.";
+  "등록된 계정이면 새 임시 비밀번호를 보냈습니다. 가장 최근 메일을 확인해주세요.";
 
 export async function POST(req: NextRequest) {
   try {

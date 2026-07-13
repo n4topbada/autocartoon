@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomBytes } from "node:crypto";
+import { randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { Resend } from "resend";
 import { prisma } from "./prisma";
@@ -8,6 +8,8 @@ import { prisma } from "./prisma";
 const TEMPORARY_PASSWORD_TTL_MS = 30 * 60 * 1000;
 const ISSUE_COOLDOWN_MS = 60 * 1000;
 const DEFAULT_FROM = "워니바나나봇 <onboarding@resend.dev>";
+const TEMPORARY_PASSWORD_LENGTH = 12;
+const TEMPORARY_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 export type TemporaryPasswordIssueStatus =
   | "sent"
@@ -17,7 +19,16 @@ export type TemporaryPasswordIssueStatus =
   | "email_failed";
 
 function createTemporaryPassword(): string {
-  return `WB-${randomBytes(8).toString("base64url")}-A9!`;
+  let password = "";
+
+  do {
+    password = Array.from(
+      { length: TEMPORARY_PASSWORD_LENGTH },
+      () => TEMPORARY_PASSWORD_ALPHABET[randomInt(TEMPORARY_PASSWORD_ALPHABET.length)]
+    ).join("");
+  } while (!/[A-Z]/.test(password) || !/[0-9]/.test(password));
+
+  return password;
 }
 
 export async function issueTemporaryPassword(
@@ -74,9 +85,12 @@ export async function issueTemporaryPassword(
       subject: "[워니바나나봇] 임시 비밀번호 발급",
       text: `${user.name || user.email}님,
 
-임시 비밀번호: ${temporaryPassword}
+아래 한 줄만 선택해 복사하세요.
+
+${temporaryPassword}
 
 이 비밀번호는 30분 동안 사용할 수 있습니다.
+여러 번 요청했다면 가장 최근에 받은 비밀번호만 유효합니다.
 로그인 후 설정에서 새 비밀번호로 변경해주세요.
 
 로그인: ${appUrl}/login

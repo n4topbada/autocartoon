@@ -131,7 +131,7 @@ export default function LoginPage() {
         throw new Error(data.error || "임시 비밀번호 발급 요청에 실패했습니다.");
       }
       setForgotMessage(
-        data.message || "등록된 계정이면 임시 비밀번호를 이메일로 보냈습니다."
+        data.message || "등록된 계정이면 새 임시 비밀번호를 보냈습니다."
       );
     } catch (forgotPasswordError) {
       setForgotError(
@@ -307,7 +307,7 @@ export default function LoginPage() {
               임시 비밀번호 발급
             </h2>
             <p className={styles.modalDescription}>
-              가입한 이메일로 30분 동안 사용할 수 있는 임시 비밀번호를 보냅니다.
+              가입한 이메일로 30분 동안 사용할 수 있는 영문·숫자 12자리 비밀번호를 보냅니다.
             </p>
             <form className={styles.form} onSubmit={handleForgotPassword}>
               <div className={styles.field}>
