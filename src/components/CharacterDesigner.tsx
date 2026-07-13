@@ -12,6 +12,7 @@ import {
   LuBot,
   LuCheck,
   LuCopy,
+  LuFileText,
   LuPanelRight,
   LuPlus,
   LuRotateCcw,
@@ -21,6 +22,7 @@ import {
   LuUserRound,
   LuX,
 } from "react-icons/lu";
+import { buildCharacterDesignerSystemPrompt } from "@/lib/character-designer";
 import {
   CORE_CHARACTER_SECTIONS,
   createEmptyCharacterDesign,
@@ -52,20 +54,43 @@ function createMessageId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function getSectionCopyText(section: CharacterDesignSection): string {
+function getRequestedSectionTitles(design: CharacterDesign): string[] {
+  return design.sections
+    .filter((section) => !CORE_SECTION_KEYS.has(section.key))
+    .map((section) => section.title);
+}
+
+function getSectionContentText(section: CharacterDesignSection): string {
   const details = section.details.map(
     (detail) => `${detail.label}: ${detail.value}`
   );
-  return [section.title, section.summary, ...details].filter(Boolean).join("\n");
+  return [section.summary, ...details].filter(Boolean).join("\n");
+}
+
+function getSectionCopyText(section: CharacterDesignSection): string {
+  return [section.title, getSectionContentText(section)]
+    .filter(Boolean)
+    .join("\n");
 }
 
 async function writeClipboard(text: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     try {
-      await navigator.clipboard.writeText(text);
+      await Promise.race([
+        navigator.clipboard.writeText(text),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new Error("Clipboard API timed out")),
+            750
+          );
+        }),
+      ]);
       return;
     } catch {
       // Fall through to the selection-based fallback for restricted browsers.
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
   }
 
@@ -132,10 +157,19 @@ export default function CharacterDesigner() {
   const [newSectionTitle, setNewSectionTitle] = useState("");
   const [sectionFormError, setSectionFormError] = useState<string | null>(null);
   const [copiedSectionKey, setCopiedSectionKey] = useState<string | null>(null);
+  const [showSystemPrompt, setShowSystemPrompt] = useState(false);
+  const [copiedSystemPrompt, setCopiedSystemPrompt] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sectionTitleInputRef = useRef<HTMLInputElement>(null);
   const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const promptCopyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const requestedSectionTitles = getRequestedSectionTitles(design);
+  const systemPrompt = buildCharacterDesignerSystemPrompt(
+    requestedSectionTitles
+  );
 
   useEffect(() => {
     try {
@@ -164,9 +198,26 @@ export default function CharacterDesigner() {
     if (addingSection) sectionTitleInputRef.current?.focus();
   }, [addingSection]);
 
+  useEffect(() => {
+    if (!showSystemPrompt) return;
+    const previousOverflow = document.body.style.overflow;
+    const handleEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setShowSystemPrompt(false);
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [showSystemPrompt]);
+
   useEffect(
     () => () => {
       if (copyResetTimerRef.current) clearTimeout(copyResetTimerRef.current);
+      if (promptCopyResetTimerRef.current) {
+        clearTimeout(promptCopyResetTimerRef.current);
+      }
     },
     []
   );
@@ -197,9 +248,7 @@ export default function CharacterDesigner() {
     const history = messages
       .filter((message) => message.id !== WELCOME_MESSAGE.id)
       .map(({ role, content }) => ({ role, content }));
-    const requestedSections = design.sections
-      .filter((section) => !CORE_SECTION_KEYS.has(section.key))
-      .map((section) => section.title);
+    const requestedSections = getRequestedSectionTitles(design);
 
     setMessages((current) => [...current, userMessage]);
     setInput("");
@@ -355,6 +404,25 @@ export default function CharacterDesigner() {
     }
   };
 
+  const copySystemPrompt = async () => {
+    try {
+      await writeClipboard(systemPrompt);
+      setCopiedSystemPrompt(true);
+      if (promptCopyResetTimerRef.current) {
+        clearTimeout(promptCopyResetTimerRef.current);
+      }
+      promptCopyResetTimerRef.current = setTimeout(() => {
+        setCopiedSystemPrompt(false);
+      }, 1600);
+    } catch (copyError) {
+      setError(
+        copyError instanceof Error
+          ? copyError.message
+          : "클립보드 복사에 실패했습니다."
+      );
+    }
+  };
+
   return (
     <section className={styles.root} aria-label="캐릭터 설계">
       <div className={styles.chatPane}>
@@ -371,15 +439,25 @@ export default function CharacterDesigner() {
               </span>
             </div>
           </div>
-          <button
-            type="button"
-            className={styles.iconButton}
-            onClick={resetDraft}
-            title="새 설정 시작"
-            aria-label="새 설정 시작"
-          >
-            <LuRotateCcw size={17} />
-          </button>
+          <div className={styles.headerActions}>
+            <button
+              type="button"
+              className={styles.promptButton}
+              onClick={() => setShowSystemPrompt(true)}
+            >
+              <LuFileText size={15} aria-hidden="true" />
+              <span>시스템 프롬프트 보기</span>
+            </button>
+            <button
+              type="button"
+              className={styles.iconButton}
+              onClick={resetDraft}
+              title="새 설정 시작"
+              aria-label="새 설정 시작"
+            >
+              <LuRotateCcw size={17} />
+            </button>
+          </div>
         </header>
 
         <div className={styles.messages} aria-live="polite">
@@ -599,25 +677,63 @@ export default function CharacterDesigner() {
                   )}
                 </div>
               </header>
-              <p className={styles.sectionSummary}>{section.summary}</p>
-
-              {section.details.length > 0 && (
-                <dl className={styles.detailList}>
-                  {section.details.map((detail, detailIndex) => (
-                    <div
-                      key={`${detail.label}-${detailIndex}`}
-                      className={styles.detailRow}
-                    >
-                      <dt>{detail.label}</dt>
-                      <dd>{detail.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
+              <p className={styles.sectionText}>
+                {getSectionContentText(section)}
+              </p>
             </article>
           ))}
         </div>
       </div>
+
+      {showSystemPrompt && (
+        <div
+          className={styles.promptOverlay}
+          onClick={() => setShowSystemPrompt(false)}
+        >
+          <section
+            className={styles.promptDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="system-prompt-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className={styles.promptDialogHeader}>
+              <div>
+                <span className={styles.promptEyebrow}>Gemini systemInstruction</span>
+                <h2 id="system-prompt-title">시스템 프롬프트</h2>
+              </div>
+              <button
+                type="button"
+                className={styles.promptCloseButton}
+                onClick={() => setShowSystemPrompt(false)}
+                title="닫기"
+                aria-label="시스템 프롬프트 닫기"
+                autoFocus
+              >
+                <LuX size={18} />
+              </button>
+            </header>
+            <div className={styles.promptDialogBody}>
+              <pre className={styles.promptText}>{systemPrompt}</pre>
+            </div>
+            <footer className={styles.promptDialogFooter}>
+              <span>{systemPrompt.length.toLocaleString()}자</span>
+              <button
+                type="button"
+                className={styles.promptCopyButton}
+                onClick={() => void copySystemPrompt()}
+              >
+                {copiedSystemPrompt ? (
+                  <LuCheck size={15} aria-hidden="true" />
+                ) : (
+                  <LuCopy size={15} aria-hidden="true" />
+                )}
+                <span>{copiedSystemPrompt ? "복사됨" : "전체 복사"}</span>
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
     </section>
   );
 }
