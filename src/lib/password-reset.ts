@@ -101,6 +101,9 @@ ${temporaryPassword}
     if (result.error) {
       throw new Error(result.error.message);
     }
+    console.info("Temporary password email accepted by Resend", {
+      emailId: result.data?.id ?? null,
+    });
     return "sent";
   } catch (error) {
     await prisma.user.updateMany({

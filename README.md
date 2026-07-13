@@ -28,10 +28,12 @@
 ```bash
 npm install
 npx prisma generate
+npx vercel env pull .env.local --environment=production
 npm run dev
 ```
 
 개발 서버는 기본적으로 `http://localhost:3000`에서 실행됩니다.
+`npm run dev`는 Windows 등에 남아 있는 오래된 전역 환경변수보다 프로젝트의 `.env.local` 값을 우선 적용합니다.
 
 ## 환경 변수
 
@@ -55,6 +57,14 @@ NEXT_PUBLIC_APP_URL=
 로그인 화면의 `비밀번호를 잊으셨나요?`에서 가입 이메일로 30분짜리 영문·숫자 12자리 임시 비밀번호를 발급합니다. 기존 비밀번호는 유지되며, 임시 비밀번호로 로그인하면 설정 탭이 자동으로 열립니다. 새 비밀번호로 변경하면 발급된 임시 비밀번호는 즉시 폐기됩니다.
 
 실사용자에게 메일을 보내려면 Resend에서 발신 도메인을 인증하고 `PASSWORD_EMAIL_FROM`에 인증된 주소를 설정해야 합니다. `onboarding@resend.dev` 기본 발신자는 Resend 계정 소유자 대상 테스트 용도입니다.
+
+### 발신 도메인 후속 작업
+
+- 보류 사유: `wonyframe.com` DNS는 별도 도메인 관리 담당자가 관리합니다.
+- DNS 위치: Hostcocoa 네임서버(`ans1`~`ans4.hostcocoa.com`)
+- 담당자 작업: Resend가 안내하는 SPF, DKIM, MX 레코드를 Hostcocoa DNS에 등록하고 도메인을 인증합니다.
+- 인증 후 설정: Vercel의 `PASSWORD_EMAIL_FROM`을 `워니바나나봇 <no-reply@wonyframe.com>`으로 지정하고 재배포합니다.
+- 인증 전 테스트: `onboarding@resend.dev`는 Resend 계정 소유 이메일로만 발송할 수 있습니다.
 
 ## DB 반영
 
