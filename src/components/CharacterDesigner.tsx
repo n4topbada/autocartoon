@@ -5,19 +5,27 @@ import {
   useEffect,
   useRef,
   useState,
+  type FormEvent,
   type KeyboardEvent,
 } from "react";
 import {
   LuBot,
+  LuCheck,
+  LuCopy,
   LuPanelRight,
+  LuPlus,
   LuRotateCcw,
   LuSend,
   LuSparkles,
+  LuTrash2,
   LuUserRound,
+  LuX,
 } from "react-icons/lu";
 import {
+  CORE_CHARACTER_SECTIONS,
   createEmptyCharacterDesign,
   type CharacterDesign,
+  type CharacterDesignSection,
   type CharacterDesignerMessage,
   type CharacterDesignerResult,
 } from "@/lib/character-designer-types";
@@ -28,6 +36,11 @@ interface UiMessage extends CharacterDesignerMessage {
 }
 
 const STORAGE_KEY = "autocartoon.character-designer.draft.v1";
+const MAX_SECTIONS = 12;
+const MAX_SECTION_TITLE_LENGTH = 40;
+const CORE_SECTION_KEYS = new Set<string>(
+  CORE_CHARACTER_SECTIONS.map((section) => section.key)
+);
 const WELCOME_MESSAGE: UiMessage = {
   id: "welcome",
   role: "assistant",
@@ -37,6 +50,34 @@ const WELCOME_MESSAGE: UiMessage = {
 
 function createMessageId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function getSectionCopyText(section: CharacterDesignSection): string {
+  const details = section.details.map(
+    (detail) => `${detail.label}: ${detail.value}`
+  );
+  return [section.title, section.summary, ...details].filter(Boolean).join("\n");
+}
+
+async function writeClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Fall through to the selection-based fallback for restricted browsers.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.append(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  if (!copied) throw new Error("클립보드 복사에 실패했습니다.");
 }
 
 function isStoredDesign(value: unknown): value is CharacterDesign {
@@ -87,8 +128,14 @@ export default function CharacterDesigner() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [storageReady, setStorageReady] = useState(false);
+  const [addingSection, setAddingSection] = useState(false);
+  const [newSectionTitle, setNewSectionTitle] = useState("");
+  const [sectionFormError, setSectionFormError] = useState<string | null>(null);
+  const [copiedSectionKey, setCopiedSectionKey] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const sectionTitleInputRef = useRef<HTMLInputElement>(null);
+  const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     try {
@@ -113,12 +160,27 @@ export default function CharacterDesigner() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, sending]);
 
+  useEffect(() => {
+    if (addingSection) sectionTitleInputRef.current?.focus();
+  }, [addingSection]);
+
+  useEffect(
+    () => () => {
+      if (copyResetTimerRef.current) clearTimeout(copyResetTimerRef.current);
+    },
+    []
+  );
+
   const resetDraft = useCallback(() => {
     setMessages([WELCOME_MESSAGE]);
     setDesign(createEmptyCharacterDesign());
     setNextQuestions([]);
     setInput("");
     setError(null);
+    setAddingSection(false);
+    setNewSectionTitle("");
+    setSectionFormError(null);
+    setCopiedSectionKey(null);
     window.sessionStorage.removeItem(STORAGE_KEY);
     inputRef.current?.focus();
   }, []);
@@ -135,6 +197,9 @@ export default function CharacterDesigner() {
     const history = messages
       .filter((message) => message.id !== WELCOME_MESSAGE.id)
       .map(({ role, content }) => ({ role, content }));
+    const requestedSections = design.sections
+      .filter((section) => !CORE_SECTION_KEYS.has(section.key))
+      .map((section) => section.title);
 
     setMessages((current) => [...current, userMessage]);
     setInput("");
@@ -149,6 +214,7 @@ export default function CharacterDesigner() {
           message: text,
           history,
           currentDesign: design,
+          requestedSections,
         }),
       });
       const data: unknown = await response.json().catch(() => null);
@@ -202,6 +268,91 @@ export default function CharacterDesigner() {
   const useQuestion = (question: string) => {
     setInput(question);
     inputRef.current?.focus();
+  };
+
+  const openSectionForm = () => {
+    if (design.sections.length >= MAX_SECTIONS) {
+      setSectionFormError(`항목은 최대 ${MAX_SECTIONS}개까지 추가할 수 있습니다.`);
+      return;
+    }
+    setSectionFormError(null);
+    setAddingSection(true);
+  };
+
+  const closeSectionForm = () => {
+    setAddingSection(false);
+    setNewSectionTitle("");
+    setSectionFormError(null);
+  };
+
+  const addCustomSection = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const title = newSectionTitle.replace(/\s+/g, " ").trim();
+    if (!title) {
+      setSectionFormError("항목 제목을 입력해주세요.");
+      return;
+    }
+    if (design.sections.length >= MAX_SECTIONS) {
+      setSectionFormError(`항목은 최대 ${MAX_SECTIONS}개까지 추가할 수 있습니다.`);
+      return;
+    }
+    if (
+      design.sections.some(
+        (section) =>
+          section.title.toLocaleLowerCase("ko-KR") ===
+          title.toLocaleLowerCase("ko-KR")
+      )
+    ) {
+      setSectionFormError("이미 같은 제목의 항목이 있습니다.");
+      return;
+    }
+
+    setDesign((current) => ({
+      ...current,
+      sections: [
+        ...current.sections,
+        {
+          key: `custom-${Date.now().toString(36)}`,
+          title,
+          summary: "다음 대화에서 이 항목의 설정을 구체화합니다.",
+          details: [],
+        },
+      ],
+    }));
+    setInput((current) =>
+      current || `"${title}" 항목을 캐릭터에 맞게 구체화해줘.`
+    );
+    closeSectionForm();
+    inputRef.current?.focus();
+  };
+
+  const removeCustomSection = (sectionKey: string) => {
+    setDesign((current) => ({
+      ...current,
+      sections: current.sections.filter((section) => section.key !== sectionKey),
+    }));
+    setCopiedSectionKey((current) =>
+      current === sectionKey ? null : current
+    );
+  };
+
+  const copySection = async (section: CharacterDesignSection) => {
+    try {
+      await writeClipboard(getSectionCopyText(section));
+      setCopiedSectionKey(section.key);
+      if (copyResetTimerRef.current) clearTimeout(copyResetTimerRef.current);
+      copyResetTimerRef.current = setTimeout(() => {
+        setCopiedSectionKey((current) =>
+          current === section.key ? null : current
+        );
+      }, 1600);
+    } catch (copyError) {
+      setError(
+        copyError instanceof Error
+          ? copyError.message
+          : "클립보드 복사에 실패했습니다."
+      );
+    }
   };
 
   return (
@@ -332,8 +483,72 @@ export default function CharacterDesigner() {
             <LuPanelRight size={18} aria-hidden="true" />
             <h2 className={styles.settingsTitle}>캐릭터 설정</h2>
           </div>
-          <span className={styles.sectionCount}>{design.sections.length}개 항목</span>
+          <div className={styles.settingsActions}>
+            <button
+              type="button"
+              className={styles.addSectionButton}
+              onClick={openSectionForm}
+              disabled={design.sections.length >= MAX_SECTIONS}
+              title={
+                design.sections.length >= MAX_SECTIONS
+                  ? `최대 ${MAX_SECTIONS}개까지 추가할 수 있습니다`
+                  : "새 설정 항목 추가"
+              }
+            >
+              <LuPlus size={15} aria-hidden="true" />
+              <span>새 항목 추가하기</span>
+            </button>
+            <span className={styles.sectionCount}>
+              {design.sections.length}개 항목
+            </span>
+          </div>
         </header>
+
+        {addingSection && (
+          <form className={styles.addSectionForm} onSubmit={addCustomSection}>
+            <div className={styles.addSectionInputRow}>
+              <input
+                ref={sectionTitleInputRef}
+                className={styles.addSectionInput}
+                value={newSectionTitle}
+                onChange={(event) => {
+                  setNewSectionTitle(event.target.value);
+                  setSectionFormError(null);
+                }}
+                maxLength={MAX_SECTION_TITLE_LENGTH}
+                placeholder="예: 가치관, 관계, 목표"
+                aria-label="새 항목 제목"
+                aria-invalid={Boolean(sectionFormError)}
+              />
+              <button
+                type="submit"
+                className={styles.confirmSectionButton}
+                title="항목 추가"
+                aria-label="항목 추가"
+              >
+                <LuCheck size={17} />
+              </button>
+              <button
+                type="button"
+                className={styles.cancelSectionButton}
+                onClick={closeSectionForm}
+                title="취소"
+                aria-label="취소"
+              >
+                <LuX size={17} />
+              </button>
+            </div>
+            <div className={styles.addSectionMeta}>
+              <span>추가한 제목은 다음 AI 설계 요청에 반드시 포함됩니다.</span>
+              <span>{newSectionTitle.length}/{MAX_SECTION_TITLE_LENGTH}</span>
+            </div>
+            {sectionFormError && (
+              <p className={styles.addSectionError} role="alert">
+                {sectionFormError}
+              </p>
+            )}
+          </form>
+        )}
 
         <div className={styles.nameBand}>
           <span className={styles.nameLabel}>이름</span>
@@ -348,10 +563,41 @@ export default function CharacterDesigner() {
               className={styles.sectionCard}
             >
               <header className={styles.sectionHeader}>
-                <span className={styles.sectionIndex}>
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <h3 className={styles.sectionTitle}>{section.title}</h3>
+                <div className={styles.sectionHeading}>
+                  <span className={styles.sectionIndex}>
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <h3 className={styles.sectionTitle}>{section.title}</h3>
+                </div>
+                <div className={styles.sectionButtons}>
+                  <button
+                    type="button"
+                    className={styles.copyButton}
+                    onClick={() => void copySection(section)}
+                    title={`${section.title} 내용 복사`}
+                    aria-label={`${section.title} 내용 복사`}
+                  >
+                    {copiedSectionKey === section.key ? (
+                      <LuCheck size={13} aria-hidden="true" />
+                    ) : (
+                      <LuCopy size={13} aria-hidden="true" />
+                    )}
+                    <span>
+                      {copiedSectionKey === section.key ? "복사됨" : "복사"}
+                    </span>
+                  </button>
+                  {!CORE_SECTION_KEYS.has(section.key) && (
+                    <button
+                      type="button"
+                      className={styles.removeSectionButton}
+                      onClick={() => removeCustomSection(section.key)}
+                      title={`${section.title} 항목 삭제`}
+                      aria-label={`${section.title} 항목 삭제`}
+                    >
+                      <LuTrash2 size={13} />
+                    </button>
+                  )}
+                </div>
               </header>
               <p className={styles.sectionSummary}>{section.summary}</p>
 

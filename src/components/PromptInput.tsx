@@ -18,14 +18,28 @@ interface Props {
 
 const TAG_ATTR = "data-char-tag-id";
 
+function createTagElement(tag: CharTag): HTMLSpanElement {
+  const tagElement = document.createElement("span");
+  tagElement.className = styles.tag;
+  tagElement.setAttribute(TAG_ATTR, tag.id);
+  tagElement.contentEditable = "false";
+  tagElement.append(document.createTextNode(tag.name));
+
+  const removeButton = document.createElement("button");
+  removeButton.type = "button";
+  removeButton.className = styles.tagX;
+  removeButton.setAttribute(TAG_ATTR, tag.id);
+  removeButton.setAttribute("aria-label", `${tag.name} 제거`);
+  removeButton.textContent = "×";
+  tagElement.append(removeButton);
+
+  return tagElement;
+}
+
 export default function PromptInput({ tags, text, onTextChange, onTagRemove, placeholder }: Props) {
   const editRef = useRef<HTMLDivElement>(null);
   const isComposing = useRef(false);
   const prevTagIds = useRef<string[]>([]);
-
-  // 태그 HTML 생성
-  const buildTagHtml = (tag: CharTag) =>
-    `<span class="${styles.tag}" ${TAG_ATTR}="${tag.id}" contenteditable="false">${tag.name}<button class="${styles.tagX}" ${TAG_ATTR}="${tag.id}">×</button></span>`;
 
   // 현재 editable에서 순수 텍스트만 추출
   const extractText = useCallback(() => {
@@ -52,16 +66,15 @@ export default function PromptInput({ tags, text, onTextChange, onTagRemove, pla
 
     // 제거
     removed.forEach((id) => {
-      const span = el.querySelector(`span[${TAG_ATTR}="${id}"]`);
+      const span = Array.from(el.querySelectorAll(`span[${TAG_ATTR}]`)).find(
+        (candidate) => candidate.getAttribute(TAG_ATTR) === id
+      );
       if (span) span.remove();
     });
 
     // 추가: 현재 커서 위치 또는 끝에 삽입
     added.forEach((tag) => {
-      const html = buildTagHtml(tag);
-      const temp = document.createElement("span");
-      temp.innerHTML = html;
-      const tagEl = temp.firstElementChild!;
+      const tagEl = createTagElement(tag);
 
       const sel = window.getSelection();
       if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
@@ -88,15 +101,15 @@ export default function PromptInput({ tags, text, onTextChange, onTagRemove, pla
   useEffect(() => {
     if (!editRef.current) return;
     const el = editRef.current;
-    if (el.innerHTML === "" || el.innerHTML === "<br>") {
-      let html = "";
-      tags.forEach((t) => {
-        html += buildTagHtml(t) + " ";
-      });
-      html += text;
-      el.innerHTML = html || "";
-      prevTagIds.current = tags.map((t) => t.id);
-    }
+    if (el.childNodes.length > 0) return;
+
+    const fragment = document.createDocumentFragment();
+    tags.forEach((tag) => {
+      fragment.append(createTagElement(tag), document.createTextNode(" "));
+    });
+    if (text) fragment.append(document.createTextNode(text));
+    el.append(fragment);
+    prevTagIds.current = tags.map((tag) => tag.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

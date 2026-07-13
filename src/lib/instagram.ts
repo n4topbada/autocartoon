@@ -2,6 +2,8 @@
  * Meta Graph API wrapper for Instagram
  */
 
+import { randomBytes, timingSafeEqual } from "node:crypto";
+
 const GRAPH_URL = "https://graph.instagram.com";
 const GRAPH_FB_URL = "https://graph.facebook.com/v21.0";
 
@@ -9,13 +11,28 @@ const APP_ID = process.env.INSTAGRAM_APP_ID || "";
 const APP_SECRET = process.env.INSTAGRAM_APP_SECRET || "";
 const REDIRECT_URI = process.env.INSTAGRAM_REDIRECT_URI || "";
 
+export const INSTAGRAM_OAUTH_STATE_COOKIE = "instagram_oauth_state";
+export const INSTAGRAM_OAUTH_STATE_MAX_AGE = 10 * 60;
+
+export function createOAuthState(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export function validateOAuthState(returnedState: string | null, expectedState: string | null): boolean {
+  if (!returnedState || !expectedState) return false;
+  const returned = Buffer.from(returnedState, "utf8");
+  const expected = Buffer.from(expectedState, "utf8");
+  return returned.length === expected.length && timingSafeEqual(returned, expected);
+}
+
 /** OAuth 인증 URL 생성 */
-export function getAuthUrl(): string {
+export function getAuthUrl(state: string): string {
   const params = new URLSearchParams({
     client_id: APP_ID,
     redirect_uri: REDIRECT_URI,
     scope: "instagram_basic,instagram_content_publish,instagram_manage_insights,pages_show_list,pages_read_engagement",
     response_type: "code",
+    state,
   });
   return `https://www.facebook.com/v21.0/dialog/oauth?${params}`;
 }

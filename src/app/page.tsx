@@ -935,9 +935,7 @@ export default function Home() {
     } catch (err) {
       const isTimeout = err instanceof DOMException && err.name === "AbortError";
       if (isTimeout) {
-        // 타임아웃: 크레딧 환불
-        fetch("/api/credits/refund", { method: "POST" }).catch(() => {});
-        setError("생성 시간이 초과되었습니다 (120초). 크레딧이 환불됩니다. 잠시 후 갤러리를 확인해주세요.");
+        setError("생성 대기 시간이 초과되었습니다 (120초). 서버에서 실패한 요청은 자동 환불됩니다. 잠시 후 갤러리를 확인해주세요.");
         // 서버에서 이미 생성됐을 수 있으므로 갤러리 새로고침
         setTimeout(() => {
           loadHistory();

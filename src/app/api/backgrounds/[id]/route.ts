@@ -8,11 +8,24 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAuth();
+    const session = await requireAuth();
     const { id } = await params;
 
-    // Blob 파일도 삭제
-    const bg = await prisma.savedBackground.findUnique({ where: { id } });
+    const bg = await prisma.savedBackground.findFirst({
+      where: { id, userId: session.userId },
+    });
+    if (!bg) {
+      return NextResponse.json({ error: "배경을 찾을 수 없습니다." }, { status: 404 });
+    }
+
+    const deleted = await prisma.savedBackground.deleteMany({
+      where: { id, userId: session.userId },
+    });
+    if (deleted.count === 0) {
+      return NextResponse.json({ error: "배경을 찾을 수 없습니다." }, { status: 404 });
+    }
+
+    // DB 소유권 검증과 삭제가 끝난 뒤 연결된 Blob도 정리한다.
     if (bg?.blobUrl) {
       await deleteBlob(bg.blobUrl);
     }
@@ -20,7 +33,6 @@ export async function DELETE(
       await deleteBlob(bg.thumbnailUrl);
     }
 
-    await prisma.savedBackground.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof AuthError) {

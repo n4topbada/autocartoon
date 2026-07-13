@@ -1,29 +1,66 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getIronSession } from "iron-session";
+import { getIronSession, type SessionOptions } from "iron-session";
 import type { SessionData } from "@/lib/session";
 
-const sessionOptions = {
-  password: process.env.SESSION_SECRET || "autocartoon-fallback-secret-key-32chars!!",
-  cookieName: "autocartoon_session",
-};
+const MIN_SESSION_SECRET_LENGTH = 32;
 
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // 퍼블릭 경로 + 정적 파일
-  if (
-    pathname.startsWith("/login") ||
-    pathname.startsWith("/verify") ||
-    pathname.startsWith("/api/auth") ||
+function isStaticPath(pathname: string) {
+  return (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/presets/") ||
     pathname === "/favicon.ico" ||
     pathname === "/robot-wony.png" ||
     pathname === "/guide.html" ||
     /\.(png|jpg|jpeg|gif|webp|svg|ico|css|js|woff2?)$/.test(pathname)
-  ) {
-    return NextResponse.next();
+  );
+}
+
+function isPublicRoute(pathname: string) {
+  return (
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/verify") ||
+    pathname.startsWith("/api/auth")
+  );
+}
+
+function getSessionOptions(): SessionOptions | null {
+  const password = process.env.SESSION_SECRET;
+  if (!password || password.length < MIN_SESSION_SECRET_LENGTH) return null;
+
+  return {
+    password,
+    cookieName: "autocartoon_session",
+    cookieOptions: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      sameSite: "lax",
+    },
+  };
+}
+
+function sessionUnavailable(pathname: string) {
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json(
+      { error: "인증 설정이 올바르지 않습니다." },
+      { status: 503 }
+    );
   }
+
+  return new NextResponse("Authentication is unavailable.", {
+    status: 503,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (isStaticPath(pathname)) return NextResponse.next();
+
+  const sessionOptions = getSessionOptions();
+  if (!sessionOptions) return sessionUnavailable(pathname);
+
+  if (isPublicRoute(pathname)) return NextResponse.next();
 
   const response = NextResponse.next();
   const session = await getIronSession<SessionData>(request, response, sessionOptions);

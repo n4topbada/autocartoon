@@ -3,50 +3,61 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+const SEED_ADMINS = [
+  { email: "wony@wonyframe.com", name: "Wony" },
+  { email: "admin@wonyframe.com", name: "Admin" },
+  { email: "n4topbada@gmail.com", name: "Bada" },
+] as const;
+
+function requireSeedAdminPassword() {
+  const password = process.env.SEED_ADMIN_PASSWORD;
+  const isStrong =
+    !!password &&
+    password.length >= 16 &&
+    Buffer.byteLength(password, "utf8") <= 72 &&
+    /[a-z]/.test(password) &&
+    /[A-Z]/.test(password) &&
+    /[0-9]/.test(password) &&
+    /[^A-Za-z0-9]/.test(password);
+
+  if (!isStrong) {
+    throw new Error(
+      "SEED_ADMIN_PASSWORD is required when creating seed admins and must be 16-72 bytes with upper, lower, number, and symbol characters."
+    );
+  }
+
+  return password;
+}
+
+async function seedAdmins() {
+  for (const account of SEED_ADMINS) {
+    const existing = await prisma.user.findUnique({
+      where: { email: account.email },
+      select: { id: true },
+    });
+
+    if (existing) {
+      console.log(`[SKIP] ${account.email} already exists; password unchanged`);
+      continue;
+    }
+
+    await prisma.user.create({
+      data: {
+        email: account.email,
+        passwordHash: await bcrypt.hash(requireSeedAdminPassword(), 12),
+        name: account.name,
+        role: "admin",
+        tier: "enterprise",
+        credits: 999999,
+        emailVerified: true,
+      },
+    });
+    console.log(`[OK] created seed admin ${account.email}`);
+  }
+}
+
 async function main() {
-  const hash = (pw: string) => bcrypt.hashSync(pw, 10);
-
-  await prisma.user.upsert({
-    where: { email: "wony@wonyframe.com" },
-    update: { passwordHash: hash("1234!@#$") },
-    create: {
-      email: "wony@wonyframe.com",
-      passwordHash: hash("1234!@#$"),
-      name: "Wony",
-      role: "admin",
-      tier: "enterprise",
-      credits: 999999,
-      emailVerified: true,
-    },
-  });
-
-  await prisma.user.upsert({
-    where: { email: "admin@wonyframe.com" },
-    update: { passwordHash: hash("1234!@#$") },
-    create: {
-      email: "admin@wonyframe.com",
-      passwordHash: hash("1234!@#$"),
-      name: "Admin",
-      role: "admin",
-      tier: "enterprise",
-      credits: 999999,
-      emailVerified: true,
-    },
-  });
-
-  await prisma.user.upsert({
-    where: { email: "n4topbada@gmail.com" },
-    update: { passwordHash: hash("1234!@#$") },
-    create: {
-      email: "n4topbada@gmail.com",
-      passwordHash: hash("1234!@#$"),
-      name: "Bada",
-      role: "admin",
-      tier: "enterprise",
-      credits: 999999,
-      emailVerified: true,
-    },
-  });
+  await seedAdmins();
 
   // 기본 캐릭터 프리셋: wony
   const wonyPreset = await prisma.characterPreset.upsert({

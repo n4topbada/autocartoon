@@ -12,7 +12,11 @@ export async function requireAuth() {
 
 export async function requireAdmin() {
   const session = await requireAuth();
-  if (session.role !== "admin") {
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { role: true },
+  });
+  if (user?.role !== "admin") {
     throw new AuthError("관리자 권한이 필요합니다.", 403);
   }
   return session;

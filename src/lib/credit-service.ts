@@ -5,28 +5,37 @@ export async function checkAndDeductCredit(
   userId: string
 ): Promise<{ ok: boolean; error?: string; source?: "tier" | "credit" }> {
   return await prisma.$transaction(async (tx) => {
-    const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
-
-    // 월간 리셋 체크
     const now = new Date();
-    const resetDate = new Date(user.tierResetAt);
-    let tierUsed = user.tierUsedThisMonth;
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-    if (
-      now.getMonth() !== resetDate.getMonth() ||
-      now.getFullYear() !== resetDate.getFullYear()
-    ) {
-      await tx.user.update({
-        where: { id: userId },
-        data: { tierUsedThisMonth: 0, tierResetAt: now },
-      });
-      tierUsed = 0;
-    }
+    // Reset once per billing month. The guarded update is safe under concurrency.
+    await tx.user.updateMany({
+      where: {
+        id: userId,
+        OR: [
+          { tierResetAt: { lt: monthStart } },
+          { tierResetAt: { gte: nextMonthStart } },
+        ],
+      },
+      data: { tierUsedThisMonth: 0, tierResetAt: now },
+    });
+
+    // Repair values created by the former public refund endpoint.
+    await tx.user.updateMany({
+      where: { id: userId, tierUsedThisMonth: { lt: 0 } },
+      data: { tierUsedThisMonth: 0 },
+    });
+
+    const user = await tx.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { tier: true },
+    });
 
     const monthlyLimit = TIER_LIMITS[user.tier] ?? 5;
 
-    // 1) 티어 무료 사용량 우선 차감
-    if (tierUsed < monthlyLimit) {
+    // Unlimited tiers still track usage, but need no conditional allowance check.
+    if (monthlyLimit === Infinity) {
       await tx.user.update({
         where: { id: userId },
         data: { tierUsedThisMonth: { increment: 1 } },
@@ -34,12 +43,23 @@ export async function checkAndDeductCredit(
       return { ok: true, source: "tier" };
     }
 
-    // 2) 크레딧 차감
-    if (user.credits > 0) {
-      await tx.user.update({
-        where: { id: userId },
-        data: { credits: { decrement: 1 } },
+    // The predicate and increment run in one statement, so the last allowance
+    // cannot be consumed by two concurrent requests.
+    if (monthlyLimit > 0) {
+      const tierDeduction = await tx.user.updateMany({
+        where: { id: userId, tierUsedThisMonth: { lt: monthlyLimit } },
+        data: { tierUsedThisMonth: { increment: 1 } },
       });
+      if (tierDeduction.count === 1) {
+        return { ok: true, source: "tier" };
+      }
+    }
+
+    const creditDeduction = await tx.user.updateMany({
+      where: { id: userId, credits: { gt: 0 } },
+      data: { credits: { decrement: 1 } },
+    });
+    if (creditDeduction.count === 1) {
       return { ok: true, source: "credit" };
     }
 

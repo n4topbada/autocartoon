@@ -301,6 +301,41 @@
   color: var(--text);
 }
 
+.settingsActions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.addSectionButton {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid rgba(50, 213, 131, 0.35);
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  background: rgba(50, 213, 131, 0.07);
+  color: #9ee8c2;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.addSectionButton:hover:not(:disabled) {
+  border-color: var(--designer-accent);
+  background: rgba(50, 213, 131, 0.12);
+  color: #d5f8e7;
+}
+
+.addSectionButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
 .sectionCount {
   padding: 4px 7px;
   border: 1px solid #363b38;
@@ -308,6 +343,83 @@
   color: var(--text-dim);
   font-size: 10px;
   white-space: nowrap;
+}
+
+.addSectionForm {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: #151917;
+  flex-shrink: 0;
+}
+
+.addSectionInputRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px 34px;
+  gap: 7px;
+}
+
+.addSectionInput {
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #39413c;
+  border-radius: 6px;
+  outline: none;
+  background: #101311;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.addSectionInput:focus {
+  border-color: var(--designer-accent-strong);
+  box-shadow: 0 0 0 2px rgba(50, 213, 131, 0.08);
+}
+
+.confirmSectionButton,
+.cancelSectionButton {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+}
+
+.confirmSectionButton {
+  border: 1px solid var(--designer-accent-strong);
+  background: var(--designer-accent-strong);
+  color: #07160e;
+}
+
+.confirmSectionButton:hover {
+  background: var(--designer-accent);
+}
+
+.cancelSectionButton {
+  border: 1px solid #3a413d;
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.cancelSectionButton:hover {
+  border-color: #6b746f;
+  color: var(--text);
+}
+
+.addSectionMeta {
+  margin-top: 6px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #717b75;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.addSectionError {
+  margin-top: 6px;
+  color: #f3aaa2;
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .nameBand {
@@ -376,9 +488,17 @@
 
 .sectionHeader {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+
+.sectionHeading {
+  min-width: 0;
+  display: flex;
   align-items: baseline;
   gap: 8px;
-  margin-bottom: 9px;
 }
 
 .sectionIndex {
@@ -393,6 +513,52 @@
   font-size: 13px;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.sectionButtons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.copyButton {
+  min-width: 50px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid #39413c;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: #151816;
+  color: #8f9993;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.copyButton:hover {
+  border-color: #5c6a62;
+  color: #dce3df;
+}
+
+.removeSectionButton {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #493837;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: #a77e79;
+  flex-shrink: 0;
+}
+
+.removeSectionButton:hover {
+  border-color: #a95d55;
+  background: rgba(231, 76, 60, 0.06);
+  color: #ef9a91;
 }
 
 .sectionSummary {
@@ -494,5 +660,21 @@
 
   .messageBubble {
     max-width: calc(100% - 40px);
+  }
+
+  .settingsHeader {
+    min-height: auto;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .settingsActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .addSectionForm {
+    padding-left: 14px;
+    padding-right: 14px;
   }
 }

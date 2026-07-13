@@ -16,6 +16,7 @@ export type GenerationMode = "text" | "sketch" | "edit" | "transform";
 export interface GenerateInput {
   presetIds: string[];
   userId: string;
+  isAdmin?: boolean;
   mode: GenerationMode;
   prompt: string;
   background?: string;
@@ -41,15 +42,35 @@ async function loadPresetImages(
 }
 
 export async function generate(input: GenerateInput) {
+  const requestedPresetIds = [...new Set(input.presetIds)];
+  if (
+    requestedPresetIds.length === 0 ||
+    requestedPresetIds.length !== input.presetIds.length ||
+    requestedPresetIds.some((id) => typeof id !== "string" || !id.trim())
+  ) {
+    throw new Error("선택된 캐릭터를 찾을 수 없습니다.");
+  }
+
   // 1. 프리셋 조회 (다중 캐릭터)
-  const presets = await prisma.characterPreset.findMany({
-    where: { id: { in: input.presetIds } },
+  const entitledPresets = await prisma.characterPreset.findMany({
+    where: input.isAdmin
+      ? { id: { in: requestedPresetIds } }
+      : {
+          id: { in: requestedPresetIds },
+          OR: [
+            { userId: input.userId },
+            { purchasedBy: { some: { userId: input.userId } } },
+          ],
+        },
     include: { images: { orderBy: { order: "asc" } } },
   });
 
-  if (presets.length === 0) {
+  if (entitledPresets.length !== requestedPresetIds.length) {
     throw new Error("선택된 캐릭터를 찾을 수 없습니다.");
   }
+
+  const presetsById = new Map(entitledPresets.map((preset) => [preset.id, preset]));
+  const presets = requestedPresetIds.map((id) => presetsById.get(id)!);
 
   // 2. 각 캐릭터의 대표이미지 로드
   const characterImages = (
@@ -82,17 +103,21 @@ export async function generate(input: GenerateInput) {
   }
   let bgImageName: string | undefined;
   if (input.backgroundImageId) {
-    const bgRecord = await prisma.savedBackground.findUnique({
-      where: { id: input.backgroundImageId },
+    const bgRecord = await prisma.savedBackground.findFirst({
+      where: input.isAdmin
+        ? { id: input.backgroundImageId }
+        : { id: input.backgroundImageId, userId: input.userId },
     });
-    if (bgRecord) {
-      const bgData = await fetchBlobAsBase64(bgRecord.blobUrl);
-      referenceImages.push({
-        base64: bgData.base64,
-        mimeType: bgRecord.mimeType,
-      });
-      bgImageName = bgRecord.name;
+    if (!bgRecord) {
+      throw new Error("선택된 배경을 찾을 수 없습니다.");
     }
+
+    const bgData = await fetchBlobAsBase64(bgRecord.blobUrl);
+    referenceImages.push({
+      base64: bgData.base64,
+      mimeType: bgRecord.mimeType,
+    });
+    bgImageName = bgRecord.name;
   }
 
   // sketch/edit 모드: 사용자 입력 이미지 추가 (배경 뒤에)
@@ -165,8 +190,8 @@ export async function generate(input: GenerateInput) {
   // 6. 결과를 Blob에 업로드 후 DB 저장
   const genRequest = await prisma.generationRequest.create({
     data: {
-      presetId: input.presetIds[0],
-      presetIds: input.presetIds,
+      presetId: requestedPresetIds[0],
+      presetIds: requestedPresetIds,
       userId: input.userId,
       mode: input.mode,
       prompt: input.prompt,

@@ -8,20 +8,26 @@ export async function POST(req: NextRequest) {
     const session = await requireAuth();
     const { imageId, caption } = (await req.json()) as { imageId: string; caption?: string };
 
-    if (!imageId) {
+    if (typeof imageId !== "string" || !imageId.trim()) {
       return NextResponse.json({ error: "imageId가 필요합니다." }, { status: 400 });
     }
 
-    // Instagram 계정 확인
-    const igAccount = await prisma.instagramAccount.findUnique({
-      where: { userId: session.userId },
-    });
+    const [igAccount, image] = await Promise.all([
+      prisma.instagramAccount.findUnique({
+        where: { userId: session.userId },
+      }),
+      prisma.generatedImage.findFirst({
+        where: {
+          id: imageId,
+          request: { userId: session.userId },
+        },
+      }),
+    ]);
+
     if (!igAccount) {
       return NextResponse.json({ error: "Instagram 계정이 연동되지 않았습니다." }, { status: 400 });
     }
 
-    // 이미지 조회
-    const image = await prisma.generatedImage.findUnique({ where: { id: imageId } });
     if (!image) {
       return NextResponse.json({ error: "이미지를 찾을 수 없습니다." }, { status: 404 });
     }

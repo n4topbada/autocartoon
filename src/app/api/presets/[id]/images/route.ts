@@ -39,11 +39,19 @@ export async function GET(
     const session = await requireAuth();
     const { id } = await params;
 
-    const preset = await prisma.characterPreset.findUnique({
-      where: { id },
+    const preset = await prisma.characterPreset.findFirst({
+      where: {
+        id,
+        OR: [
+          { userId: session.userId },
+          { userId: null },
+          { isPublic: true },
+          { purchasedBy: { some: { userId: session.userId } } },
+        ],
+      },
       include: { images: { orderBy: { order: "asc" } } },
     });
-    if (!preset || preset.userId !== session.userId) {
+    if (!preset) {
       return NextResponse.json({ error: "프리셋을 찾을 수 없습니다." }, { status: 404 });
     }
 
@@ -52,7 +60,7 @@ export async function GET(
       preset.images[0] ??
       null;
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       id: preset.id,
       representativeImage: representativeImage
         ? {
@@ -67,6 +75,8 @@ export async function GET(
         thumbnailUrl: img.thumbnailUrl ?? img.blobUrl,
       })),
     });
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -83,11 +93,11 @@ export async function POST(
     const session = await requireAuth();
     const { id } = await params;
 
-    const preset = await prisma.characterPreset.findUnique({
-      where: { id },
+    const preset = await prisma.characterPreset.findFirst({
+      where: { id, userId: session.userId },
       include: { images: true },
     });
-    if (!preset || preset.userId !== session.userId) {
+    if (!preset) {
       return NextResponse.json({ error: "프리셋을 찾을 수 없습니다." }, { status: 404 });
     }
 
@@ -149,20 +159,42 @@ export async function DELETE(
     const session = await requireAuth();
     const { id } = await params;
     const { imageId } = (await req.json()) as { imageId: string };
+    if (typeof imageId !== "string" || !imageId.trim()) {
+      return NextResponse.json({ error: "imageId가 필요합니다." }, { status: 400 });
+    }
 
-    const preset = await prisma.characterPreset.findUnique({
-      where: { id },
+    const preset = await prisma.characterPreset.findFirst({
+      where: { id, userId: session.userId },
       include: { images: true },
     });
-    if (!preset || preset.userId !== session.userId) {
+    if (!preset) {
       return NextResponse.json({ error: "프리셋을 찾을 수 없습니다." }, { status: 404 });
+    }
+
+    const target = preset.images.find((img) => img.id === imageId);
+    if (!target) {
+      return NextResponse.json({ error: "이미지를 찾을 수 없습니다." }, { status: 404 });
     }
     if (preset.images.length <= 1) {
       return NextResponse.json({ error: "최소 1개의 이미지는 유지해야 합니다." }, { status: 400 });
     }
 
-    const target = preset.images.find((img) => img.id === imageId);
-    await prisma.presetImage.delete({ where: { id: imageId } });
+    const deleted = await prisma.$transaction(async (tx) => {
+      const result = await tx.presetImage.deleteMany({
+        where: { id: imageId, presetId: id },
+      });
+      if (result.count > 0 && preset.representativeImageId === imageId) {
+        await tx.characterPreset.updateMany({
+          where: { id, userId: session.userId, representativeImageId: imageId },
+          data: { representativeImageId: null },
+        });
+      }
+      return result.count;
+    });
+    if (deleted === 0) {
+      return NextResponse.json({ error: "이미지를 찾을 수 없습니다." }, { status: 404 });
+    }
+
     if (target?.blobUrl) await deleteBlob(target.blobUrl);
     if (target?.thumbnailUrl) await deleteBlob(target.thumbnailUrl);
 

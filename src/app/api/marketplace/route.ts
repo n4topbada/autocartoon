@@ -1,16 +1,27 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, AuthError } from "@/lib/auth";
 
 export async function GET() {
   try {
     const session = await requireAuth();
+    const marketplacePresetWhere: Prisma.CharacterPresetWhereInput = {
+      OR: [
+        { userId: null },
+        { userId: { not: session.userId }, isPublic: true },
+      ],
+    };
 
-    // 1. 마켓플레이스 그룹 (Depth_A with children) - 본인 소유가 아닌 모든 그룹
+    // 1. 마켓플레이스 그룹: 시스템 또는 공개 프리셋만 포함한다.
     const groups = await prisma.characterGroup.findMany({
-      where: { NOT: { userId: session.userId }, presets: { some: { isPublic: true } } },
+      where: {
+        OR: [{ userId: null }, { userId: { not: session.userId } }],
+        presets: { some: marketplacePresetWhere },
+      },
       include: {
         presets: {
+          where: marketplacePresetWhere,
           include: {
             images: { orderBy: { order: "asc" }, take: 1 },
             purchasedBy: {
@@ -24,9 +35,9 @@ export async function GET() {
       orderBy: { order: "asc" },
     });
 
-    // 2. 독립 프리셋 (groupId=null, 본인 소유 아닌 것)
+    // 2. 독립 프리셋 (groupId=null, 시스템 또는 타인의 공개 프리셋)
     const standalone = await prisma.characterPreset.findMany({
-      where: { groupId: null, isPublic: true, NOT: { userId: session.userId } },
+      where: { groupId: null, AND: [marketplacePresetWhere] },
       include: {
         images: { orderBy: { order: "asc" }, take: 1 },
         purchasedBy: {
@@ -75,7 +86,9 @@ export async function GET() {
       }),
     ];
 
-    return NextResponse.json(items);
+    const response = NextResponse.json(items);
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

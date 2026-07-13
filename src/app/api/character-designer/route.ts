@@ -2,8 +2,9 @@ import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireCharacterDesigner } from "@/lib/auth";
 import {
+  buildCharacterDesignerSystemPrompt,
   CHARACTER_DESIGN_RESPONSE_SCHEMA,
-  CHARACTER_DESIGNER_SYSTEM_PROMPT,
+  ensureRequestedCharacterSections,
   normalizeCharacterDesign,
   parseCharacterDesignerResponse,
 } from "@/lib/character-designer";
@@ -12,12 +13,15 @@ import type {
   CharacterDesignerMessage,
   CharacterDesignerResult,
 } from "@/lib/character-designer-types";
+import { CORE_CHARACTER_SECTIONS } from "@/lib/character-designer-types";
 
 export const maxDuration = 60;
 
 const MODEL = "gemini-3.1-flash-lite";
 const MAX_MESSAGE_LENGTH = 4000;
 const MAX_HISTORY_MESSAGES = 12;
+const MAX_REQUESTED_SECTIONS = 6;
+const MAX_SECTION_TITLE_LENGTH = 40;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -40,6 +44,43 @@ function normalizeHistory(value: unknown): CharacterDesignerMessage[] {
 
   while (history[0]?.role === "assistant") history.shift();
   return history;
+}
+
+function normalizeRequestedSections(
+  value: unknown,
+  currentDesign: CharacterDesign | null
+): string[] {
+  const coreTitles = new Set(
+    CORE_CHARACTER_SECTIONS.map((section) =>
+      section.title.toLocaleLowerCase("ko-KR")
+    )
+  );
+  const currentTitles = currentDesign
+    ? currentDesign.sections.slice(CORE_CHARACTER_SECTIONS.length).map(
+        (section) => section.title
+      )
+    : [];
+  const submittedTitles = Array.isArray(value) ? value : [];
+  const seen = new Set<string>();
+
+  return [...currentTitles, ...submittedTitles]
+    .map((title) =>
+      typeof title === "string"
+        ? title
+            .replace(/[\u0000-\u001f\u007f]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, MAX_SECTION_TITLE_LENGTH)
+        : ""
+    )
+    .filter((title) => {
+      if (!title) return false;
+      const normalized = title.toLocaleLowerCase("ko-KR");
+      if (coreTitles.has(normalized) || seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    })
+    .slice(0, MAX_REQUESTED_SECTIONS);
 }
 
 function getGeminiClients(): GoogleGenAI[] {
@@ -70,7 +111,8 @@ async function generateDesign(
   client: GoogleGenAI,
   message: string,
   history: CharacterDesignerMessage[],
-  currentDesign: CharacterDesign | null
+  currentDesign: CharacterDesign | null,
+  requestedSections: string[]
 ): Promise<CharacterDesignerResult> {
   const contents = [
     ...history.map((item) => ({
@@ -87,7 +129,7 @@ async function generateDesign(
     model: MODEL,
     contents,
     config: {
-      systemInstruction: CHARACTER_DESIGNER_SYSTEM_PROMPT,
+      systemInstruction: buildCharacterDesignerSystemPrompt(requestedSections),
       responseMimeType: "application/json",
       responseJsonSchema: CHARACTER_DESIGN_RESPONSE_SCHEMA,
       temperature: 0.75,
@@ -100,7 +142,11 @@ async function generateDesign(
     throw new Error("Gemini returned an empty character design response");
   }
 
-  return parseCharacterDesignerResponse(response.text);
+  return ensureRequestedCharacterSections(
+    parseCharacterDesignerResponse(response.text),
+    currentDesign,
+    requestedSections
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -133,6 +179,10 @@ export async function POST(req: NextRequest) {
     const currentDesign = body.currentDesign
       ? normalizeCharacterDesign(body.currentDesign)
       : null;
+    const requestedSections = normalizeRequestedSections(
+      body.requestedSections,
+      currentDesign
+    );
 
     let lastError: unknown;
     for (const client of getGeminiClients()) {
@@ -141,7 +191,8 @@ export async function POST(req: NextRequest) {
           client,
           message,
           history,
-          currentDesign
+          currentDesign,
+          requestedSections
         );
         return NextResponse.json(result);
       } catch (error) {
