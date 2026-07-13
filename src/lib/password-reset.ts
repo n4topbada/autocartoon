@@ -79,16 +79,18 @@ export async function issueTemporaryPassword(
     const resend = new Resend(apiKey);
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://wonybananabot.vercel.app";
+    const issueReference = issuedAt.getTime().toString(36).toUpperCase();
     const result = await resend.emails.send({
       from: process.env.PASSWORD_EMAIL_FROM || DEFAULT_FROM,
       to: user.email,
-      subject: "[워니바나나봇] 임시 비밀번호 발급",
+      subject: `[워니바나나봇] 임시 비밀번호 발급 [${issueReference}]`,
       text: `${user.name || user.email}님,
 
 아래 한 줄만 선택해 복사하세요.
 
 ${temporaryPassword}
 
+요청 번호: ${issueReference}
 이 비밀번호는 30분 동안 사용할 수 있습니다.
 여러 번 요청했다면 가장 최근에 받은 비밀번호만 유효합니다.
 로그인 후 설정에서 새 비밀번호로 변경해주세요.
