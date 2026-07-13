@@ -7,6 +7,7 @@ export interface SessionData {
   userId: string;
   email: string;
   role: string;
+  usedTemporaryPassword?: boolean;
 }
 
 function getSessionOptions(): SessionOptions {

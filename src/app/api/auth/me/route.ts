@@ -56,5 +56,6 @@ export async function GET() {
     credits: user.credits,
     tierUsed,
     tierLimit: monthlyLimit === Infinity ? -1 : monthlyLimit,
+    mustChangePassword: session.usedTemporaryPassword === true,
   });
 }

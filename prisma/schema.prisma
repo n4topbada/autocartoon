@@ -105,20 +105,24 @@ model GenerationRequest {
 }
 
 model User {
-  id                String    @id @default(cuid())
-  email             String    @unique
-  passwordHash      String
-  name              String?
-  role              String    @default("user")
-  tier              String    @default("free")
-  credits           Int       @default(0)
-  tierUsedThisMonth Int       @default(0)
-  tierResetAt       DateTime  @default(now())
-  emailVerified     Boolean   @default(false)
-  verifyToken       String?   @unique
-  verifyTokenExp    DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                         String    @id @default(cuid())
+  email                      String    @unique
+  passwordHash               String
+  name                       String?
+  role                       String    @default("user")
+  tier                       String    @default("free")
+  credits                    Int       @default(0)
+  tierUsedThisMonth          Int       @default(0)
+  tierResetAt                DateTime  @default(now())
+  emailVerified              Boolean   @default(false)
+  verifyToken                String?   @unique
+  verifyTokenExp             DateTime?
+  temporaryPasswordHash      String?
+  temporaryPasswordExpiresAt DateTime?
+  temporaryPasswordIssuedAt  DateTime?
+  passwordChangedAt          DateTime?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
   presets            CharacterPreset[]
   characterGroups    CharacterGroup[]

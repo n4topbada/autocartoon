@@ -57,6 +57,26 @@
   gap: 6px;
 }
 
+.passwordLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.forgotButton {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #93c5fd;
+  font-size: 12px;
+}
+
+.forgotButton:hover {
+  color: #bfdbfe;
+  text-decoration: underline;
+}
+
 .label {
   font-size: 13px;
   font-weight: 600;
@@ -89,6 +109,10 @@
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .loginBtn:hover:not(:disabled) {
@@ -163,12 +187,47 @@
 }
 
 .modal {
+  position: relative;
   background: #111827;
   border: 1px solid #1f2937;
   border-radius: 16px;
   padding: 32px;
   width: 400px;
   max-width: 90vw;
+}
+
+.modalClose {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #9ca3af;
+}
+
+.modalClose:hover {
+  background: #1f2937;
+  color: #f3f4f6;
+}
+
+.modalIcon {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(96, 165, 250, 0.4);
+  border-radius: 8px;
+  background: rgba(96, 165, 250, 0.1);
+  color: #93c5fd;
 }
 
 .modalTitle {
@@ -185,4 +244,22 @@
   text-align: center;
   line-height: 1.5;
   margin: 0;
+}
+
+.modalDescription {
+  margin: -12px 0 22px;
+  color: #9ca3af;
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 30px 20px;
+  }
+
+  .modal {
+    padding: 28px 20px;
+  }
 }

@@ -1,0 +1,5 @@
+ALTER TABLE "User"
+ADD COLUMN IF NOT EXISTS "temporaryPasswordHash" TEXT,
+ADD COLUMN IF NOT EXISTS "temporaryPasswordExpiresAt" TIMESTAMP(3),
+ADD COLUMN IF NOT EXISTS "temporaryPasswordIssuedAt" TIMESTAMP(3),
+ADD COLUMN IF NOT EXISTS "passwordChangedAt" TIMESTAMP(3);

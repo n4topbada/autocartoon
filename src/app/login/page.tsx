@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { LuKeyRound, LuX } from "react-icons/lu";
 import styles from "./page.module.css";
+
+const MIN_PASSWORD_LENGTH = 10;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,7 +14,6 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // 회원가입 모달
   const [showRegister, setShowRegister] = useState(false);
   const [regEmail, setRegEmail] = useState("");
   const [regPassword, setRegPassword] = useState("");
@@ -20,37 +22,55 @@ export default function LoginPage() {
   const [regError, setRegError] = useState("");
   const [regLoading, setRegLoading] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotMessage, setForgotMessage] = useState("");
+  const [forgotError, setForgotError] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+
+  useEffect(() => {
+    if (!showRegister && !showForgot) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowRegister(false);
+        setShowForgot(false);
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [showForgot, showRegister]);
+
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
+      const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "로그인에 실패했습니다.");
       router.push("/");
       router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "로그인 실패");
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : "로그인 실패");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleRegister = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     setRegError("");
     setRegMessage("");
 
-    if (regPassword.length < 8) {
-      setRegError("비밀번호는 8자 이상이어야 합니다.");
+    if (regPassword.length < MIN_PASSWORD_LENGTH) {
+      setRegError(`비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`);
       return;
     }
-    if (!/[a-zA-Z]/.test(regPassword) || !/[0-9]/.test(regPassword)) {
+    if (!/[A-Za-z]/.test(regPassword) || !/[0-9]/.test(regPassword)) {
       setRegError("비밀번호는 영문과 숫자를 모두 포함해야 합니다.");
       return;
     }
@@ -61,27 +81,66 @@ export default function LoginPage() {
 
     setRegLoading(true);
     try {
-      const res = await fetch("/api/auth/register", {
+      const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: regEmail, password: regPassword }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const data = (await response.json()) as {
+        autoVerified?: boolean;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(data.error || "가입에 실패했습니다.");
 
+      setRegMessage(
+        data.autoVerified ? "가입 완료! 로그인해주세요." : "가입 완료! 이메일을 확인해주세요."
+      );
       if (data.autoVerified) {
-        setRegMessage("가입 완료! 로그인해주세요.");
         setTimeout(() => {
           setShowRegister(false);
-          setEmail(regEmail);
+          setEmail(regEmail.trim().toLowerCase());
         }, 1500);
-      } else {
-        setRegMessage("가입 완료! 이메일을 확인해주세요.");
       }
-    } catch (err) {
-      setRegError(err instanceof Error ? err.message : "가입 실패");
+    } catch (registerError) {
+      setRegError(registerError instanceof Error ? registerError.message : "가입 실패");
     } finally {
       setRegLoading(false);
+    }
+  };
+
+  const openForgotPassword = () => {
+    setForgotEmail(email);
+    setForgotError("");
+    setForgotMessage("");
+    setShowForgot(true);
+  };
+
+  const handleForgotPassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setForgotError("");
+    setForgotMessage("");
+    setForgotLoading(true);
+    try {
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      const data = (await response.json()) as { message?: string; error?: string };
+      if (!response.ok) {
+        throw new Error(data.error || "임시 비밀번호 발급 요청에 실패했습니다.");
+      }
+      setForgotMessage(
+        data.message || "등록된 계정이면 임시 비밀번호를 이메일로 보냈습니다."
+      );
+    } catch (forgotPasswordError) {
+      setForgotError(
+        forgotPasswordError instanceof Error
+          ? forgotPasswordError.message
+          : "임시 비밀번호 발급 요청에 실패했습니다."
+      );
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -96,28 +155,41 @@ export default function LoginPage() {
 
         <form className={styles.form} onSubmit={handleLogin}>
           <div className={styles.field}>
-            <label className={styles.label}>이메일</label>
+            <label className={styles.label} htmlFor="login-email">이메일</label>
             <input
+              id="login-email"
               className={styles.input}
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(event) => setEmail(event.target.value)}
               placeholder="you@example.com"
+              autoComplete="username"
               required
             />
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>비밀번호</label>
+            <div className={styles.passwordLabelRow}>
+              <label className={styles.label} htmlFor="login-password">비밀번호</label>
+              <button
+                className={styles.forgotButton}
+                type="button"
+                onClick={openForgotPassword}
+              >
+                비밀번호를 잊으셨나요?
+              </button>
+            </div>
             <input
+              id="login-password"
               className={styles.input}
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(event) => setPassword(event.target.value)}
               placeholder="비밀번호"
+              autoComplete="current-password"
               required
             />
           </div>
-          {error && <p className={styles.error}>{error}</p>}
+          {error && <p className={styles.error} role="alert">{error}</p>}
           <button className={styles.loginBtn} type="submit" disabled={loading}>
             {loading ? "로그인 중..." : "로그인"}
           </button>
@@ -125,68 +197,77 @@ export default function LoginPage() {
 
         <div className={styles.divider} />
 
-        <button
-          className={styles.registerBtn}
-          onClick={() => setShowRegister(true)}
-        >
+        <button className={styles.registerBtn} onClick={() => setShowRegister(true)}>
           신규 가입
         </button>
       </div>
 
-      {/* 회원가입 모달 */}
       {showRegister && (
-        <div
-          className={styles.modalOverlay}
-          onClick={() => setShowRegister(false)}
-        >
+        <div className={styles.modalOverlay} onClick={() => setShowRegister(false)}>
           <div
             className={styles.modal}
-            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="register-title"
+            onClick={(event) => event.stopPropagation()}
           >
-            <h2 className={styles.modalTitle}>신규 가입</h2>
+            <button
+              className={styles.modalClose}
+              type="button"
+              onClick={() => setShowRegister(false)}
+              aria-label="회원가입 닫기"
+              title="닫기"
+            >
+              <LuX size={18} />
+            </button>
+            <h2 id="register-title" className={styles.modalTitle}>신규 가입</h2>
             <form className={styles.form} onSubmit={handleRegister}>
               <div className={styles.field}>
-                <label className={styles.label}>이메일</label>
+                <label className={styles.label} htmlFor="register-email">이메일</label>
                 <input
+                  id="register-email"
                   className={styles.input}
                   type="email"
                   value={regEmail}
-                  onChange={(e) => setRegEmail(e.target.value)}
+                  onChange={(event) => setRegEmail(event.target.value)}
                   placeholder="you@example.com"
+                  autoComplete="email"
                   required
                 />
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>비밀번호</label>
+                <label className={styles.label} htmlFor="register-password">비밀번호</label>
                 <input
+                  id="register-password"
                   className={styles.input}
                   type="password"
                   value={regPassword}
-                  onChange={(e) => setRegPassword(e.target.value)}
-                  placeholder="영문+숫자 혼합 8자 이상"
+                  onChange={(event) => setRegPassword(event.target.value)}
+                  placeholder="영문+숫자 혼합 10자 이상"
+                  autoComplete="new-password"
                   required
-                  minLength={8}
+                  minLength={MIN_PASSWORD_LENGTH}
                 />
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>비밀번호 확인</label>
+                <label className={styles.label} htmlFor="register-confirm">비밀번호 확인</label>
                 <input
+                  id="register-confirm"
                   className={styles.input}
                   type="password"
                   value={regConfirm}
-                  onChange={(e) => setRegConfirm(e.target.value)}
+                  onChange={(event) => setRegConfirm(event.target.value)}
                   placeholder="비밀번호 재입력"
+                  autoComplete="new-password"
                   required
                 />
               </div>
-              <p className={styles.notice}>추후 이메일 인증절차로 회원등급관리가 되니 실사용하시는 이메일 주소 입력 바랍니다.</p>
-              {regError && <p className={styles.error}>{regError}</p>}
-              {regMessage && <p className={styles.success}>{regMessage}</p>}
-              <button
-                className={styles.loginBtn}
-                type="submit"
-                disabled={regLoading}
-              >
+              <p className={styles.notice}>
+                회원등급 관리에 사용할 실제 이메일 주소를 입력해주세요.
+              </p>
+              {regError && <p className={styles.error} role="alert">{regError}</p>}
+              {regMessage && <p className={styles.success} role="status">{regMessage}</p>}
+              <button className={styles.loginBtn} type="submit" disabled={regLoading}>
                 {regLoading ? "가입 중..." : "가입하기"}
               </button>
               <button
@@ -195,6 +276,58 @@ export default function LoginPage() {
                 onClick={() => setShowRegister(false)}
               >
                 취소
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showForgot && (
+        <div className={styles.modalOverlay} onClick={() => setShowForgot(false)}>
+          <div
+            className={styles.modal}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="forgot-password-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              className={styles.modalClose}
+              type="button"
+              onClick={() => setShowForgot(false)}
+              aria-label="임시 비밀번호 발급 닫기"
+              title="닫기"
+            >
+              <LuX size={18} />
+            </button>
+            <div className={styles.modalIcon} aria-hidden="true">
+              <LuKeyRound size={22} />
+            </div>
+            <h2 id="forgot-password-title" className={styles.modalTitle}>
+              임시 비밀번호 발급
+            </h2>
+            <p className={styles.modalDescription}>
+              가입한 이메일로 30분 동안 사용할 수 있는 임시 비밀번호를 보냅니다.
+            </p>
+            <form className={styles.form} onSubmit={handleForgotPassword}>
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="forgot-email">이메일</label>
+                <input
+                  id="forgot-email"
+                  className={styles.input}
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(event) => setForgotEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  required
+                />
+              </div>
+              {forgotError && <p className={styles.error} role="alert">{forgotError}</p>}
+              {forgotMessage && <p className={styles.success} role="status">{forgotMessage}</p>}
+              <button className={styles.loginBtn} type="submit" disabled={forgotLoading}>
+                <LuKeyRound size={16} aria-hidden="true" />
+                {forgotLoading ? "발급 중..." : "임시 비밀번호 받기"}
               </button>
             </form>
           </div>

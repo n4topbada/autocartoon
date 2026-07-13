@@ -11,6 +11,7 @@ export interface AuthUser {
   credits: number;
   tierUsed: number;
   tierLimit: number; // -1 = unlimited
+  mustChangePassword: boolean;
 }
 
 interface AuthContextType {

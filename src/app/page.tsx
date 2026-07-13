@@ -26,6 +26,7 @@ import {
   LuInstagram,
   LuShieldAlert,
   LuUserRoundCog,
+  LuSettings,
 } from "react-icons/lu";
 import { resizeFromFile, fetchImageFromUrl } from "@/lib/image-resize";
 import Board from "@/components/Board";
@@ -36,6 +37,7 @@ import CanvasEditor from "@/components/CanvasEditor";
 import InstagramTab from "@/components/InstagramTab";
 import MyContents from "@/components/MyContents";
 import CharacterDesigner from "@/components/CharacterDesigner";
+import AccountSettings from "@/components/AccountSettings";
 import { canAccessCharacterDesigner } from "@/lib/character-designer-access";
 
 type Tab =
@@ -44,7 +46,8 @@ type Tab =
   | "background"
   | "board"
   | "instagram"
-  | "contents";
+  | "contents"
+  | "settings";
 
 interface PresetImageData {
   id: string;
@@ -260,6 +263,10 @@ export default function Home() {
   // 챗봇
   const [chatOpen, setChatOpen] = useState(false);
   const [showDesignerAccessDenied, setShowDesignerAccessDenied] = useState(false);
+
+  useEffect(() => {
+    if (user?.mustChangePassword) setActiveTab("settings");
+  }, [user?.mustChangePassword]);
 
   const handleDesignerTabClick = useCallback(() => {
     if (!canAccessCharacterDesigner(user)) {
@@ -1001,6 +1008,13 @@ export default function Home() {
             <LuLayoutList size={14} />
             My Contents
           </button>
+          <button
+            className={`${styles.tab} ${activeTab === "settings" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("settings")}
+          >
+            <LuSettings size={14} />
+            설정
+          </button>
           {/* Instagram 탭: Meta App 설정 후 주석 해제 (INSTAGRAM_SETUP.md 참조) */}
         </nav>
         <div className={styles.headerRight}>
@@ -1039,6 +1053,8 @@ export default function Home() {
           <InstagramTab />
         ) : activeTab === "contents" ? (
           <MyContents galleryImages={flatImages.map((img) => ({ id: img.id, dataUrl: img.dataUrl, thumbnailUrl: img.thumbnailUrl }))} />
+        ) : activeTab === "settings" ? (
+          <AccountSettings />
         ) : (
         <>
         {/* 좌측 패널 */}
