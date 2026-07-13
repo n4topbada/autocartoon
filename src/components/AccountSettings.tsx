@@ -2,10 +2,13 @@
 
 import { useState, type FormEvent } from "react";
 import {
+  LuCircleAlert,
   LuCheck,
   LuEye,
   LuEyeOff,
   LuKeyRound,
+  LuLoaderCircle,
+  LuRefreshCw,
   LuShieldCheck,
   LuUserRound,
 } from "react-icons/lu";
@@ -21,8 +24,22 @@ const TIER_LABELS: Record<string, string> = {
   enterprise: "Enterprise",
 };
 
+function AccountSettingsHeader() {
+  return (
+    <header className={styles.pageHeader}>
+      <div>
+        <p className={styles.eyebrow}>Account</p>
+        <h2 id="account-settings-title" className={styles.title}>
+          계정 설정
+        </h2>
+      </div>
+      <LuShieldCheck className={styles.headerIcon} aria-hidden="true" />
+    </header>
+  );
+}
+
 export default function AccountSettings() {
-  const { user, refresh } = useAuth();
+  const { user, loading, refresh } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -78,19 +95,44 @@ export default function AccountSettings() {
     }
   };
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <section className={styles.page} aria-labelledby="account-settings-title">
+        <AccountSettingsHeader />
+        <div
+          className={styles.statePanel}
+          role={loading ? "status" : "alert"}
+          aria-live="polite"
+        >
+          {loading ? (
+            <>
+              <LuLoaderCircle className={styles.spinner} aria-hidden="true" />
+              <div>
+                <strong>계정 정보를 불러오는 중입니다.</strong>
+                <span>잠시만 기다려주세요.</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <LuCircleAlert className={styles.stateIcon} aria-hidden="true" />
+              <div>
+                <strong>계정 정보를 불러오지 못했습니다.</strong>
+                <span>로그인 상태를 다시 확인해주세요.</span>
+              </div>
+              <button type="button" onClick={() => void refresh()}>
+                <LuRefreshCw size={16} aria-hidden="true" />
+                다시 시도
+              </button>
+            </>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className={styles.page} aria-labelledby="account-settings-title">
-      <header className={styles.pageHeader}>
-        <div>
-          <p className={styles.eyebrow}>Account</p>
-          <h2 id="account-settings-title" className={styles.title}>
-            계정 설정
-          </h2>
-        </div>
-        <LuShieldCheck className={styles.headerIcon} aria-hidden="true" />
-      </header>
+      <AccountSettingsHeader />
 
       {user.mustChangePassword && (
         <div className={styles.temporaryNotice} role="status">

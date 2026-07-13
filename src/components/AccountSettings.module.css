@@ -37,6 +37,75 @@
   color: #34d399;
 }
 
+.statePanel {
+  max-width: 960px;
+  min-height: 148px;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-dim);
+}
+
+.statePanel div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.statePanel strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.statePanel span {
+  font-size: 12px;
+}
+
+.statePanel button {
+  min-height: 36px;
+  margin-left: 10px;
+  padding: 0 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  background: transparent;
+  color: #93c5fd;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.statePanel button:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.stateIcon,
+.spinner {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  color: #60a5fa;
+}
+
+.spinner {
+  animation: settings-spin 0.9s linear infinite;
+}
+
+@keyframes settings-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .temporaryNotice {
   max-width: 960px;
   margin: 0 auto 20px;
@@ -247,5 +316,15 @@
 
   .panel {
     padding: 18px;
+  }
+
+  .statePanel {
+    min-height: 168px;
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .statePanel button {
+    margin-left: 0;
   }
 }

@@ -3,12 +3,14 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { LuKeyRound, LuX } from "react-icons/lu";
+import { useAuth } from "@/components/AuthProvider";
 import styles from "./page.module.css";
 
 const MIN_PASSWORD_LENGTH = 10;
 
 export default function LoginPage() {
   const router = useRouter();
+  const { refresh } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -52,8 +54,8 @@ export default function LoginPage() {
       });
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error || "로그인에 실패했습니다.");
-      router.push("/");
-      router.refresh();
+      await refresh();
+      router.replace("/");
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "로그인 실패");
     } finally {
