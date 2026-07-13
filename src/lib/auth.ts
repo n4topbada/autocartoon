@@ -1,5 +1,6 @@
 import { getSession } from "./session";
 import { prisma } from "./prisma";
+import { canAccessCharacterDesigner } from "./character-designer-access";
 
 export async function requireAuth() {
   const session = await getSession();
@@ -15,6 +16,20 @@ export async function requireAdmin() {
     throw new AuthError("관리자 권한이 필요합니다.", 403);
   }
   return session;
+}
+
+export async function requireCharacterDesigner() {
+  const session = await requireAuth();
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { id: true, email: true, role: true },
+  });
+
+  if (!user || !canAccessCharacterDesigner(user)) {
+    throw new AuthError("캐릭터 설계 기능에 접근할 권한이 없습니다.", 403);
+  }
+
+  return user;
 }
 
 export async function getCurrentUser() {

@@ -74,6 +74,13 @@
   display: flex;
   gap: 4px;
   margin-left: auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabNav::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
@@ -1466,6 +1473,36 @@
   cursor: not-allowed;
 }
 
+.accessModal {
+  width: min(400px, 90vw);
+  align-items: center;
+  gap: 14px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.accessIcon {
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(246, 195, 68, 0.42);
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: #f6c344;
+  background: rgba(246, 195, 68, 0.08);
+}
+
+.accessDescription {
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.accessModal .modalActions {
+  width: 100%;
+  justify-content: center;
+}
+
 /* 반응형 */
 /* 태블릿 */
 @media (max-width: 1024px) {
@@ -1483,7 +1520,7 @@
 @media (max-width: 768px) {
   .header { flex-wrap: wrap; padding: 8px 12px; }
   .logo { font-size: 14px; }
-  .tabNav { order: 3; width: 100%; justify-content: center; }
+  .tabNav { order: 3; width: 100%; justify-content: flex-start; }
   .headerRight { gap: 6px; }
 
   .main { flex-direction: column; }

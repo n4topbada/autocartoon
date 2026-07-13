@@ -24,6 +24,8 @@ import {
   LuTag,
   LuShare2,
   LuInstagram,
+  LuShieldAlert,
+  LuUserRoundCog,
 } from "react-icons/lu";
 import { resizeFromFile, fetchImageFromUrl } from "@/lib/image-resize";
 import Board from "@/components/Board";
@@ -33,8 +35,16 @@ import PromptInput from "@/components/PromptInput";
 import CanvasEditor from "@/components/CanvasEditor";
 import InstagramTab from "@/components/InstagramTab";
 import MyContents from "@/components/MyContents";
+import CharacterDesigner from "@/components/CharacterDesigner";
+import { canAccessCharacterDesigner } from "@/lib/character-designer-access";
 
-type Tab = "character" | "background" | "board" | "instagram" | "contents";
+type Tab =
+  | "character"
+  | "designer"
+  | "background"
+  | "board"
+  | "instagram"
+  | "contents";
 
 interface PresetImageData {
   id: string;
@@ -249,6 +259,24 @@ export default function Home() {
 
   // 챗봇
   const [chatOpen, setChatOpen] = useState(false);
+  const [showDesignerAccessDenied, setShowDesignerAccessDenied] = useState(false);
+
+  const handleDesignerTabClick = useCallback(() => {
+    if (!canAccessCharacterDesigner(user)) {
+      setShowDesignerAccessDenied(true);
+      return;
+    }
+    setActiveTab("designer");
+  }, [user]);
+
+  useEffect(() => {
+    if (!showDesignerAccessDenied) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowDesignerAccessDenied(false);
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [showDesignerAccessDenied]);
 
   // 캐릭터 업로드 상태
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -948,6 +976,13 @@ export default function Home() {
             캐릭터 생성
           </button>
           <button
+            className={`${styles.tab} ${activeTab === "designer" ? styles.tabActive : ""}`}
+            onClick={handleDesignerTabClick}
+          >
+            <LuUserRoundCog size={14} />
+            캐릭터 설계
+          </button>
+          <button
             className={`${styles.tab} ${activeTab === "background" ? styles.tabActive : ""}`}
             onClick={() => setActiveTab("background")}
           >
@@ -996,7 +1031,9 @@ export default function Home() {
       </header>
 
       <main className={styles.main}>
-        {activeTab === "background" ? (
+        {activeTab === "designer" ? (
+          <CharacterDesigner />
+        ) : activeTab === "background" ? (
           <BackgroundGenerator />
         ) : activeTab === "board" ? (
           <Board />
@@ -1707,6 +1744,42 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {showDesignerAccessDenied && (
+        <div
+          className={styles.modalOverlay}
+          onClick={() => setShowDesignerAccessDenied(false)}
+        >
+          <div
+            className={`${styles.modal} ${styles.accessModal}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="designer-access-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className={styles.accessIcon} aria-hidden="true">
+              <LuShieldAlert size={24} />
+            </span>
+            <h2 id="designer-access-title" className={styles.modalTitle}>
+              접근 권한이 없습니다
+            </h2>
+            <p className={styles.accessDescription}>
+              캐릭터 설계는 wony@wonyframe.com 계정과 관리자만 사용할 수 있습니다.
+            </p>
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={styles.modalConfirm}
+                onClick={() => setShowDesignerAccessDenied(false)}
+                autoFocus
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 챗봇 패널 */}
       <ChatBot open={chatOpen} onClose={() => setChatOpen(false)} />
 

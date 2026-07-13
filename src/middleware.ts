@@ -30,6 +30,12 @@ export async function middleware(request: NextRequest) {
 
   // 비인증 → 로그인 리다이렉트
   if (!session.userId) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "로그인이 필요합니다." },
+        { status: 401 }
+      );
+    }
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
