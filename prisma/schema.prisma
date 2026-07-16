@@ -116,6 +116,7 @@ model GenerationRequest {
 model User {
   id                         String    @id @default(cuid())
   email                      String    @unique
+  kakaoId                    String?   @unique
   passwordHash               String
   name                       String?
   role                       String    @default("user")
@@ -130,6 +131,7 @@ model User {
   temporaryPasswordExpiresAt DateTime?
   temporaryPasswordIssuedAt  DateTime?
   passwordChangedAt          DateTime?
+  welcomeCreditsGrantedAt    DateTime?
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
 
@@ -148,6 +150,7 @@ model User {
   contents           Content[]
   generationJobs     GenerationJob[]
   creditLedger       CreditLedger[]
+  creditPayments     CreditPayment[]
   creativeProjects   CreativeProject[]
   savedProjectBriefs SavedProjectBrief[]
   sessions           UserSession[]
@@ -187,6 +190,7 @@ model GenerationJob {
   runId                  String?   @unique
   operationName          String?
   creditSource           String?
+  creditUnits            Int?
   estimatedCostUsdMicros Int?
   startedAt              DateTime?
   completedAt            DateTime?
@@ -227,20 +231,45 @@ model GenerationArtifact {
 }
 
 model CreditLedger {
-  id        String   @id @default(cuid())
-  userId    String
-  jobId     String
-  action    String
-  source    String
-  units     Int      @default(1)
-  note      String?
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  userId       String
+  jobId        String?
+  referenceKey String   @unique
+  action       String
+  source       String
+  units        Int      @default(1)
+  balanceAfter Int?
+  note         String?
+  createdAt    DateTime @default(now())
 
-  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  job  GenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  GenerationJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
 
   @@unique([jobId, action])
   @@index([userId, createdAt])
+}
+
+model CreditPayment {
+  id                 String    @id @default(cuid())
+  userId             String
+  provider           String    @default("kakaopay")
+  productCode        String
+  credits            Int
+  amountKrw          Int
+  status             String    @default("created")
+  partnerOrderId     String    @unique
+  providerTid        String?   @unique
+  providerApprovalId String?
+  paymentMethod      String?
+  failureReason      String?   @db.Text
+  approvedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status, updatedAt])
 }
 
 model CreativeProject {

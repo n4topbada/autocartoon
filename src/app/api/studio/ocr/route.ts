@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuth } from "@/lib/auth";
-import {
-  generatePlatformTextContent,
-  getPublicPlatformAIError,
-} from "@/lib/platform-ai";
+import { AI_CREDIT_COSTS } from "@/lib/credit-products";
+import { isCreditError, withCreditCharge } from "@/lib/credit-service";
+import { generatePlatformTextContent, getPublicPlatformAIError } from "@/lib/platform-ai";
 
 export const maxDuration = 60;
 
@@ -16,7 +15,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAuth();
+    const session = await requireAuth();
     const body: unknown = await req.json().catch(() => null);
     if (!isRecord(body) || !isRecord(body.image)) {
       return NextResponse.json({ error: "추출할 이미지가 필요합니다." }, { status: 400 });
@@ -33,23 +32,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "4MB 이하 PNG, JPG, WEBP 이미지를 사용해주세요." }, { status: 400 });
     }
 
-    const response = await generatePlatformTextContent({
-      contents: [{
-        role: "user",
-        parts: [
-          { text: "이미지에 실제로 보이는 글자만 읽어 원래 줄바꿈 순서대로 출력하세요. 설명, 마크다운, 따옴표, 추측한 문장은 넣지 마세요. 글자가 없으면 빈 문자열을 출력하세요." },
-          { inlineData: { data: base64, mimeType } },
-        ],
-      }],
-      config: {
-        temperature: 0.1,
-        maxOutputTokens: 2_048,
-        abortSignal: AbortSignal.timeout(50_000),
-      },
-    });
-    return NextResponse.json({ text: response.text?.trim() || "" });
+    const text = await withCreditCharge(
+      session.userId,
+      { units: AI_CREDIT_COSTS.ocr, source: "ocr" },
+      async () => {
+        const response = await generatePlatformTextContent({
+          contents: [{
+            role: "user",
+            parts: [
+              { text: "이미지에 실제로 보이는 글자만 읽어 원래 줄바꿈 순서대로 출력하세요. 설명, 마크다운, 추측은 추가하지 마세요. 글자가 없으면 빈 문자열을 출력하세요." },
+              { inlineData: { data: base64, mimeType } },
+            ],
+          }],
+          config: {
+            temperature: 0.1,
+            maxOutputTokens: 2_048,
+            abortSignal: AbortSignal.timeout(50_000),
+          },
+        });
+        return response.text?.trim() || "";
+      }
+    );
+    return NextResponse.json({ text });
   } catch (error) {
     if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (isCreditError(error)) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error("Canvas OCR error:", error);

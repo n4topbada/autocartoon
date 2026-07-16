@@ -1,23 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateContentForBackground } from "@/lib/gemini";
 import { requireAuth, AuthError } from "@/lib/auth";
-import { checkAndDeductCredit, refundDeductedCredit } from "@/lib/credit-service";
+import { AI_CREDIT_COSTS } from "@/lib/credit-products";
+import { isCreditError, withCreditCharge } from "@/lib/credit-service";
+import { generateContentForBackground } from "@/lib/gemini";
 import { getPublicPlatformAIError } from "@/lib/platform-ai";
 
-// Allow enough time for image generation on Vercel.
 export const maxDuration = 120;
 
 const MAX_ATTEMPTS_PER_IMAGE = 2;
+const MAX_PROMPT_LENGTH = 10_000;
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const MAX_BASE64_LENGTH = Math.ceil(MAX_IMAGE_BYTES / 3) * 4;
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 type InputImage = { base64: string; mimeType: string };
-type DeductResult = Awaited<ReturnType<typeof checkAndDeductCredit>>;
 
-async function generateBackgroundImage(args: {
-  prompt: string;
-  inputImage: InputImage;
-}) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function generateBackgroundImage(args: { prompt: string; inputImage: InputImage }) {
   const errors: string[] = [];
-
   for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_IMAGE; attempt++) {
     try {
       const result = await generateContentForBackground(args);
@@ -27,74 +30,76 @@ async function generateBackgroundImage(args: {
       errors.push(error instanceof Error ? error.message : "Unknown generation error");
     }
   }
-
-  throw new Error(errors[errors.length - 1] || "모델이 이미지를 반환하지 않았습니다.");
+  throw new Error(errors.at(-1) || "모델이 이미지를 반환하지 않았습니다.");
 }
 
 export async function POST(req: NextRequest) {
-  let deducted: DeductResult | null = null;
-  let sessionUserId: string | null = null;
-
   try {
     const session = await requireAuth();
-    sessionUserId = session.userId;
-
-    const body = await req.json();
-    const { inputImage, prompt, count } = body as {
-      inputImage: InputImage;
-      prompt: string;
-      count: number;
-    };
-
-    if (!inputImage?.base64 || !prompt) {
-      return NextResponse.json(
-        { error: "inputImage와 prompt는 필수입니다." },
-        { status: 400 }
-      );
+    const body: unknown = await req.json().catch(() => null);
+    if (!isRecord(body) || !isRecord(body.inputImage)) {
+      return NextResponse.json({ error: "입력 이미지와 프롬프트가 필요합니다." }, { status: 400 });
+    }
+    const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
+    const base64 = typeof body.inputImage.base64 === "string" ? body.inputImage.base64 : "";
+    const mimeType = typeof body.inputImage.mimeType === "string" ? body.inputImage.mimeType : "";
+    if (!prompt || prompt.length > MAX_PROMPT_LENGTH) {
+      return NextResponse.json({ error: "프롬프트는 10,000자 이하로 입력해주세요." }, { status: 400 });
+    }
+    if (
+      !base64 ||
+      base64.length > MAX_BASE64_LENGTH ||
+      base64.length % 4 !== 0 ||
+      !/^[A-Za-z0-9+/]*={0,2}$/.test(base64) ||
+      Buffer.byteLength(base64, "base64") > MAX_IMAGE_BYTES ||
+      !ALLOWED_IMAGE_TYPES.has(mimeType)
+    ) {
+      return NextResponse.json({ error: "4MB 이하 PNG, JPG, WEBP 이미지를 사용해주세요." }, { status: 400 });
     }
 
-    const n = Math.max(1, Math.min(5, count || 1));
-
-    const creditResult = await checkAndDeductCredit(session.userId);
-    if (!creditResult.ok) {
-      return NextResponse.json({ error: creditResult.error }, { status: 402 });
-    }
-    deducted = creditResult;
-
+    const count = Math.max(1, Math.min(5, Number(body.count) || 1));
+    const inputImage = { base64, mimeType };
     const results = await Promise.allSettled(
-      Array.from({ length: n }, () => generateBackgroundImage({ prompt, inputImage }))
+      Array.from({ length: count }, () =>
+        withCreditCharge(
+          session.userId,
+          { units: AI_CREDIT_COSTS.image1k, source: "background-image" },
+          () => generateBackgroundImage({ prompt, inputImage })
+        )
+      )
     );
 
-    const images: { base64: string; mimeType: string }[] = [];
-    const errors: string[] = [];
-
-    for (const result of results) {
-      if (result.status === "fulfilled") {
-        images.push(result.value);
-      } else {
-        errors.push(result.reason?.message || "알 수 없는 오류");
-      }
-    }
+    const images = results
+      .filter((result): result is PromiseFulfilledResult<{ base64: string; mimeType: string }> => result.status === "fulfilled")
+      .map((result) => result.value);
+    const failures = results
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map((result) => result.reason as unknown);
 
     if (images.length === 0) {
-      await refundDeductedCredit(session.userId, deducted.source);
-      deducted = null;
+      const creditFailure = failures.find(isCreditError);
+      if (creditFailure) {
+        return NextResponse.json({ error: creditFailure.message }, { status: creditFailure.status });
+      }
       return NextResponse.json(
-        { error: getPublicPlatformAIError(errors[0], "이미지 생성에 실패했습니다. 다시 시도해주세요.") },
+        { error: getPublicPlatformAIError(failures[0], "이미지 생성에 실패했습니다. 다시 시도해주세요.") },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ images, errors: errors.length > 0 ? errors : undefined });
+    return NextResponse.json({
+      images,
+      errors: failures.length
+        ? failures.map((error) => getPublicPlatformAIError(error, "일부 이미지 생성에 실패했습니다."))
+        : undefined,
+    });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-
-    if (sessionUserId && deducted?.ok) {
-      await refundDeductedCredit(sessionUserId, deducted.source);
+    if (isCreditError(error)) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
-
     console.error("Background generation error:", error);
     return NextResponse.json(
       { error: getPublicPlatformAIError(error, "배경 이미지 생성에 실패했습니다. 다시 시도해주세요.") },

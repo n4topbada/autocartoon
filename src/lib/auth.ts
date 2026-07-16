@@ -68,10 +68,7 @@ export async function getCurrentUser() {
       email: true,
       name: true,
       role: true,
-      tier: true,
       credits: true,
-      tierUsedThisMonth: true,
-      tierResetAt: true,
     },
   });
   return user;

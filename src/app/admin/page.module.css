@@ -1,221 +1,32 @@
-.container {
-  min-height: 100vh;
-  background: #0a0a0a;
-  padding: 24px;
-  color: #e5e7eb;
-}
-
-.loading {
-  text-align: center;
-  padding: 80px;
-  color: #6b7280;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  max-width: 1400px;
-  margin: 0 auto 24px;
-}
-
-.title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #f3f4f6;
-}
-
-.backLink {
-  color: #818cf8;
-  font-size: 14px;
-  text-decoration: none;
-}
-
-.backLink:hover {
-  text-decoration: underline;
-}
-
-.tableWrap {
-  max-width: 1400px;
-  margin: 0 auto;
-  overflow-x: auto;
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.table th {
-  background: #1f2937;
-  color: #9ca3af;
-  padding: 10px 12px;
-  text-align: left;
-  font-weight: 600;
-  white-space: nowrap;
-  border-bottom: 1px solid #374151;
-}
-
-.table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid #1f2937;
-  white-space: nowrap;
-}
-
-.table tr:hover td {
-  background: #111827;
-}
-
-.email {
-  color: #93c5fd;
-}
-
-.adminBadge {
-  padding: 2px 8px;
-  background: #7c3aed;
-  color: white;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.userBadge {
-  padding: 2px 8px;
-  background: #374151;
-  color: #9ca3af;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.creditCell {
-  font-weight: 600;
-  color: #34d399;
-}
-
-.date {
-  color: #6b7280;
-}
-
-.tierSelect {
-  padding: 4px 8px;
-  background: #1f2937;
-  border: 1px solid #374151;
-  border-radius: 6px;
-  color: #e5e7eb;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.creditAction {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.creditInput {
-  width: 70px;
-  padding: 4px 8px;
-  background: #1f2937;
-  border: 1px solid #374151;
-  border-radius: 6px;
-  color: #e5e7eb;
-  font-size: 12px;
-}
-
-.creditBtn {
-  padding: 4px 12px;
-  background: #059669;
-  border: none;
-  border-radius: 6px;
-  color: white;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.creditBtn:hover:not(:disabled) {
-  background: #047857;
-}
-
-.creditBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Tier 정책 섹션 */
-.policySection {
-  max-width: 1400px;
-  margin: 48px auto 0;
-}
-
-.policyTitle {
-  font-size: 20px;
-  font-weight: 700;
-  color: #f3f4f6;
-  margin-bottom: 20px;
-}
-
-.policyGrid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-}
-
-.policyCard {
-  background: #1f2937;
-  border: 1px solid #374151;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.policyCardHeader {
-  padding: 16px;
-  border-bottom: 3px solid;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.policyTier {
-  font-size: 18px;
-  font-weight: 700;
-  color: #f3f4f6;
-}
-
-.policyPrice {
-  font-size: 13px;
-  color: #9ca3af;
-}
-
-.policyList {
-  padding: 16px;
-  margin: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.policyList li {
-  font-size: 13px;
-  color: #d1d5db;
-  padding-left: 16px;
-  position: relative;
-}
-
-.policyList li::before {
-  content: "✓";
-  position: absolute;
-  left: 0;
-  color: #34d399;
-  font-weight: 700;
-}
-
-.policyNote {
-  margin-top: 16px;
-  font-size: 12px;
-  color: #6b7280;
-}
+.container { min-height: 100vh; padding: 24px; background: #0b0d10; color: #e5e7eb; }
+.header { max-width: 1400px; min-height: 66px; margin: 0 auto 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.headerTitle { display: flex; align-items: center; gap: 12px; }
+.header p { margin: 4px 0 0; color: #818b98; font-size: 13px; }
+.title { margin: 0; font-size: 22px; letter-spacing: 0; }
+.iconButton { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #343a43; border-radius: 7px; background: transparent; color: #d8dde4; }
+.iconButton:hover { background: #1a1f26; }
+.loading { min-height: 280px; display: flex; align-items: center; justify-content: center; gap: 9px; color: #818b98; }
+.error { max-width: 1400px; margin: 0 auto 14px; padding: 11px 13px; border: 1px solid #843b45; border-radius: 7px; background: #30161a; color: #f3a5ad; font-size: 13px; }
+.tableWrap { max-width: 1400px; margin: 0 auto; overflow-x: auto; border-top: 1px solid #343a43; }
+.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table th { padding: 11px 12px; border-bottom: 1px solid #343a43; background: #15191f; color: #949eaa; text-align: left; font-weight: 600; white-space: nowrap; }
+.table td { padding: 11px 12px; border-bottom: 1px solid #242a31; white-space: nowrap; }
+.table tr:hover td { background: #12161b; }
+.email { color: #9fc9ee; }
+.adminBadge, .userBadge { padding: 3px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.adminBadge { background: #76522b; color: #ffe2b6; }
+.userBadge { background: #30363f; color: #c5cbd3; }
+.creditCell { color: #79d6b0; font-weight: 700; }
+.date { color: #818b98; }
+.creditAction { display: flex; align-items: center; gap: 6px; }
+.creditInput { width: 82px; height: 34px; padding: 0 9px; border: 1px solid #3a414b; border-radius: 6px; background: #171b21; color: #f3f4f6; font-size: 12px; }
+.creditBtn { min-width: 70px; height: 34px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 6px; background: #237a58; color: #fff; font-size: 12px; font-weight: 700; }
+.creditBtn:hover:not(:disabled) { background: #2b8f68; }
+.creditBtn:disabled { opacity: .45; cursor: not-allowed; }
+.policySection { max-width: 1400px; margin: 32px auto 0; padding: 22px 0; border-top: 1px solid #343a43; }
+.policySection h2 { margin: 0 0 8px; font-size: 16px; }
+.policySection p { max-width: 760px; margin: 0 0 14px; color: #949eaa; font-size: 13px; line-height: 1.6; }
+.walletLink { color: #9fc9ee; font-size: 13px; }
+.spin { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 680px) { .container { padding: 14px; } .header { align-items: flex-start; } }

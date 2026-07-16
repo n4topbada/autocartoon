@@ -68,6 +68,9 @@
 }
 
 .statLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 13px;
   color: #9ca3af;
 }

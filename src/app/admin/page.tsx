@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { LuArrowLeft, LuCoins, LuLoaderCircle, LuRefreshCw } from "react-icons/lu";
 import styles from "./page.module.css";
 
 interface UserRow {
@@ -9,198 +10,125 @@ interface UserRow {
   email: string;
   name: string | null;
   role: string;
-  tier: string;
   credits: number;
-  tierUsedThisMonth: number;
-  tierLimit: number;
+  kakaoLinked: boolean;
   emailVerified: boolean;
+  paidPayments: number;
   createdAt: string;
 }
 
 export default function AdminPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [creditInputs, setCreditInputs] = useState<Record<string, string>>({});
+  const [grantingUserId, setGrantingUserId] = useState<string | null>(null);
 
   const loadUsers = useCallback(async () => {
-    const res = await fetch("/api/admin/users");
-    if (res.ok) setUsers(await res.json());
-    setLoading(false);
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/admin/users", { cache: "no-store" });
+      const data = (await response.json()) as UserRow[] & { error?: string };
+      if (!response.ok) throw new Error(data.error || "사용자 목록을 불러오지 못했습니다.");
+      setUsers(data);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "사용자 목록을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
-
-  const handleTierChange = async (userId: string, tier: string) => {
-    await fetch(`/api/admin/users/${userId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tier }),
-    });
-    loadUsers();
-  };
+  useEffect(() => { void loadUsers(); }, [loadUsers]);
 
   const handleAddCredits = async (userId: string) => {
     const amount = Number(creditInputs[userId]);
-    if (!amount || amount <= 0) return;
-    await fetch(`/api/admin/users/${userId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ addCredits: amount }),
-    });
-    setCreditInputs((prev) => ({ ...prev, [userId]: "" }));
-    loadUsers();
+    if (!Number.isSafeInteger(amount) || amount <= 0) return;
+    setGrantingUserId(userId);
+    setError("");
+    try {
+      const response = await fetch(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ addCredits: amount }),
+      });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(result.error || "크레딧 지급에 실패했습니다.");
+      setCreditInputs((previous) => ({ ...previous, [userId]: "" }));
+      await loadUsers();
+    } catch (grantError) {
+      setError(grantError instanceof Error ? grantError.message : "크레딧 지급에 실패했습니다.");
+    } finally {
+      setGrantingUserId(null);
+    }
   };
 
-  if (loading) {
-    return (
-      <div className={styles.container}>
-        <p className={styles.loading}>로딩 중...</p>
-      </div>
-    );
-  }
-
   return (
-    <div className={styles.container}>
+    <main className={styles.container}>
       <header className={styles.header}>
-        <h1 className={styles.title}>관리자 페이지</h1>
-        <Link href="/" className={styles.backLink}>메인으로</Link>
+        <div className={styles.headerTitle}>
+          <Link href="/" className={styles.iconButton} aria-label="작업 화면으로 돌아가기" title="돌아가기">
+            <LuArrowLeft size={19} />
+          </Link>
+          <div><h1 className={styles.title}>사용자 및 크레딧</h1><p>잔액과 결제 연결 상태를 관리합니다.</p></div>
+        </div>
+        <button className={styles.iconButton} type="button" onClick={() => void loadUsers()} title="새로고침">
+          <LuRefreshCw size={17} />
+        </button>
       </header>
 
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th>이메일</th>
-              <th>이름</th>
-              <th>Role</th>
-              <th>Tier</th>
-              <th>월간 사용량</th>
-              <th>Credit</th>
-              <th>인증</th>
-              <th>가입일</th>
-              <th>Tier 변경</th>
-              <th>Credit 지급</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td className={styles.email}>{u.email}</td>
-                <td>{u.name || "-"}</td>
-                <td>
-                  <span className={u.role === "admin" ? styles.adminBadge : styles.userBadge}>
-                    {u.role}
-                  </span>
-                </td>
-                <td>{u.tier}</td>
-                <td>
-                  {u.tierLimit === -1
-                    ? `${u.tierUsedThisMonth} (무제한)`
-                    : `${u.tierUsedThisMonth}/${u.tierLimit}`}
-                </td>
-                <td className={styles.creditCell}>{u.credits.toLocaleString()}</td>
-                <td>{u.emailVerified ? "O" : "X"}</td>
-                <td className={styles.date}>
-                  {new Date(u.createdAt).toLocaleDateString("ko-KR")}
-                </td>
-                <td>
-                  <select
-                    className={styles.tierSelect}
-                    value={u.tier}
-                    onChange={(e) => handleTierChange(u.id, e.target.value)}
-                  >
-                    <option value="free">Free</option>
-                    <option value="basic">Basic</option>
-                    <option value="pro">Pro</option>
-                    <option value="enterprise">Enterprise</option>
-                  </select>
-                </td>
-                <td className={styles.creditAction}>
-                  <input
-                    className={styles.creditInput}
-                    type="number"
-                    min="1"
-                    placeholder="수량"
-                    value={creditInputs[u.id] || ""}
-                    onChange={(e) =>
-                      setCreditInputs((prev) => ({
-                        ...prev,
-                        [u.id]: e.target.value,
-                      }))
-                    }
-                  />
-                  <button
-                    className={styles.creditBtn}
-                    onClick={() => handleAddCredits(u.id)}
-                    disabled={!creditInputs[u.id] || Number(creditInputs[u.id]) <= 0}
-                  >
-                    지급
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Tier 정책 */}
-      <section className={styles.policySection}>
-        <h2 className={styles.policyTitle}>Tier 정책</h2>
-        <div className={styles.policyGrid}>
-          <div className={styles.policyCard}>
-            <div className={styles.policyCardHeader} style={{ borderColor: "#6b7280" }}>
-              <span className={styles.policyTier}>Free</span>
-              <span className={styles.policyPrice}>무료</span>
-            </div>
-            <ul className={styles.policyList}>
-              <li>월 <strong>5회</strong> 이미지 생성</li>
-              <li>기본 캐릭터 프리셋 사용</li>
-              <li>텍스트 모드</li>
-            </ul>
-          </div>
-          <div className={styles.policyCard}>
-            <div className={styles.policyCardHeader} style={{ borderColor: "#3b82f6" }}>
-              <span className={styles.policyTier}>Basic</span>
-              <span className={styles.policyPrice}>기본</span>
-            </div>
-            <ul className={styles.policyList}>
-              <li>월 <strong>30회</strong> 이미지 생성</li>
-              <li>모든 캐릭터 프리셋</li>
-              <li>텍스트 + 스케치 모드</li>
-            </ul>
-          </div>
-          <div className={styles.policyCard}>
-            <div className={styles.policyCardHeader} style={{ borderColor: "#8b5cf6" }}>
-              <span className={styles.policyTier}>Pro</span>
-              <span className={styles.policyPrice}>프로</span>
-            </div>
-            <ul className={styles.policyList}>
-              <li>월 <strong>100회</strong> 이미지 생성</li>
-              <li>모든 캐릭터 프리셋</li>
-              <li>전체 모드 (텍스트/스케치/편집)</li>
-              <li>커스텀 배경 업로드</li>
-            </ul>
-          </div>
-          <div className={styles.policyCard}>
-            <div className={styles.policyCardHeader} style={{ borderColor: "#f59e0b" }}>
-              <span className={styles.policyTier}>Enterprise</span>
-              <span className={styles.policyPrice}>엔터프라이즈</span>
-            </div>
-            <ul className={styles.policyList}>
-              <li><strong>무제한</strong> 이미지 생성</li>
-              <li>모든 캐릭터 프리셋</li>
-              <li>전체 모드 + 우선 처리</li>
-              <li>커스텀 배경 업로드</li>
-              <li>관리자 기능</li>
-            </ul>
-          </div>
+      {error && <div className={styles.error} role="alert">{error}</div>}
+      {loading ? (
+        <div className={styles.loading}><LuLoaderCircle className={styles.spin} /> 사용자 목록을 불러오는 중</div>
+      ) : (
+        <div className={styles.tableWrap}>
+          <table className={styles.table}>
+            <thead><tr><th>이메일</th><th>이름</th><th>권한</th><th>크레딧</th><th>카카오</th><th>결제</th><th>가입일</th><th>수동 지급</th></tr></thead>
+            <tbody>
+              {users.map((user) => (
+                <tr key={user.id}>
+                  <td className={styles.email}>{user.email}</td>
+                  <td>{user.name || "-"}</td>
+                  <td><span className={user.role === "admin" ? styles.adminBadge : styles.userBadge}>{user.role}</span></td>
+                  <td className={styles.creditCell}>{user.credits.toLocaleString()}</td>
+                  <td>{user.kakaoLinked ? "연결" : "-"}</td>
+                  <td>{user.paidPayments.toLocaleString()}건</td>
+                  <td className={styles.date}>{new Date(user.createdAt).toLocaleDateString("ko-KR")}</td>
+                  <td>
+                    <div className={styles.creditAction}>
+                      <input
+                        className={styles.creditInput}
+                        type="number"
+                        min="1"
+                        max="1000000"
+                        aria-label={`${user.email} 크레딧 지급량`}
+                        placeholder="수량"
+                        value={creditInputs[user.id] || ""}
+                        onChange={(event) => setCreditInputs((previous) => ({ ...previous, [user.id]: event.target.value }))}
+                      />
+                      <button
+                        className={styles.creditBtn}
+                        type="button"
+                        onClick={() => void handleAddCredits(user.id)}
+                        disabled={grantingUserId !== null || !creditInputs[user.id] || Number(creditInputs[user.id]) <= 0}
+                      >
+                        {grantingUserId === user.id ? <LuLoaderCircle className={styles.spin} /> : <LuCoins />}
+                        지급
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <p className={styles.policyNote}>
-          * 월간 무료 사용량 초과 시, 🍌 바나나 1개가 차감됩니다. 매월 1일 자동 리셋됩니다.
-        </p>
+      )}
+
+      <section className={styles.policySection}>
+        <h2>운영 정책</h2>
+        <p>신규 가입 30크레딧, 외부 AI 호출 전 차감, 실패 작업 자동 환불이 기본입니다. 수동 지급도 크레딧 원장에 관리자 ID와 함께 기록됩니다.</p>
+        <Link href="/credits" className={styles.walletLink}>사용자 지갑 화면 보기</Link>
       </section>
-    </div>
+    </main>
   );
 }

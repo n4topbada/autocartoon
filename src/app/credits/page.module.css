@@ -1,0 +1,389 @@
+.page {
+  min-height: 100vh;
+  background: #0b0d10;
+  color: #f5f7fa;
+}
+
+.loadingPage {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #0b0d10;
+  color: #aab2bd;
+  font-size: 14px;
+}
+
+.header {
+  border-bottom: 1px solid #252a31;
+  background: #111419;
+}
+
+.headerInner {
+  width: min(1080px, calc(100% - 40px));
+  min-height: 84px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 40px 1fr 40px;
+  align-items: center;
+  gap: 14px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 21px;
+  letter-spacing: 0;
+}
+
+.header p,
+.sectionHeading p {
+  margin: 4px 0 0;
+  color: #89929f;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.backButton,
+.refreshButton {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #30363f;
+  border-radius: 7px;
+  background: transparent;
+  color: #d4d9df;
+}
+
+.backButton:hover,
+.refreshButton:hover {
+  background: #1b2027;
+  border-color: #4b5563;
+}
+
+.content {
+  width: min(1080px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 28px 0 64px;
+}
+
+.notice {
+  min-height: 44px;
+  margin-bottom: 16px;
+  padding: 11px 14px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid;
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+.success {
+  border-color: #257a58;
+  background: #102d23;
+  color: #8de0bc;
+}
+
+.error {
+  border-color: #8d3d47;
+  background: #30161a;
+  color: #f3a5ad;
+}
+
+.info {
+  border-color: #3b6288;
+  background: #142638;
+  color: #9fc9ee;
+}
+
+.balanceSection {
+  min-height: 150px;
+  padding: 28px 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border: 1px solid #30363f;
+  border-left: 4px solid #f4c430;
+  border-radius: 8px;
+  background: #15191f;
+}
+
+.eyebrow {
+  display: block;
+  margin-bottom: 8px;
+  color: #aab2bd;
+  font-size: 12px;
+}
+
+.balance {
+  font-size: 38px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.balanceUnit {
+  margin-left: 8px;
+  color: #c5cbd3;
+  font-size: 14px;
+}
+
+.welcomeInfo {
+  max-width: 310px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #c5cbd3;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.welcomeInfo svg {
+  flex: 0 0 auto;
+  color: #f4c430;
+}
+
+.section {
+  padding: 34px 0;
+  border-bottom: 1px solid #252a31;
+}
+
+.sectionHeading {
+  margin-bottom: 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.sectionHeading h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  letter-spacing: 0;
+}
+
+.providerBadge {
+  min-height: 30px;
+  padding: 5px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+  background: #fee500;
+  color: #171717;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.setupNotice {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-left: 3px solid #d6a931;
+  background: #292313;
+  color: #e9cf82;
+  font-size: 12px;
+}
+
+.productGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.product {
+  min-height: 154px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid #30363f;
+  border-radius: 8px;
+  background: #15191f;
+}
+
+.productName {
+  color: #9da6b2;
+  font-size: 12px;
+}
+
+.productCredits {
+  margin-top: 5px;
+  font-size: 21px;
+  font-weight: 750;
+}
+
+.bonus {
+  display: inline-block;
+  margin-top: 5px;
+  color: #79d6b0;
+  font-size: 11px;
+}
+
+.productAction {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.productAction strong {
+  font-size: 14px;
+}
+
+.productAction button {
+  min-width: 82px;
+  height: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: #fee500;
+  color: #171717;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.productAction button:hover:not(:disabled) {
+  background: #f1d900;
+}
+
+.productAction button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.paymentAssurance {
+  margin: 14px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #7f8995;
+  font-size: 11px;
+}
+
+.costTable,
+.historyTable {
+  border-top: 1px solid #30363f;
+}
+
+.costRow {
+  min-height: 48px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #252a31;
+  color: #cbd1d8;
+  font-size: 13px;
+}
+
+.costRow strong {
+  color: #f4c430;
+  font-size: 13px;
+}
+
+.costFootnote {
+  padding: 10px 12px 0;
+  color: #77818d;
+  font-size: 11px;
+}
+
+.historyRow {
+  min-height: 64px;
+  padding: 11px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid #252a31;
+}
+
+.historyRow > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.historyRow strong {
+  font-size: 13px;
+}
+
+.historyRow span {
+  overflow-wrap: anywhere;
+  color: #7f8995;
+  font-size: 11px;
+}
+
+.historyAmount {
+  flex: 0 0 auto;
+  align-items: flex-end;
+}
+
+.amountPositive {
+  color: #79d6b0;
+}
+
+.amountNegative {
+  color: #f19aa4;
+}
+
+.empty {
+  padding: 30px 12px;
+  color: #7f8995;
+  font-size: 13px;
+  text-align: center;
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 760px) {
+  .headerInner,
+  .content {
+    width: min(100% - 24px, 1080px);
+  }
+
+  .balanceSection {
+    min-height: 0;
+    padding: 22px 20px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .balance {
+    font-size: 32px;
+  }
+
+  .productGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .product {
+    min-height: 136px;
+  }
+
+  .sectionHeading {
+    align-items: flex-start;
+  }
+
+  .paymentAssurance {
+    align-items: flex-start;
+  }
+}

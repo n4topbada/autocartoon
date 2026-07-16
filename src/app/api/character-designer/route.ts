@@ -14,6 +14,8 @@ import type {
   CharacterDesignerResult,
 } from "@/lib/character-designer-types";
 import { CORE_CHARACTER_SECTIONS } from "@/lib/character-designer-types";
+import { AI_CREDIT_COSTS } from "@/lib/credit-products";
+import { isCreditError, withCreditCharge } from "@/lib/credit-service";
 
 export const maxDuration = 60;
 
@@ -135,7 +137,7 @@ async function generateDesign(
 
 export async function POST(req: NextRequest) {
   try {
-    await requireCharacterDesigner();
+    const user = await requireCharacterDesigner();
 
     let body: unknown;
     try {
@@ -168,15 +170,17 @@ export async function POST(req: NextRequest) {
       currentDesign
     );
 
-    const result = await generateDesign(
-      message,
-      history,
-      currentDesign,
-      requestedSections
+    const result = await withCreditCharge(
+      user.id,
+      { units: AI_CREDIT_COSTS.characterDesigner, source: "character-designer" },
+      () => generateDesign(message, history, currentDesign, requestedSections)
     );
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    if (isCreditError(error)) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
 

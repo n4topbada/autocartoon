@@ -65,7 +65,10 @@
 }
 
 .forgotButton {
+  min-height: 32px;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
   border: 0;
   background: transparent;
   color: #93c5fd;
@@ -122,6 +125,27 @@
 .loginBtn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.kakaoBtn {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: #fee500;
+  color: #191919;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.kakaoBtn:hover {
+  background: #f1d900;
 }
 
 .error {

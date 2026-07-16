@@ -85,6 +85,7 @@ test("job responses expose durable progress and artifacts", () => {
     runId: "run-1",
     operationName: "operation-1",
     creditSource: "tier",
+    creditUnits: 1,
     estimatedCostUsdMicros: null,
     startedAt: now,
     completedAt: now,

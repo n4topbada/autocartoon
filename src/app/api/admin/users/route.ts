@@ -1,43 +1,42 @@
 import { NextResponse } from "next/server";
+import { AuthError, requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, AuthError } from "@/lib/auth";
-import { TIER_LIMITS } from "@/lib/tier-config";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     await requireAdmin();
-
     const users = await prisma.user.findMany({
       select: {
         id: true,
         email: true,
         name: true,
         role: true,
-        tier: true,
         credits: true,
-        tierUsedThisMonth: true,
-        tierResetAt: true,
+        kakaoId: true,
         emailVerified: true,
         createdAt: true,
+        _count: { select: { creditPayments: { where: { status: "paid" } } } },
       },
       orderBy: { createdAt: "asc" },
     });
-
-    return NextResponse.json(
-      users.map((u) => {
-        const limit = TIER_LIMITS[u.tier] ?? 5;
-        return {
-          ...u,
-          tierLimit: limit === Infinity ? -1 : limit,
-          createdAt: u.createdAt.toISOString(),
-          tierResetAt: u.tierResetAt.toISOString(),
-        };
-      })
-    );
+    return NextResponse.json(users.map((user) => ({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      credits: user.credits,
+      kakaoLinked: Boolean(user.kakaoId),
+      emailVerified: user.emailVerified,
+      paidPayments: user._count.creditPayments,
+      createdAt: user.createdAt.toISOString(),
+    })));
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    return NextResponse.json({ error: "서버 오류" }, { status: 500 });
+    console.error("Admin users error:", error);
+    return NextResponse.json({ error: "사용자 목록을 불러오지 못했습니다." }, { status: 500 });
   }
 }

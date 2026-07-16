@@ -15,10 +15,7 @@ export interface AuthUser {
   email: string;
   name: string | null;
   role: string;
-  tier: string;
   credits: number;
-  tierUsed: number;
-  tierLimit: number; // -1 = unlimited
   mustChangePassword: boolean;
 }
 

@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth";
+import { AI_CREDIT_COSTS } from "@/lib/credit-products";
+import { isCreditError, withCreditCharge } from "@/lib/credit-service";
+import { generatePlatformTextContent, getPublicPlatformAIError } from "@/lib/platform-ai";
 import { prisma } from "@/lib/prisma";
-import { GoogleGenAI } from "@google/genai";
 
-const PRIMARY_KEY = process.env.GEMINI_API_KEY!;
-const FALLBACK_KEY = process.env.GEMINI_API_KEY_FALLBACK!;
+export const maxDuration = 60;
 
-const genaiPrimary = new GoogleGenAI({ apiKey: PRIMARY_KEY });
-const genaiFallback = FALLBACK_KEY
-  ? new GoogleGenAI({ apiKey: FALLBACK_KEY })
-  : null;
+const MAX_MESSAGE_LENGTH = 4_000;
+const MAX_HISTORY_MESSAGES = 12;
 
 async function buildSystemPrompt(userId: string): Promise<string> {
   const [knowledgeItems, recentPosts, user] = await Promise.all([
@@ -21,132 +20,107 @@ async function buildSystemPrompt(userId: string): Promise<string> {
     }),
     prisma.user.findUnique({
       where: { id: userId },
-      select: { name: true, tier: true, credits: true },
+      select: { name: true, credits: true },
     }),
   ]);
 
-  const knowledgeSection = knowledgeItems.length
-    ? knowledgeItems
-        .map((k) => `[${k.category}] ${k.title}\n${k.content}`)
-        .join("\n\n")
-    : "등록된 지식 베이스가 없습니다.";
-
-  const postsSection = recentPosts.length
+  const knowledge = knowledgeItems.length
+    ? knowledgeItems.map((item) => `[${item.category}] ${item.title}\n${item.content}`).join("\n\n")
+    : "등록된 지식 문서가 없습니다.";
+  const posts = recentPosts.length
     ? recentPosts
-        .map(
-          (p) => {
-            const counts = (p as unknown as { _count: { likes: number; comments: number } })._count;
-            return `- ${p.title} (❤️${counts.likes} 💬${counts.comments}): ${p.content.length > 80 ? p.content.slice(0, 80) + "..." : p.content}`;
-          }
-        )
+        .map((post) => `- ${post.title} (좋아요 ${post._count.likes}, 댓글 ${post._count.comments}): ${post.content.slice(0, 120)}`)
         .join("\n")
     : "최근 게시글이 없습니다.";
 
-  const userInfo = user
-    ? `사용자 이름: ${user.name ?? "미설정"}, 등급: ${user.tier}, 잔여 크레딧: ${user.credits}`
-    : "사용자 정보 없음";
+  return `너는 WONY 서비스의 AI 도우미 '워니봇'이다.
+서비스 사용법, 생성 기능, 크레딧, 커뮤니티 질문에 한국어로 친절하고 간결하게 답한다.
+아래 자료를 참고하되 자료에 없는 사실은 지어내지 않는다.
+사용자가 사람의 상담이나 관리자 연결을 명시적으로 요청하면 답변 끝에 [NEED_HUMAN]을 붙인다.
 
-  return `너는 "워니봇"이야. "워니바나나봇" 서비스의 AI 도우미야.
-서비스 이용 방법, 기능, 요금제, 크레딧, 커뮤니티 관련 질문에 한국어로 친절하게 답변해.
-아래 지식 베이스와 커뮤니티 게시글을 참고해서 답변해줘.
-답을 모르면 솔직하게 모른다고 말하고, 고객센터 연결을 안내해.
-사용자가 화가 나 있거나 "사람 연결", "상담원", "도움" 등 사람 도움을 요청하면, 답변 끝에 반드시 [NEED_HUMAN] 마커를 포함해.
+<service-knowledge>
+${knowledge}
+</service-knowledge>
 
---- 지식 베이스 ---
-${knowledgeSection}
+<recent-community-posts>
+${posts}
+</recent-community-posts>
 
---- 최근 커뮤니티 게시글 ---
-${postsSection}
-
---- 현재 사용자 정보 ---
-${userInfo}
-`;
+<current-user>
+이름: ${user?.name || "미설정"}
+크레딧: ${user?.credits ?? 0}
+</current-user>`;
 }
 
-async function generateReply(
-  genai: GoogleGenAI,
-  systemPrompt: string,
-  history: { role: string; content: string }[],
-  message: string
-): Promise<string> {
-  const contents = [
-    { role: "user" as const, parts: [{ text: systemPrompt }] },
-    { role: "model" as const, parts: [{ text: "네, 워니봇으로서 도와드리겠습니다!" }] },
-    ...history.map((m) => ({
-      role: (m.role === "assistant" ? "model" : "user") as "user" | "model",
-      parts: [{ text: m.content }],
-    })),
-    { role: "user" as const, parts: [{ text: message }] },
-  ];
-
-  const config: Record<string, unknown> = {
-    temperature: 1.5,
-    thinkingConfig: {
-      thinkingLevel: "MINIMAL",
-    },
-  };
-
-  const response = await genai.models.generateContentStream({
-    model: "gemini-3.1-flash-lite",
-    contents,
-    config,
-  });
-
-  let text = "";
-  for await (const chunk of response) {
-    if (chunk.text) text += chunk.text;
-  }
-  return text;
+function normalizeHistory(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .slice(-MAX_HISTORY_MESSAGES)
+    .flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const role = (item as { role?: unknown }).role;
+      const content = (item as { content?: unknown }).content;
+      if ((role !== "user" && role !== "assistant") || typeof content !== "string") return [];
+      const text = content.trim().slice(0, 2_000);
+      return text ? [{ role, content: text }] : [];
+    });
 }
 
 export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth();
-    const body = await req.json();
-    const { message, history } = body as {
-      message: string;
-      history: { role: string; content: string }[];
-    };
-
-    if (!message || typeof message !== "string") {
-      return NextResponse.json(
-        { error: "message는 필수입니다." },
-        { status: 400 }
-      );
+    const body = (await req.json().catch(() => null)) as {
+      message?: unknown;
+      history?: unknown;
+    } | null;
+    const message = typeof body?.message === "string" ? body.message.trim() : "";
+    if (!message) return NextResponse.json({ error: "메시지를 입력해주세요." }, { status: 400 });
+    if (message.length > MAX_MESSAGE_LENGTH) {
+      return NextResponse.json({ error: `메시지는 ${MAX_MESSAGE_LENGTH.toLocaleString()}자 이하여야 합니다.` }, { status: 400 });
     }
+    const history = normalizeHistory(body?.history);
 
-    const systemPrompt = await buildSystemPrompt(session.userId);
-
-    let reply: string;
-    try {
-      reply = await generateReply(
-        genaiPrimary,
-        systemPrompt,
-        history ?? [],
-        message
-      );
-    } catch (primaryError) {
-      if (!genaiFallback) throw primaryError;
-      console.warn("Primary Gemini key failed, trying fallback:", primaryError);
-      reply = await generateReply(
-        genaiFallback,
-        systemPrompt,
-        history ?? [],
-        message
-      );
-    }
+    const reply = await withCreditCharge(
+      session.userId,
+      { units: AI_CREDIT_COSTS.chat, source: "chat" },
+      async () => {
+        const systemInstruction = await buildSystemPrompt(session.userId);
+        const response = await generatePlatformTextContent({
+          contents: [
+            ...history.map((item) => ({
+              role: item.role === "assistant" ? ("model" as const) : ("user" as const),
+              parts: [{ text: item.content }],
+            })),
+            { role: "user", parts: [{ text: message }] },
+          ],
+          config: {
+            systemInstruction,
+            temperature: 0.9,
+            maxOutputTokens: 2_048,
+            abortSignal: AbortSignal.timeout(50_000),
+          },
+        });
+        if (!response.text?.trim()) throw new Error("AI가 빈 응답을 반환했습니다.");
+        return response.text;
+      }
+    );
 
     const needHuman = reply.includes("[NEED_HUMAN]");
-    const cleanReply = reply.replace(/\[NEED_HUMAN\]/g, "").trim();
-
-    return NextResponse.json({ reply: cleanReply, needHuman });
+    return NextResponse.json({
+      reply: reply.replace(/\[NEED_HUMAN\]/g, "").trim(),
+      needHuman,
+    });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
+    if (isCreditError(error)) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Chat error:", error);
-    const message =
-      error instanceof Error ? error.message : "알 수 없는 오류";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: getPublicPlatformAIError(error, "AI 답변을 만들지 못했습니다. 다시 시도해주세요.") },
+      { status: 500 }
+    );
   }
 }

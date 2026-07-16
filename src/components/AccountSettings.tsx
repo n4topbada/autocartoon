@@ -20,13 +20,6 @@ import styles from "./AccountSettings.module.css";
 
 const MIN_PASSWORD_LENGTH = 10;
 
-const TIER_LABELS: Record<string, string> = {
-  free: "Free",
-  basic: "Basic",
-  pro: "Pro",
-  enterprise: "Enterprise",
-};
-
 interface DeviceSession {
   id: string;
   device: string;
@@ -254,8 +247,8 @@ export default function AccountSettings() {
               <dd>{user.role === "admin" ? "관리자" : "사용자"}</dd>
             </div>
             <div>
-              <dt>요금제</dt>
-              <dd>{TIER_LABELS[user.tier] || user.tier}</dd>
+              <dt>크레딧</dt>
+              <dd><a href="/credits">{user.credits.toLocaleString()} 크레딧</a></dd>
             </div>
           </dl>
         </section>

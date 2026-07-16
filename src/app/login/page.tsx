@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { LuKeyRound, LuX } from "react-icons/lu";
+import { RiKakaoTalkFill } from "react-icons/ri";
 import { useAuth } from "@/components/AuthProvider";
 import styles from "./page.module.css";
 
@@ -15,6 +16,20 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const status = new URLSearchParams(window.location.search).get("kakao");
+    if (!status) return;
+    const messages: Record<string, string> = {
+      not_configured: "카카오 로그인이 아직 설정되지 않았습니다.",
+      invalid_state: "카카오 로그인 요청이 만료되었습니다. 다시 시도해주세요.",
+      access_denied: "카카오 로그인이 취소되었습니다.",
+      missing_code: "카카오 인증 정보를 받지 못했습니다.",
+      failed: "카카오 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.",
+      already_linked: "이 이메일은 다른 카카오 계정에 이미 연결되어 있습니다.",
+    };
+    setError(messages[status] || messages.failed);
+  }, []);
 
   const [showRegister, setShowRegister] = useState(false);
   const [regEmail, setRegEmail] = useState("");
@@ -196,6 +211,11 @@ export default function LoginPage() {
             {loading ? "로그인 중..." : "로그인"}
           </button>
         </form>
+
+        <a className={styles.kakaoBtn} href="/api/auth/kakao">
+          <RiKakaoTalkFill size={18} aria-hidden="true" />
+          카카오로 시작하기
+        </a>
 
         <div className={styles.divider} />
 

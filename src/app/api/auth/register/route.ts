@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { validatePassword } from "@/lib/password-policy";
 import { prisma } from "@/lib/prisma";
+import { WELCOME_CREDITS } from "@/lib/credit-products";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -48,13 +49,28 @@ export async function POST(req: NextRequest) {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    await prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        name: email.split("@")[0],
-        emailVerified: true,
-      },
+    await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          passwordHash,
+          name: email.split("@")[0],
+          emailVerified: true,
+          credits: WELCOME_CREDITS,
+          welcomeCreditsGrantedAt: new Date(),
+        },
+      });
+      await tx.creditLedger.create({
+        data: {
+          userId: user.id,
+          referenceKey: `welcome:${user.id}:grant`,
+          action: "grant",
+          source: "welcome",
+          units: WELCOME_CREDITS,
+          balanceAfter: WELCOME_CREDITS,
+          note: "신규 가입 웰컴 크레딧",
+        },
+      });
     });
 
     return NextResponse.json({
