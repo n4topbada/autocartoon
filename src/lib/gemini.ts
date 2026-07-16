@@ -1,17 +1,11 @@
 import { GoogleGenAI, type Content, type Part } from "@google/genai";
-
-const PRIMARY_KEY = process.env.GEMINI_API_KEY!;
-const FALLBACK_KEY = process.env.GEMINI_API_KEY_FALLBACK!;
-
-const genaiPrimary = new GoogleGenAI({ apiKey: PRIMARY_KEY });
-const genaieFallback = FALLBACK_KEY
-  ? new GoogleGenAI({ apiKey: FALLBACK_KEY })
-  : null;
+import { getImageModel, getPlatformAIClients } from "./platform-ai";
 
 export type Modality = "IMAGE" | "TEXT";
 
 export interface GeminiRequest {
   prompt: string;
+  aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
   referenceImages?: { base64: string; mimeType: string }[];
   /** 번호 라벨이 붙은 이미지 (transform 모드용) */
   labeledImages?: { label: string; base64: string; mimeType: string }[];
@@ -29,7 +23,7 @@ async function callGemini(
   config: Record<string, unknown>
 ): Promise<GeminiResult> {
   const response = await genai.models.generateContentStream({
-    model: "gemini-3.1-flash-image-preview",
+    model: getImageModel(),
     contents,
     config,
   });
@@ -67,7 +61,7 @@ async function callGeminiSync(
   config: Record<string, unknown>
 ): Promise<GeminiResult> {
   const response = await genai.models.generateContent({
-    model: "gemini-3.1-flash-image-preview",
+    model: getImageModel(),
     contents,
     config,
   });
@@ -113,16 +107,16 @@ export async function generateContentForBackground(
     },
   };
 
-  try {
-    return await callGeminiSync(genaiPrimary, contents, config);
-  } catch (err) {
-    console.warn(
-      "[Gemini] Background - Primary key failed, trying fallback...",
-      (err as Error).message
-    );
-    if (!genaieFallback) throw err;
-    return await callGeminiSync(genaieFallback, contents, config);
+  let lastError: unknown;
+  for (const client of await getPlatformAIClients()) {
+    try {
+      return await callGeminiSync(client, contents, config);
+    } catch (error) {
+      lastError = error;
+      console.warn("[Platform AI] Background generation failed; trying next client.");
+    }
   }
+  throw lastError;
 }
 
 // --- Character generation (streaming) ---
@@ -165,19 +159,19 @@ export async function generateContent(
       thinkingLevel: "MINIMAL",
     },
     imageConfig: {
-      aspectRatio: "1:1",
+      aspectRatio: req.aspectRatio || "1:1",
       imageSize: "1K",
     },
   };
 
-  // Primary 키로 시도, 실패 시 fallback
-  try {
-    return await callGemini(genaiPrimary, contents, config);
-  } catch (err) {
-    console.warn("[Gemini] Primary key failed, trying fallback...", (err as Error).message);
-
-    if (!genaieFallback) throw err;
-
-    return await callGemini(genaieFallback, contents, config);
+  let lastError: unknown;
+  for (const client of await getPlatformAIClients()) {
+    try {
+      return await callGemini(client, contents, config);
+    } catch (error) {
+      lastError = error;
+      console.warn("[Platform AI] Image generation failed; trying next client.");
+    }
   }
+  throw lastError;
 }

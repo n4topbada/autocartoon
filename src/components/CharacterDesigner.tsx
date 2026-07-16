@@ -314,7 +314,7 @@ export default function CharacterDesigner() {
     }
   };
 
-  const useQuestion = (question: string) => {
+  const selectQuestion = (question: string) => {
     setInput(question);
     inputRef.current?.focus();
   };
@@ -516,7 +516,7 @@ export default function CharacterDesigner() {
                 type="button"
                 key={question}
                 className={styles.suggestionButton}
-                onClick={() => useQuestion(question)}
+                onClick={() => selectQuestion(question)}
               >
                 {question}
               </button>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import styles from "./page.module.css";
 
 interface UserRow {
@@ -64,7 +65,7 @@ export default function AdminPage() {
     <div className={styles.container}>
       <header className={styles.header}>
         <h1 className={styles.title}>관리자 페이지</h1>
-        <a href="/" className={styles.backLink}>메인으로</a>
+        <Link href="/" className={styles.backLink}>메인으로</Link>
       </header>
 
       <div className={styles.tableWrap}>

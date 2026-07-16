@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import Link from "next/link";
 import styles from "./page.module.css";
 import BackgroundGenerator from "@/components/BackgroundGenerator";
 import UserAvatar from "@/components/UserAvatar";
@@ -14,19 +15,17 @@ import {
   LuImage,
   LuUpload,
   LuPaintbrush,
-  LuUsers,
   LuLink,
   LuX,
   LuLayoutList,
-  LuMessageCircle,
   LuPencil,
   LuDownload,
   LuTag,
   LuShare2,
-  LuInstagram,
   LuShieldAlert,
   LuUserRoundCog,
   LuSettings,
+  LuClapperboard,
 } from "react-icons/lu";
 import { resizeFromFile, fetchImageFromUrl } from "@/lib/image-resize";
 import Board from "@/components/Board";
@@ -892,15 +891,6 @@ export default function Home() {
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
       setGenElapsed(elapsed);
-      if (elapsed < 5) {
-        setGenerationStatus("참조 이미지와 프롬프트를 정리하고 있습니다.");
-      } else if (elapsed < 20) {
-        setGenerationStatus("AI가 장면을 그리고 있습니다.");
-      } else if (elapsed < 60) {
-        setGenerationStatus("이미지 품질을 다듬는 중입니다.");
-      } else {
-        setGenerationStatus("완료되는 즉시 갤러리에 자동 반영됩니다.");
-      }
     }, 1000);
 
     // 120초 타임아웃
@@ -930,15 +920,57 @@ export default function Home() {
 
       const res = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+        },
         body: JSON.stringify(body),
         signal: controller.signal,
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "생성 실패");
-      await loadHistory();
-      notifyGenerationDone("이미지 생성이 완료되었습니다.");
+      const jobId = data.job?.id as string | undefined;
+      if (!jobId) {
+        await loadHistory();
+        notifyGenerationDone("이미지 생성이 완료되었습니다.");
+        return;
+      }
+
+      clearTimeout(timeout);
+      const stageMessages: Record<string, string> = {
+        queued: "생성 대기열에 등록했습니다.",
+        preparing_references: "캐릭터와 참조 이미지를 준비하고 있습니다.",
+        generating_image: "AI가 장면을 그리고 있습니다.",
+        completed: "이미지 생성이 완료되었습니다.",
+      };
+      for (let attempt = 0; attempt < 240; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const statusResponse = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
+        const statusData = await statusResponse.json();
+        if (!statusResponse.ok) {
+          throw new Error(statusData.error || "생성 상태 확인 실패");
+        }
+        const job = statusData.job as {
+          status: string;
+          stage: string;
+          progress: number;
+          error?: string;
+        };
+        setGenerationStatus(
+          `${stageMessages[job.stage] || "이미지를 처리하고 있습니다."} ${job.progress}%`
+        );
+
+        if (job.status === "succeeded") {
+          await loadHistory();
+          notifyGenerationDone("이미지 생성이 완료되어 갤러리에 반영했습니다.");
+          return;
+        }
+        if (job.status === "failed" || job.status === "canceled") {
+          throw new Error(job.error || "이미지 생성에 실패했습니다.");
+        }
+      }
+      throw new Error("생성 작업이 오래 걸리고 있습니다. 작업은 서버에서 계속 진행됩니다.");
     } catch (err) {
       const isTimeout = err instanceof DOMException && err.name === "AbortError";
       if (isTimeout) {
@@ -994,6 +1026,10 @@ export default function Home() {
             <LuImage size={14} />
             배경 생성
           </button>
+          <Link className={styles.tab} href="/studio">
+            <LuClapperboard size={14} />
+            통합 스튜디오
+          </Link>
           <button
             className={`${styles.tab} ${activeTab === "board" ? styles.tabActive : ""}`}
             onClick={() => setActiveTab("board")}

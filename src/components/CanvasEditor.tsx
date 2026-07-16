@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { upload } from "@vercel/blob/client";
 import styles from "./CanvasEditor.module.css";
 import {
   LuArrowLeft,
@@ -14,10 +15,6 @@ import {
   LuUndo2,
   LuEye,
   LuMessageCircle,
-  LuCloud,
-  LuZap,
-  LuCircle,
-  LuPenTool,
   LuEyeOff,
   LuPaintBucket,
   LuChevronUp,
@@ -35,6 +32,13 @@ import {
 interface GalleryImage {
   id: string;
   dataUrl: string;
+}
+
+export interface SavedCanvasImage {
+  id: string;
+  dataUrl: string;
+  thumbnailUrl?: string | null;
+  mimeType: string;
 }
 
 interface Layer {
@@ -57,15 +61,40 @@ const FILL_COLORS = [
   "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#6b7280",
 ];
 
+export type CanvasAspectRatio = "1:1" | "4:5" | "9:16" | "16:9";
+
 interface Props {
   initialImage: GalleryImage;
   galleryImages: GalleryImage[];
   onClose: () => void;
-  onSave: () => void;
+  onSave: (image: SavedCanvasImage) => void;
+  initialAspect?: CanvasAspectRatio;
+  projectId?: string;
+  cutId?: string;
 }
 
 const MIN_CANVAS = 540;
-type AspectRatio = "1:1" | "4:5";
+type AspectRatio = CanvasAspectRatio;
+
+const ASPECT_CONFIG: Record<
+  AspectRatio,
+  { heightRatio: number; exportW: number; exportH: number }
+> = {
+  "1:1": { heightRatio: 1, exportW: 1080, exportH: 1080 },
+  "4:5": { heightRatio: 5 / 4, exportW: 1080, exportH: 1350 },
+  "9:16": { heightRatio: 16 / 9, exportW: 1080, exportH: 1920 },
+  "16:9": { heightRatio: 9 / 16, exportW: 1920, exportH: 1080 },
+};
+
+function closestAspect(width: number, height: number): AspectRatio {
+  const ratio = height / width;
+  return (Object.keys(ASPECT_CONFIG) as AspectRatio[]).reduce((closest, candidate) =>
+    Math.abs(ASPECT_CONFIG[candidate].heightRatio - ratio) <
+    Math.abs(ASPECT_CONFIG[closest].heightRatio - ratio)
+      ? candidate
+      : closest
+  );
+}
 
 function createLayer(id?: string, w = MIN_CANVAS, h = MIN_CANVAS): Layer {
   return {
@@ -94,7 +123,15 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-export default function CanvasEditor({ initialImage, galleryImages, onClose, onSave }: Props) {
+export default function CanvasEditor({
+  initialImage,
+  galleryImages,
+  onClose,
+  onSave,
+  initialAspect,
+  projectId,
+  cutId,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [layers, setLayers] = useState<Layer[]>([]);
   const [activeLayerId, setActiveLayerId] = useState<string>("");
@@ -161,16 +198,20 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
     (async () => {
       try {
         const img = await loadImage(initialImage.dataUrl);
-        // 원본 해상도 기준 캔버스 크기 (최소 MIN_CANVAS)
-        const cw = Math.max(img.width, MIN_CANVAS);
-        const ch = Math.max(img.height, MIN_CANVAS);
+        const targetAspect = initialAspect ?? closestAspect(img.width, img.height);
+        const heightRatio = ASPECT_CONFIG[targetAspect].heightRatio;
+        const cw = Math.max(img.width, Math.ceil(img.height / heightRatio), MIN_CANVAS);
+        const ch = Math.round(cw * heightRatio);
         setCanvasW(cw);
         setCanvasH(ch);
+        setAspect(targetAspect);
 
         const layerCanvas = document.createElement("canvas");
         layerCanvas.width = cw;
         layerCanvas.height = ch;
         const ctx = layerCanvas.getContext("2d")!;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, cw, ch);
         // 원본 이미지를 캔버스 중앙에 원본 크기로
         const x = (cw - img.width) / 2;
         const y = (ch - img.height) / 2;
@@ -186,17 +227,13 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
         };
         setLayers([layer]);
         setActiveLayerId(layer.id);
-        // 1:1 여부 자동 판단
-        if (Math.abs(cw - ch) < 10) {
-          setAspect("1:1");
-        }
       } catch {
         const layer = createLayer("layer_initial", MIN_CANVAS, MIN_CANVAS);
         setLayers([layer]);
         setActiveLayerId(layer.id);
       }
     })();
-  }, [initialImage.dataUrl]);
+  }, [initialAspect, initialImage.dataUrl]);
 
   // 캔버스 렌더링
   const render = useCallback(() => {
@@ -250,7 +287,7 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
       ctx.fillRect(0, cropRect.y + cropRect.h, canvasW, canvasH - cropRect.y - cropRect.h);
       ctx.restore();
     }
-  }, [layers, cropRect, tool]);
+  }, [layers, cropRect, tool, canvasH, canvasW, selectedBubbleId]);
 
   useEffect(() => {
     render();
@@ -520,16 +557,8 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
     if (newAspect === aspect) return;
     saveUndo();
 
-    // 새 캔버스 크기 계산
-    let newW = canvasW;
-    let newH: number;
-    if (newAspect === "4:5") {
-      // 4:5 = width:height → height = width * 5/4
-      newH = Math.round(canvasW * 5 / 4);
-    } else {
-      // 1:1 → height = width
-      newH = canvasW;
-    }
+    const newW = canvasW;
+    const newH = Math.round(canvasW * ASPECT_CONFIG[newAspect].heightRatio);
 
     const dy = (newH - canvasH) / 2; // 상하 확장/축소 오프셋
 
@@ -544,6 +573,10 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
           newCanvas.width = newW;
           newCanvas.height = newH;
           const ctx = newCanvas.getContext("2d")!;
+          if (l.id === "layer_initial") {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, newW, newH);
+          }
           ctx.drawImage(l.canvas, 0, dy);
           return { ...l, canvas: newCanvas, y: l.y + dy, width: newW, height: newH };
         }
@@ -646,9 +679,7 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
   const handleSave = async () => {
     setSaving(true);
     try {
-      // 내보내기 해상도: 1:1=1080x1080, 4:5=1080x1350
-      const exportW = 1080;
-      const exportH = aspect === "4:5" ? 1350 : 1080;
+      const { exportW, exportH } = ASPECT_CONFIG[aspect];
       const exportCanvas = document.createElement("canvas");
       exportCanvas.width = exportW;
       exportCanvas.height = exportH;
@@ -686,23 +717,30 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
       const blob = await new Promise<Blob>((resolve) =>
         exportCanvas.toBlob((b) => resolve(b!), "image/png")
       );
-      const arrayBuffer = await blob.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(arrayBuffer).reduce((s, b) => s + String.fromCharCode(b), "")
-      );
+      const uploaded = await upload(`edited/canvas-${Date.now()}.png`, blob, {
+        access: "public",
+        handleUploadUrl: "/api/images/upload",
+        clientPayload: JSON.stringify({ projectId, cutId }),
+        multipart: blob.size > 5 * 1024 * 1024,
+      });
 
       const res = await fetch("/api/images/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ base64, mimeType: "image/png" }),
+        body: JSON.stringify({
+          blobUrl: uploaded.url,
+          mimeType: "image/png",
+          ...(projectId ? { projectId } : {}),
+          ...(cutId ? { cutId } : {}),
+        }),
       });
 
-      if (res.ok) {
-        onSave();
-        onClose();
-      }
-    } catch {
-      // ignore
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "이미지를 저장하지 못했습니다.");
+      onSave(result as SavedCanvasImage);
+      onClose();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "이미지를 저장하지 못했습니다.");
     } finally {
       setSaving(false);
     }
@@ -784,6 +822,18 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
                 onClick={() => handleAspectChange("4:5")}
               >
                 4:5
+              </button>
+              <button
+                className={`${styles.toolBtn} ${aspect === "9:16" ? styles.toolActive : ""}`}
+                onClick={() => handleAspectChange("9:16")}
+              >
+                9:16
+              </button>
+              <button
+                className={`${styles.toolBtn} ${aspect === "16:9" ? styles.toolActive : ""}`}
+                onClick={() => handleAspectChange("16:9")}
+              >
+                16:9
               </button>
             </div>
             <div className={styles.toolGroup}>
@@ -1042,7 +1092,9 @@ export default function CanvasEditor({ initialImage, galleryImages, onClose, onS
             disabled={saving}
           >
             <LuSave size={16} />
-            {saving ? "저장 중..." : `합치고 저장하기 (1080×${aspect === "4:5" ? "1350" : "1080"})`}
+            {saving
+              ? "저장 중..."
+              : `합치고 저장하기 (${ASPECT_CONFIG[aspect].exportW}×${ASPECT_CONFIG[aspect].exportH})`}
           </button>
         </div>
 

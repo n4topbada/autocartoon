@@ -1,27 +1,51 @@
 # AutoCartoon
 
-웹툰/카툰 스타일 캐릭터 이미지를 AI로 생성하는 Next.js 웹 서비스입니다.
-캐릭터 참조 이미지와 텍스트 프롬프트를 기반으로 일관된 스타일의 장면 이미지를 만들고, 생성 결과를 히스토리와 콘텐츠 보드에서 관리할 수 있습니다.
+캐릭터 참조를 바탕으로 웹툰 장면, 제스처, 배경, Veo 영상을 만들고 프로젝트 단위로 편집하는 Next.js 제작 서비스입니다.
+
+사용자는 Gemini나 Google Cloud API 키를 입력하지 않습니다. 운영 서버가 플랫폼 소유 Vertex AI 프로젝트를 사용하며, Vercel에서는 OIDC Workload Identity Federation으로 Google Cloud에 키 없이 인증합니다.
 
 ## 주요 기능
 
-- 캐릭터 참조 이미지 기반 이미지 생성
-- 텍스트, 스케치, 편집, 변환 모드 지원
-- 캐릭터 프리셋 등록/관리 및 대표 이미지 설정
-- 관리자용 캐릭터 페르소나 설계 채팅, 실제 시스템 프롬프트 전체 보기·복사, 동적 설정 패널
-- 캐릭터 마켓플레이스와 구매 흐름
-- 배경 이미지 저장 및 생성 이미지 합성
-- 생성 히스토리, 즐겨찾기, 태그 관리
-- 콘텐츠 슬롯 관리, 게시판, 인스타그램 연동
-- 이메일 임시 비밀번호 발급 및 계정 설정 내 비밀번호 변경
+- 최대 4명 캐릭터를 함께 사용하는 장면 및 제스처 생성
+- 캐릭터 정면, 좌측, 우측, 후면 참조 등록과 실제 생성 입력 반영
+- 텍스트, 스케치, 편집, 변환 모드
+- 저밀도 배경 정리, 일러스트 변환, 앵글 생성
+- 프로젝트, 컷, 대사, 자산, 생성 결과를 한 화면에서 다루는 통합 스튜디오
+- 컷별 9:16, 16:9, 1:1, 4:5 캔버스 규격
+- 레이어, 크롭, 배경 제거, 말풍선 편집과 컷 결과 재저장
+- 고해상도 캔버스 결과의 브라우저 직접 Blob 업로드와 공유 자산 참조 보호
+- Veo 3.1 Fast 기반 4초, 6초, 8초 영상과 720p, 1080p 출력
+- 영속 생성 작업, 실제 단계별 진행률, 새로고침 후 복구, 재시도
+- idempotency key 기반 중복 생성 방지와 작업별 크레딧 원장 및 자동 환불
+- 원본과 512px WebP 썸네일 분리 저장
+- 생성 히스토리, 즐겨찾기, 태그, 콘텐츠, 게시판, Instagram 연동 코드
+- 관리자용 캐릭터 페르소나 설계 채팅과 동적 설정 패널
+- 이메일 임시 비밀번호와 계정 설정 내 비밀번호 변경
+
+## 생성 구조
+
+```text
+브라우저
+  -> 생성 작업 등록
+  -> GenerationJob + CreditLedger
+  -> Vercel Workflow
+  -> Vertex AI Gemini / Veo
+  -> Vercel Blob 원본 + 썸네일
+  -> ProjectAsset + ProjectCut + GenerationArtifact
+  -> 3초 폴링, 완료 알림, 화면 자동 갱신
+```
+
+이미지와 영상 생성은 HTTP 요청이 끝날 때까지 브라우저가 기다리는 구조가 아닙니다. 작업을 먼저 DB에 기록한 뒤 Workflow가 실행하므로 페이지를 이동하거나 새로고침해도 진행 상태와 결과를 복구할 수 있습니다.
 
 ## 기술 스택
 
 - Next.js 15, React 19, TypeScript
-- Prisma, PostgreSQL
-- Vercel Blob
-- Google Gemini API
-- iron-session 기반 세션 인증
+- Prisma 6, PostgreSQL
+- Vercel Blob, Vercel Workflow, Vercel OIDC
+- Google Vertex AI, Gemini Image, Veo 3.1
+- iron-session HttpOnly 쿠키 인증
+- Resend 이메일
+- Sharp 썸네일 처리
 
 ## 로컬 실행
 
@@ -32,101 +56,110 @@ npx vercel env pull .env.local --environment=production
 npm run dev
 ```
 
-개발 서버는 기본적으로 `http://localhost:3000`에서 실행됩니다.
-`npm run dev`는 Windows 등에 남아 있는 오래된 전역 환경변수보다 프로젝트의 `.env.local` 값을 우선 적용합니다.
+기본 주소는 `http://localhost:3000`입니다. `scripts/dev.mjs`가 프로젝트의 `.env`와 `.env.local`을 오래된 전역 환경 변수보다 우선 적용합니다.
+
+Vertex AI를 로컬에서 호출하려면 Google Cloud Application Default Credentials를 준비합니다.
+
+```bash
+gcloud auth application-default login
+```
 
 ## 환경 변수
 
-`.env`에 아래 값이 필요합니다.
+전체 예시는 [`.env.example`](./.env.example)에 있습니다.
+
+필수 애플리케이션 설정:
 
 ```env
 DATABASE_URL=
 SESSION_SECRET=
-GEMINI_API_KEY=
-GEMINI_API_KEY_FALLBACK=
 BLOB_READ_WRITE_TOKEN=
 RESEND_API_KEY=
 PASSWORD_EMAIL_FROM=
 NEXT_PUBLIC_APP_URL=
 ```
 
-`BLOB_READ_WRITE_TOKEN`은 Vercel Blob 업로드에 필요합니다. 로컬 개발에서는 Blob 장애 시 `public/uploads` fallback이 동작하지만, 운영에서는 Vercel Blob Store가 정상 상태여야 캐릭터 등록과 이미지 저장이 정상 작동합니다.
+권장 운영 AI 설정:
 
-## 계정 복구
+```env
+PLATFORM_AI_PROVIDER=vertex
+GOOGLE_CLOUD_PROJECT=
+GOOGLE_CLOUD_LOCATION=global
+GOOGLE_CLOUD_VIDEO_LOCATION=us-central1
+VERTEX_TEXT_MODEL=gemini-3.1-flash-lite-preview
+VERTEX_IMAGE_MODEL=gemini-3.1-flash-image-preview
+VERTEX_VIDEO_MODEL=veo-3.1-fast-generate-001
+VERTEX_VIDEO_OUTPUT_GCS_URI=gs://BUCKET/autocartoon/veo
+```
 
-로그인 화면의 `비밀번호를 잊으셨나요?`에서 가입 이메일로 30분짜리 영문·숫자 12자리 임시 비밀번호를 발급합니다. 기존 비밀번호는 유지되며, 임시 비밀번호로 로그인하면 설정 탭이 자동으로 열립니다. 새 비밀번호로 변경하면 발급된 임시 비밀번호는 즉시 폐기됩니다.
+Vercel OIDC와 Google Workload Identity Federation:
 
-각 발급 메일 제목에는 고유 요청 번호가 포함됩니다. Gmail이 반복 발급 메일을 과거 대화로 묶어 숨기는 것을 줄이고, 사용자가 가장 최근 메일을 구분할 수 있게 합니다.
+```env
+GCP_PROJECT_NUMBER=
+GCP_SERVICE_ACCOUNT_EMAIL=
+GCP_WORKLOAD_IDENTITY_POOL_ID=
+GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID=
+```
 
-실사용자에게 메일을 보내려면 Resend에서 발신 도메인을 인증하고 `PASSWORD_EMAIL_FROM`에 인증된 주소를 설정해야 합니다. `onboarding@resend.dev` 기본 발신자는 Resend 계정 소유자 대상 테스트 용도입니다.
+서비스 계정 JSON은 로컬 또는 비상용 대안으로만 지원합니다. 운영은 장기 비밀키가 없는 OIDC 방식을 권장합니다. `GEMINI_API_KEY`와 `GEMINI_API_KEY_FALLBACK`은 Vertex를 쓰지 않는 서버 측 호환 모드용이며 사용자에게 노출하지 않습니다.
 
-### 발신 도메인 후속 작업
+## Google Cloud 권한
 
-- 보류 사유: `wonyframe.com` DNS는 별도 도메인 관리 담당자가 관리합니다.
-- DNS 위치: Hostcocoa 네임서버(`ans1`~`ans4.hostcocoa.com`)
-- 담당자 작업: Resend가 안내하는 SPF, DKIM, MX 레코드를 Hostcocoa DNS에 등록하고 도메인을 인증합니다.
-- 인증 후 설정: Vercel의 `PASSWORD_EMAIL_FROM`을 `워니바나나봇 <no-reply@wonyframe.com>`으로 지정하고 재배포합니다.
-- 인증 전 테스트: `onboarding@resend.dev`는 Resend 계정 소유 이메일로만 발송할 수 있습니다.
+Vercel이 가장하는 서비스 계정에는 다음 최소 권한이 필요합니다.
+
+- 프로젝트: `roles/aiplatform.user`
+- Veo 출력 버킷: `roles/storage.objectAdmin`
+- 서비스 계정 impersonation: 배포 환경별 OIDC principal에 `roles/iam.workloadIdentityUser`
+
+OIDC provider 조건은 Vercel 팀, 프로젝트, `development`/`preview`/`production` 환경으로 제한하는 것을 권장합니다.
 
 ## DB 반영
 
-운영/공유 DB에는 migration을 적용합니다.
+운영 및 공유 DB에는 migration을 사용합니다.
 
 ```bash
 npx prisma migrate deploy
 ```
 
-로컬 스키마를 빠르게 맞출 때만 아래 명령을 사용합니다.
+현재 스튜디오 migration은 다음 데이터를 추가합니다.
+
+- `GenerationJob`, `GenerationArtifact`, `CreditLedger`
+- `CreativeProject`, `ProjectCut`, `ProjectAsset`
+- 캐릭터 persona, voiceConfig, 4면 이미지 view
+
+## 검증
 
 ```bash
-npm run db:push
+npm test
+npm run lint
+npx tsc --noEmit
+npm run build
 ```
 
-## 기본 계정과 시드
+테스트는 4면 참조 선택, 다중 캐릭터 대표 이미지 제한, 저밀도 배경 프롬프트, 영속 작업 응답 계약을 확인합니다. 프로덕션 빌드에서는 이미지와 영상 Workflow 2개 및 8개 step이 함께 컴파일됩니다.
 
-기본 계정과 시스템 프리셋은 `prisma/seed.ts`에 정의되어 있습니다.
+## 계정 복구
 
-```bash
-npm run db:seed
-```
+로그인 화면의 `비밀번호를 잊으셨나요?`에서 가입 이메일로 30분 동안 유효한 영문·숫자 12자리 임시 비밀번호를 발급합니다. 임시 비밀번호로 로그인하면 설정 화면이 열리고, 새 비밀번호를 저장하면 임시 비밀번호가 즉시 폐기됩니다.
+
+실사용자 발송 전에는 Resend에서 발신 도메인을 인증하고 `PASSWORD_EMAIL_FROM`을 인증 주소로 바꿔야 합니다. `onboarding@resend.dev`는 Resend 계정 소유자 대상 테스트 발신자입니다.
 
 ## 캐릭터 폴더 등록
 
-합법적으로 확보한 캐릭터 참조 이미지를 폴더에 넣고 프리셋으로 등록할 수 있습니다. PNG/JPG/WEBP/GIF를 지원하며 파일명 순서 기준 첫 4장만 등록합니다.
-
-권한 있는 직접 이미지 URL 목록이 있으면 먼저 폴더로 내려받을 수 있습니다.
+권한을 확보한 PNG, JPG, WebP, GIF 이미지를 폴더에서 프리셋으로 등록할 수 있습니다.
 
 ```bash
-npm run download:images -- --folder="assets/kang-geonma" --manifest="assets/kang-geonma/urls.txt"
+npm run import:character -- --name="캐릭터 이름" --alias="character-alias" --folder="assets/character" --email="admin@example.com"
 ```
 
-```bash
-npm run import:character -- --name="강건마" --alias="kang-geonma" --folder="assets/kang-geonma" --email="n4topbada@gmail.com"
-```
+공개 마켓에 노출하려면 `--public`을 추가합니다.
 
-캐릭터 샵에 공개하려면 `--public`을 추가합니다.
+## 운영 메모
 
-## 성능 메모
+- Veo와 Gemini 비용은 사용자 API 키가 아니라 플랫폼 Google Cloud 프로젝트에 청구됩니다.
+- Veo는 영상 길이와 해상도에 따라 비용과 대기 시간이 커지므로 내부 크레딧과 작업 원장을 유지합니다.
+- Vercel Blob 또는 GCS가 정지되면 결과 저장이 실패하며 작업 크레딧은 자동 환불됩니다.
+- 기존 원본의 썸네일은 `npm run backfill:thumbnails`로 채울 수 있습니다.
+- 레퍼런스의 실제 보이스 공급자와 음성 복제 계약은 공개 화면에서 확정하지 못했습니다. 현재는 브라우저 음성 미리듣기와 Veo 자체 오디오를 제공하며, 서버 TTS 및 내레이션 합성은 별도 공급자와 라이선스 결정 후 연결할 영역입니다.
 
-- 캐릭터 목록 API는 첫 화면 속도를 위해 대표 이미지 1장만 내려줍니다.
-- 캐릭터 관리 모달을 열 때 전체 참조 이미지를 별도로 조회합니다.
-- 이미지 생성 경로에서는 참조 이미지 로딩과 결과 이미지 저장을 병렬 처리합니다.
-- 이미지 저장 시 원본과 512px webp 썸네일을 함께 생성해 갤러리/캐릭터/콘텐츠 목록에는 썸네일을 우선 사용합니다.
-- 생성 중에는 단계별 진행 문구를 표시하고, 완료 후 갤러리를 자동 갱신하며 브라우저 알림/토스트를 띄웁니다.
-- 자주 조회되는 목록 쿼리에는 Prisma migration으로 인덱스를 추가했습니다.
-- 무료/저가 DB와 서버리스 환경에서는 콜드 스타트와 네트워크 지연이 체감될 수 있습니다. 사용량이 늘면 DB 리전, Vercel 플랜, 이미지 CDN/스토리지 구성을 함께 점검하세요.
-
-기존 이미지에 썸네일을 채우려면 아래 스크립트를 실행합니다.
-
-```bash
-npm run backfill:thumbnails
-```
-
-## 배포 전 체크
-
-```bash
-npm run build
-npx prisma migrate deploy
-```
-
-Vercel Blob Store가 suspended 상태이면 이미지 업로드가 실패합니다. Vercel Dashboard의 Storage/Usage/Billing 상태를 먼저 확인하세요.
+상세한 레퍼런스 분석과 기능 차이는 [`docs/toonagent-reverse-engineering.md`](./docs/toonagent-reverse-engineering.md)에 기록돼 있습니다.

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import styles from "./InstagramTab.module.css";
-import { LuInstagram, LuRefreshCw, LuExternalLink, LuPlus, LuUnplug } from "react-icons/lu";
+import { LuInstagram, LuRefreshCw, LuExternalLink, LuUnplug } from "react-icons/lu";
 
 interface AccountInfo {
   username: string;

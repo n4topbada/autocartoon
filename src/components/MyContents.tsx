@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import styles from "./MyContents.module.css";
-import { LuPlus, LuTrash2, LuX, LuGripVertical, LuFileText } from "react-icons/lu";
+import { LuPlus, LuTrash2, LuX, LuFileText } from "react-icons/lu";
 
 interface SlotData {
   id: string;

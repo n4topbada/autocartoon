@@ -3,6 +3,7 @@ node_modules/
 out/
 .env
 .env.local
+.env.development.local
 *.db
 *.db-journal
 prisma/dev.db
@@ -17,3 +18,5 @@ assets/kang-geonma/*.jpeg
 assets/kang-geonma/*.png
 assets/kang-geonma/*.webp
 assets/kang-geonma/*.gif
+/.swc
+.codex-dev.*.log

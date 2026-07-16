@@ -8,6 +8,8 @@ const MIME_TO_EXT: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/webp": ".webp",
   "image/gif": ".gif",
+  "video/mp4": ".mp4",
+  "audio/mpeg": ".mp3",
 };
 
 /**
@@ -49,13 +51,18 @@ export async function uploadBase64ImageWithThumbnail(
 ): Promise<{ blobUrl: string; thumbnailUrl: string }> {
   const buffer = Buffer.from(base64, "base64");
   const thumbnailBuffer = await createThumbnailBuffer(buffer);
-
-  const [blobUrl, thumbnailUrl] = await Promise.all([
-    uploadBase64ToBlob(base64, mimeType, folder),
-    uploadBufferToBlob(thumbnailBuffer, "image/webp", `${folder}/thumbs`),
-  ]);
-
-  return { blobUrl, thumbnailUrl };
+  const blobUrl = await uploadBase64ToBlob(base64, mimeType, folder);
+  try {
+    const thumbnailUrl = await uploadBufferToBlob(
+      thumbnailBuffer,
+      "image/webp",
+      `${folder}/thumbs`
+    );
+    return { blobUrl, thumbnailUrl };
+  } catch (error) {
+    await deleteBlob(blobUrl);
+    throw error;
+  }
 }
 
 export async function uploadThumbnailForBlobUrl(
@@ -75,7 +82,7 @@ async function createThumbnailBuffer(buffer: Buffer): Promise<Buffer> {
     .toBuffer();
 }
 
-async function uploadBufferToBlob(
+export async function uploadBufferToBlob(
   buffer: Buffer,
   mimeType: string,
   folder: string

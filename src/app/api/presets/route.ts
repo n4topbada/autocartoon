@@ -77,11 +77,15 @@ export async function GET(req: NextRequest) {
         groupId: p.groupId,
         order: p.order,
         userId: p.userId,
+        description: p.description,
+        persona: p.persona,
+        voiceConfig: p.voiceConfig,
         representativeImage: repImage
           ? { id: repImage.id, dataUrl: repImage.blobUrl, thumbnailUrl: repImage.thumbnailUrl ?? repImage.blobUrl }
           : null,
         images: p.images.map((img) => ({
           id: img.id,
+          view: img.view,
           dataUrl: img.blobUrl,
           thumbnailUrl: img.thumbnailUrl ?? img.blobUrl,
         })),
@@ -136,7 +140,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { name, images, groupId, isPublic } = body as {
       name: string;
-      images: { base64: string; mimeType: string }[];
+      images: { base64: string; mimeType: string; view?: string }[];
       groupId?: string;
       isPublic?: boolean;
     };
@@ -179,6 +183,9 @@ export async function POST(req: NextRequest) {
             blobUrl: uploads[i].blobUrl,
             thumbnailUrl: uploads[i].thumbnailUrl,
             mimeType: img.mimeType,
+            view: ["front", "left", "right", "back"].includes(img.view || "")
+              ? img.view!
+              : "reference",
             order: i,
           })),
         },
@@ -204,6 +211,7 @@ export async function POST(req: NextRequest) {
         : null,
       images: preset.images.map((img) => ({
         id: img.id,
+        view: img.view,
         dataUrl: img.blobUrl,
         thumbnailUrl: img.thumbnailUrl ?? img.blobUrl,
       })),

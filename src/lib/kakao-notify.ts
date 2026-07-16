@@ -13,17 +13,6 @@ const API_SECRET = process.env.SOLAPI_API_SECRET;
 const PFID = process.env.SOLAPI_PFID; // 카카오 비즈채널 발신프로필 ID
 const WONY_PHONE = process.env.WONY_PHONE;
 
-function generateSignature(apiKey: string, apiSecret: string): { authorization: string } {
-  const date = new Date().toISOString();
-  const salt = crypto.randomUUID();
-  // HMAC-SHA256 signature
-  const encoder = new TextEncoder();
-  // For simplicity, use date+salt as auth header (Solapi uses API Key + Secret directly)
-  return {
-    authorization: `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}`,
-  };
-}
-
 export interface KakaoNotifyResult {
   success: boolean;
   error?: string;

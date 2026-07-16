@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generate, type GenerationMode } from "@/lib/generation-service";
+import { type GenerationMode } from "@/lib/generation-service";
 import { requireAuth, AuthError } from "@/lib/auth";
-import { checkAndDeductCredit, refundDeductedCredit } from "@/lib/credit-service";
+import { reserveJobCredit } from "@/lib/credit-service";
 import { prisma } from "@/lib/prisma";
+import { uploadBase64ToBlob } from "@/lib/blob";
+import {
+  failGenerationJob,
+  jobToResponse,
+  type StoredImageJobInput,
+} from "@/lib/generation-jobs";
+import {
+  getImageModel,
+  getPlatformAIProvider,
+} from "@/lib/platform-ai";
+import { imageGenerationWorkflow } from "@/workflows/image-generation";
+import { start } from "workflow/api";
+import type { Prisma } from "@prisma/client";
 
 const GENERATION_MODES = new Set<GenerationMode>([
   "text",
@@ -23,15 +36,21 @@ const MAX_BACKGROUND_LENGTH = 2_000;
 const MAX_INPUT_IMAGES = 4;
 const MAX_INPUT_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_BASE64_LENGTH = Math.ceil(MAX_INPUT_IMAGE_BYTES / 3) * 4;
+const ALLOWED_ASPECT_RATIOS = new Set(["1:1", "4:5", "9:16", "16:9"]);
 
 type InputImage = { base64: string; mimeType: string };
 
 interface ValidatedGenerationRequest {
   presetIds: string[];
   mode: GenerationMode;
+  aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
   prompt: string;
   background?: string;
   backgroundImageId?: string;
+  projectId?: string;
+  cutId?: string;
+  idempotencyKey?: string;
+  jobKind?: "image" | "gesture";
   inputImage?: InputImage;
   inputImages?: InputImage[];
 }
@@ -150,6 +169,21 @@ function parseGenerationRequest(value: unknown): ValidatedGenerationRequest {
     value.backgroundImageId === undefined
       ? undefined
       : parseId(value.backgroundImageId, "backgroundImageId");
+  const projectId =
+    value.projectId === undefined ? undefined : parseId(value.projectId, "projectId");
+  const cutId = value.cutId === undefined ? undefined : parseId(value.cutId, "cutId");
+  if (cutId && !projectId) {
+    throw new RequestValidationError("cutId를 사용할 때 projectId가 필요합니다.");
+  }
+  const idempotencyKey = parseOptionalText(
+    value.idempotencyKey,
+    "idempotencyKey",
+    200
+  );
+  const jobKind = value.jobKind === "gesture" ? "gesture" : "image";
+  const aspectRatio = typeof value.aspectRatio === "string" && ALLOWED_ASPECT_RATIOS.has(value.aspectRatio)
+    ? value.aspectRatio as "1:1" | "4:5" | "9:16" | "16:9"
+    : undefined;
   const inputImage =
     value.inputImage === undefined
       ? undefined
@@ -168,9 +202,14 @@ function parseGenerationRequest(value: unknown): ValidatedGenerationRequest {
   return {
     presetIds,
     mode: value.mode as GenerationMode,
+    aspectRatio,
     prompt,
     background,
     backgroundImageId,
+    projectId,
+    cutId,
+    idempotencyKey,
+    jobKind,
     inputImage,
     inputImages,
   };
@@ -212,6 +251,30 @@ async function validateResourceAccess(
         { error: "선택한 배경을 찾을 수 없거나 사용할 권한이 없습니다." },
         { status: 404 }
       );
+    }
+  }
+
+  if (input.projectId) {
+    const project = await prisma.creativeProject.findFirst({
+      where: { id: input.projectId, userId },
+      select: { id: true },
+    });
+    if (!project) {
+      return NextResponse.json({ error: "프로젝트를 찾을 수 없습니다." }, { status: 404 });
+    }
+  }
+
+  if (input.cutId) {
+    const cut = await prisma.projectCut.findFirst({
+      where: {
+        id: input.cutId,
+        projectId: input.projectId,
+        project: { userId },
+      },
+      select: { id: true },
+    });
+    if (!cut) {
+      return NextResponse.json({ error: "프로젝트 컷을 찾을 수 없습니다." }, { status: 404 });
     }
   }
 
@@ -257,35 +320,82 @@ export async function POST(req: NextRequest) {
     );
     if (accessError) return accessError;
 
-    const creditResult = await checkAndDeductCredit(session.userId);
+    const idempotencyKey =
+      req.headers.get("idempotency-key")?.trim().slice(0, 200) ||
+      input.idempotencyKey ||
+      crypto.randomUUID();
+    const existing = await prisma.generationJob.findUnique({
+      where: {
+        userId_idempotencyKey: { userId: session.userId, idempotencyKey },
+      },
+      include: { artifacts: { orderBy: { createdAt: "asc" } } },
+    });
+    if (existing) {
+      return NextResponse.json({ job: jobToResponse(existing), deduplicated: true }, { status: 202 });
+    }
+
+    const inputUploadId = crypto.randomUUID();
+    const storeInput = async (image: InputImage, index: number) => ({
+      url: await uploadBase64ToBlob(image.base64, image.mimeType, `job-inputs/${inputUploadId}/${index}`),
+      mimeType: image.mimeType,
+    });
+    const storedInputImage = input.inputImage
+      ? await storeInput(input.inputImage, 0)
+      : undefined;
+    const storedInputImages = input.inputImages
+      ? await Promise.all(input.inputImages.map(storeInput))
+      : undefined;
+    const storedInput: StoredImageJobInput = {
+      presetIds: input.presetIds,
+      mode: input.mode,
+      ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {}),
+      prompt: input.prompt,
+      isAdmin,
+      ...(input.background ? { background: input.background } : {}),
+      ...(input.backgroundImageId ? { backgroundImageId: input.backgroundImageId } : {}),
+      ...(storedInputImage ? { inputImage: storedInputImage } : {}),
+      ...(storedInputImages ? { inputImages: storedInputImages } : {}),
+    };
+
+    const job = await prisma.generationJob.create({
+      data: {
+        userId: session.userId,
+        projectId: input.projectId,
+        cutId: input.cutId,
+        kind: input.jobKind || "image",
+        provider: getPlatformAIProvider(),
+        model: getImageModel(),
+        idempotencyKey,
+        prompt: input.prompt,
+        input: storedInput as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    const creditResult = await reserveJobCredit(session.userId, job.id);
     if (!creditResult.ok) {
+      await prisma.generationJob.update({
+        where: { id: job.id },
+        data: {
+          status: "failed",
+          stage: "credit_rejected",
+          error: creditResult.error,
+          completedAt: new Date(),
+        },
+      });
       return NextResponse.json({ error: creditResult.error }, { status: 402 });
     }
 
-    let refundStarted = false;
-    const refundOnce = async () => {
-      if (refundStarted) return;
-      refundStarted = true;
-      await refundDeductedCredit(session.userId, creditResult.source);
-    };
-
     try {
-      const result = await generate({
-        ...input,
-        userId: session.userId,
-        isAdmin,
+      const run = await start(imageGenerationWorkflow, [job.id]);
+      const queuedJob = await prisma.generationJob.update({
+        where: { id: job.id },
+        data: { runId: run.runId },
+        include: { artifacts: true },
       });
-      return NextResponse.json(result);
+      return NextResponse.json({ job: jobToResponse(queuedJob) }, { status: 202 });
     } catch (error) {
-      try {
-        await refundOnce();
-      } catch (refundError) {
-        console.error("Generation credit refund failed:", refundError);
-      }
-
-      console.error("Generation error:", error);
-      const message = error instanceof Error ? error.message : "알 수 없는 오류";
-      return NextResponse.json({ error: message }, { status: 500 });
+      await failGenerationJob(job.id, error);
+      throw error;
     }
   } catch (error) {
     if (error instanceof AuthError) {

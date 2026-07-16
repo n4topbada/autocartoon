@@ -65,12 +65,14 @@ export async function GET(
       representativeImage: representativeImage
         ? {
             id: representativeImage.id,
+            view: representativeImage.view,
             dataUrl: representativeImage.blobUrl,
             thumbnailUrl: representativeImage.thumbnailUrl ?? representativeImage.blobUrl,
           }
         : null,
       images: preset.images.map((img) => ({
         id: img.id,
+        view: img.view,
         dataUrl: img.blobUrl,
         thumbnailUrl: img.thumbnailUrl ?? img.blobUrl,
       })),
@@ -102,7 +104,7 @@ export async function POST(
     }
 
     const { images } = (await req.json()) as {
-      images: { base64: string; mimeType: string }[];
+      images: { base64: string; mimeType: string; view?: string }[];
     };
 
     const imageError = validatePresetImages(images);
@@ -129,10 +131,13 @@ export async function POST(
           blobUrl: uploads[i].blobUrl,
           thumbnailUrl: uploads[i].thumbnailUrl,
           mimeType: images[i].mimeType,
+          view: ["front", "left", "right", "back"].includes(images[i].view || "")
+            ? images[i].view!
+            : "reference",
           order: maxOrder + 1 + i,
         },
       });
-      created.push({ id: img.id, dataUrl: img.blobUrl, thumbnailUrl: img.thumbnailUrl ?? img.blobUrl });
+      created.push({ id: img.id, view: img.view, dataUrl: img.blobUrl, thumbnailUrl: img.thumbnailUrl ?? img.blobUrl });
     }
 
     return NextResponse.json({ images: created, total: currentCount + images.length });
@@ -148,6 +153,39 @@ export async function POST(
       );
     }
     return NextResponse.json({ error: "이미지 추가 실패" }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await requireAuth();
+    const { id } = await params;
+    const body = (await req.json()) as { imageId?: string; view?: string };
+    const allowedViews = new Set(["reference", "front", "left", "right", "back"]);
+    if (!body.imageId || !body.view || !allowedViews.has(body.view)) {
+      return NextResponse.json({ error: "imageId와 올바른 view가 필요합니다." }, { status: 400 });
+    }
+    const image = await prisma.presetImage.findFirst({
+      where: {
+        id: body.imageId,
+        presetId: id,
+        ...(session.role === "admin" ? {} : { preset: { userId: session.userId } }),
+      },
+    });
+    if (!image) return NextResponse.json({ error: "이미지를 찾을 수 없습니다." }, { status: 404 });
+    const updated = await prisma.presetImage.update({
+      where: { id: image.id },
+      data: { view: body.view },
+    });
+    return NextResponse.json({ image: { id: updated.id, view: updated.view } });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: "이미지 방향을 저장하지 못했습니다." }, { status: 500 });
   }
 }
 

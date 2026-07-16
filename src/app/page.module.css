@@ -97,6 +97,7 @@
   align-items: center;
   gap: 6px;
   white-space: nowrap;
+  text-decoration: none;
 }
 
 .tab:hover {
