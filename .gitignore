@@ -20,3 +20,6 @@ assets/kang-geonma/*.webp
 assets/kang-geonma/*.gif
 /.swc
 .codex-dev.*.log
+
+# Local handoff credentials. Never commit plaintext access secrets.
+docs/*.private.md

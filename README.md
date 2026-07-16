@@ -174,6 +174,7 @@ npm run build
 ## 관련 문서
 
 - [ToonAgent 역설계와 기능 비교](./docs/toonagent-reverse-engineering.md)
+- [현재 구현·기능 차이·접근 정보 인수인계](./docs/project-handoff.md)
 - [Kakao Login REST API](https://developers.kakao.com/docs/ko/kakaologin/rest-api)
 - [KakaoPay 단건 결제](https://developers.kakaopay.com/docs/payment/online/single-payment)
 - [Vertex AI 생성형 AI 가격](https://cloud.google.com/vertex-ai/generative-ai/pricing)
