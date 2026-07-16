@@ -1,6 +1,6 @@
-import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireCharacterDesigner } from "@/lib/auth";
+import { generatePlatformTextContent } from "@/lib/platform-ai";
 import {
   buildCharacterDesignerSystemPrompt,
   CHARACTER_DESIGN_RESPONSE_SCHEMA,
@@ -17,7 +17,6 @@ import { CORE_CHARACTER_SECTIONS } from "@/lib/character-designer-types";
 
 export const maxDuration = 60;
 
-const MODEL = "gemini-3.1-flash-lite";
 const MAX_MESSAGE_LENGTH = 4000;
 const MAX_HISTORY_MESSAGES = 12;
 const MAX_REQUESTED_SECTIONS = 6;
@@ -83,19 +82,6 @@ function normalizeRequestedSections(
     .slice(0, MAX_REQUESTED_SECTIONS);
 }
 
-function getGeminiClients(): GoogleGenAI[] {
-  const keys = [
-    process.env.GEMINI_API_KEY,
-    process.env.GEMINI_API_KEY_FALLBACK,
-  ].filter((key): key is string => Boolean(key));
-
-  if (keys.length === 0) {
-    throw new Error("Gemini API key is not configured");
-  }
-
-  return keys.map((apiKey) => new GoogleGenAI({ apiKey }));
-}
-
 function buildLatestPrompt(message: string, design: CharacterDesign | null): string {
   if (!design) return message;
 
@@ -108,7 +94,6 @@ ${JSON.stringify(design)}
 }
 
 async function generateDesign(
-  client: GoogleGenAI,
   message: string,
   history: CharacterDesignerMessage[],
   currentDesign: CharacterDesign | null,
@@ -125,8 +110,7 @@ async function generateDesign(
     },
   ];
 
-  const response = await client.models.generateContent({
-    model: MODEL,
+  const response = await generatePlatformTextContent({
     contents,
     config: {
       systemInstruction: buildCharacterDesignerSystemPrompt(requestedSections),
@@ -184,24 +168,13 @@ export async function POST(req: NextRequest) {
       currentDesign
     );
 
-    let lastError: unknown;
-    for (const client of getGeminiClients()) {
-      try {
-        const result = await generateDesign(
-          client,
-          message,
-          history,
-          currentDesign,
-          requestedSections
-        );
-        return NextResponse.json(result);
-      } catch (error) {
-        lastError = error;
-        console.warn("Character designer Gemini attempt failed:", error);
-      }
-    }
-
-    throw lastError ?? new Error("Character designer generation failed");
+    const result = await generateDesign(
+      message,
+      history,
+      currentDesign,
+      requestedSections
+    );
+    return NextResponse.json(result);
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

@@ -3,7 +3,11 @@ import { start } from "workflow/api";
 import { AuthError, requireAuth } from "@/lib/auth";
 import { reserveJobCredit } from "@/lib/credit-service";
 import { failGenerationJob, jobToResponse, type StoredVideoJobInput } from "@/lib/generation-jobs";
-import { getPlatformAIProvider, getVideoModel } from "@/lib/platform-ai";
+import {
+  getPlatformAIProvider,
+  getPublicPlatformAIError,
+  getVideoModel,
+} from "@/lib/platform-ai";
 import { prisma } from "@/lib/prisma";
 import { videoGenerationWorkflow } from "@/workflows/video-generation";
 import type { Prisma } from "@prisma/client";
@@ -21,6 +25,10 @@ export async function GET(req: NextRequest) {
     const session = await requireAuth();
     const status = req.nextUrl.searchParams.get("status");
     const kind = req.nextUrl.searchParams.get("kind");
+    const requestedLimit = Number(req.nextUrl.searchParams.get("limit") || 30);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.max(1, Math.min(50, Math.floor(requestedLimit)))
+      : 30;
     const jobs = await prisma.generationJob.findMany({
       where: {
         userId: session.userId,
@@ -29,7 +37,7 @@ export async function GET(req: NextRequest) {
       },
       include: { artifacts: { orderBy: { createdAt: "asc" } } },
       orderBy: { createdAt: "desc" },
-      take: 50,
+      take: limit,
     });
     return NextResponse.json({ jobs: jobs.map(jobToResponse) });
   } catch (error) {
@@ -172,7 +180,7 @@ export async function POST(req: NextRequest) {
     }
     console.error("Video job start error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "영상 작업을 시작하지 못했습니다." },
+      { error: getPublicPlatformAIError(error, "영상 작업을 시작하지 못했습니다.") },
       { status: 500 }
     );
   }

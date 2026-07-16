@@ -5,9 +5,18 @@ import {
   uploadThumbnailForBlobUrl,
 } from "@/lib/blob";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const ASPECT_SIZES: Record<string, { width: number; height: number }> = {
+  "1:1": { width: 1080, height: 1080 },
+  "4:5": { width: 1080, height: 1350 },
+  "3:4": { width: 960, height: 1280 },
+  "8:11": { width: 800, height: 1100 },
+  "9:16": { width: 1080, height: 1920 },
+  "16:9": { width: 1920, height: 1080 },
+};
 
 function isVercelBlobUrl(value: string): boolean {
   try {
@@ -27,6 +36,9 @@ export async function POST(req: NextRequest) {
       mimeType?: string;
       projectId?: string;
       cutId?: string;
+      aspectRatio?: string;
+      canvas?: unknown;
+      operation?: string;
     };
     const base64 = body.base64?.trim();
     const providedBlobUrl = body.blobUrl?.trim();
@@ -36,6 +48,15 @@ export async function POST(req: NextRequest) {
     }
     if (body.cutId && !body.projectId) {
       return NextResponse.json({ error: "cutId에는 projectId가 필요합니다." }, { status: 400 });
+    }
+    const serializedCanvas = body.canvas && typeof body.canvas === "object" && !Array.isArray(body.canvas)
+      ? body.canvas
+      : undefined;
+    const aspectRatio = body.aspectRatio && ASPECT_SIZES[body.aspectRatio]
+      ? body.aspectRatio
+      : undefined;
+    if (serializedCanvas && JSON.stringify(serializedCanvas).length > 200_000) {
+      return NextResponse.json({ error: "캔버스 편집 정보가 너무 큽니다." }, { status: 413 });
     }
 
     if (body.projectId) {
@@ -70,10 +91,6 @@ export async function POST(req: NextRequest) {
       },
       select: { id: true },
     });
-    if (!firstPreset) {
-      return NextResponse.json({ error: "캐릭터가 없습니다." }, { status: 400 });
-    }
-
     let blobUrl: string;
     let thumbnailUrl: string;
     let mimeType = ALLOWED_MIME_TYPES.has(body.mimeType || "")
@@ -108,11 +125,11 @@ export async function POST(req: NextRequest) {
     const image = await prisma.$transaction(async (tx) => {
       const generationRequest = await tx.generationRequest.create({
         data: {
-          presetId: firstPreset.id,
-          presetIds: [firstPreset.id],
+          presetId: firstPreset?.id ?? null,
+          presetIds: firstPreset ? [firstPreset.id] : [],
           userId: session.userId,
-          mode: "edit",
-          prompt: "캔버스 편집",
+          mode: body.operation === "cutout" ? "cutout" : "edit",
+          prompt: body.operation === "cutout" ? "배경 제거" : "캔버스 편집",
         },
       });
       const savedImage = await tx.generatedImage.create({
@@ -138,7 +155,23 @@ export async function POST(req: NextRequest) {
       if (body.cutId) {
         await tx.projectCut.update({
           where: { id: body.cutId },
-          data: { imageUrl: blobUrl, thumbnailUrl },
+          data: {
+            imageUrl: blobUrl,
+            thumbnailUrl,
+            ...(serializedCanvas
+              ? { canvas: serializedCanvas as Prisma.InputJsonValue }
+              : {}),
+          },
+        });
+      }
+      if (body.projectId && aspectRatio) {
+        await tx.creativeProject.update({
+          where: { id: body.projectId },
+          data: {
+            aspectRatio,
+            canvasWidth: ASPECT_SIZES[aspectRatio].width,
+            canvasHeight: ASPECT_SIZES[aspectRatio].height,
+          },
         });
       }
       return savedImage;

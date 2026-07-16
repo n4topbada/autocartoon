@@ -4,7 +4,8 @@ import { useRef, useState, useCallback } from "react";
 import styles from "./ImageDropZone.module.css";
 
 export interface ImageData {
-  base64: string;
+  base64?: string;
+  artifactId?: string;
   mimeType: string;
   preview: string;
 }
@@ -25,11 +26,20 @@ export default function ImageDropZone({
   placeholderText = "이미지 업로드\n(클릭, 드래그, 붙여넣기)",
 }: ImageDropZoneProps) {
   const [dragOver, setDragOver] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback(
     (file: File) => {
-      if (!file.type.startsWith("image/")) return;
+      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+        setError("PNG, JPG, WebP 이미지만 사용할 수 있습니다.");
+        return;
+      }
+      if (file.size > 4 * 1024 * 1024) {
+        setError("이미지 크기는 4MB 이하여야 합니다.");
+        return;
+      }
+      setError(null);
       const reader = new FileReader();
       reader.onload = () => {
         const dataUrl = reader.result as string;
@@ -137,10 +147,11 @@ export default function ImageDropZone({
           </p>
         </div>
       )}
+      {error && <span className={styles.error} role="alert">{error}</span>}
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/png,image/jpeg,image/webp"
         onChange={handleFileChange}
         className={styles.fileInput}
       />

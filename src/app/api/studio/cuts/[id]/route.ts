@@ -9,6 +9,23 @@ async function ownedCut(id: string, userId: string) {
   });
 }
 
+function normalizeDialoguePlan(value: unknown) {
+  if (!Array.isArray(value)) return undefined;
+  return value.slice(0, 12).flatMap((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const record = item as Record<string, unknown>;
+    const text = typeof record.text === "string" ? record.text.trim().slice(0, 1_000) : "";
+    if (!text) return [];
+    return [{
+      id: typeof record.id === "string" ? record.id.slice(0, 128) : `dialogue_${index}`,
+      text,
+      speakerPresetId: typeof record.speakerPresetId === "string"
+        ? record.speakerPresetId.slice(0, 128)
+        : null,
+    }];
+  });
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -22,6 +39,12 @@ export async function PATCH(
     const duration = typeof body.durationMs === "number"
       ? Math.max(1000, Math.min(30_000, Math.round(body.durationMs)))
       : undefined;
+    const dialoguePlan = body.dialoguePlan === undefined
+      ? undefined
+      : normalizeDialoguePlan(body.dialoguePlan);
+    if (body.dialoguePlan !== undefined && !dialoguePlan) {
+      return NextResponse.json({ error: "대사 구성은 배열이어야 합니다." }, { status: 400 });
+    }
     const updated = await prisma.projectCut.update({
       where: { id },
       data: {
@@ -29,7 +52,10 @@ export async function PATCH(
         ...(typeof body.prompt === "string" ? { prompt: body.prompt.slice(0, 10_000) } : {}),
         ...(typeof body.negativePrompt === "string" ? { negativePrompt: body.negativePrompt.slice(0, 2_000) } : {}),
         ...(typeof body.dialogue === "string" ? { dialogue: body.dialogue.slice(0, 5_000) } : {}),
-        ...(typeof body.speakerPresetId === "string" ? { speakerPresetId: body.speakerPresetId.slice(0, 128) } : {}),
+        ...(dialoguePlan !== undefined ? { dialoguePlan } : {}),
+        ...(typeof body.speakerPresetId === "string"
+          ? { speakerPresetId: body.speakerPresetId.trim().slice(0, 128) || null }
+          : {}),
         ...(duration ? { durationMs: duration } : {}),
         ...(body.canvas && typeof body.canvas === "object" ? { canvas: body.canvas } : {}),
         ...(body.scene && typeof body.scene === "object" ? { scene: body.scene } : {}),

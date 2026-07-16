@@ -6,6 +6,7 @@ export type Modality = "IMAGE" | "TEXT";
 export interface GeminiRequest {
   prompt: string;
   aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
+  imageSize?: "1K" | "2K";
   referenceImages?: { base64: string; mimeType: string }[];
   /** 번호 라벨이 붙은 이미지 (transform 모드용) */
   labeledImages?: { label: string; base64: string; mimeType: string }[];
@@ -160,7 +161,7 @@ export async function generateContent(
     },
     imageConfig: {
       aspectRatio: req.aspectRatio || "1:1",
-      imageSize: "1K",
+      imageSize: req.imageSize || "1K",
     },
   };
 

@@ -2,14 +2,11 @@ import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { validatePassword } from "@/lib/password-policy";
 import { prisma } from "@/lib/prisma";
-import { getSession } from "@/lib/session";
+import { AuthError, requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session.userId) {
-      return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-    }
+    const session = await requireAuth();
 
     let body: { currentPassword?: unknown; newPassword?: unknown };
     try {
@@ -88,12 +85,20 @@ export async function POST(req: NextRequest) {
         temporaryPasswordIssuedAt: null,
       },
     });
+    if (session.sessionId) {
+      await prisma.userSession.deleteMany({
+        where: { userId: user.id, id: { not: session.sessionId } },
+      });
+    }
 
     session.usedTemporaryPassword = false;
     await session.save();
 
     return NextResponse.json({ message: "비밀번호가 변경되었습니다." });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     console.error("Change password error:", error);
     return NextResponse.json(
       { error: "비밀번호 변경에 실패했습니다." },

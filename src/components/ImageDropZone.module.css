@@ -70,3 +70,17 @@
 .fileInput {
   display: none;
 }
+
+.error {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  padding: 6px 8px;
+  border: 1px solid #8f4e48;
+  border-radius: 4px;
+  background: rgba(69, 29, 27, 0.94);
+  color: #ffd7d2;
+  font-size: 11px;
+  text-align: center;
+}

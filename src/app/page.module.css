@@ -229,6 +229,162 @@
   color: white;
 }
 
+.characterLibraryModal {
+  width: min(1040px, calc(100vw - 40px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
+.characterLibraryHeader,
+.characterLibraryHeader > div,
+.characterLibraryInfo,
+.characterLibraryActions {
+  display: flex;
+  align-items: center;
+}
+
+.characterLibraryHeader,
+.characterLibraryInfo {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.characterLibraryHeader {
+  margin-bottom: 18px;
+}
+
+.characterLibraryHeader > div {
+  gap: 8px;
+}
+
+.characterLibraryHeader h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.characterLibraryHeader span,
+.characterLibraryInfo span {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.characterLibraryAdd,
+.characterLibraryClose,
+.characterLibraryActions button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.characterLibraryAdd {
+  padding: 0 12px;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.characterLibraryClose,
+.characterLibraryActions button {
+  width: 34px;
+  padding: 0;
+}
+
+.characterLibraryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 12px;
+}
+
+.characterLibraryCard {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.characterLibraryViews {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  aspect-ratio: 2 / 1;
+  background: #111;
+}
+
+.characterLibraryViews img,
+.characterLibraryViews span {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  object-fit: cover;
+  border-right: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.characterLibraryViews img:last-child,
+.characterLibraryViews span:last-child {
+  border-right: 0;
+}
+
+.characterLibraryInfo {
+  padding: 10px;
+}
+
+.characterLibraryInfo h3 {
+  margin: 0 0 3px;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.characterLibraryActions {
+  flex-shrink: 0;
+  gap: 5px;
+}
+
+.characterLibraryActions button:last-child {
+  color: #ffaaa1;
+}
+
+.characterLibraryEmpty {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+@media (max-width: 620px) {
+  .characterLibraryModal {
+    width: calc(100vw - 20px);
+  }
+
+  .characterLibraryHeader {
+    align-items: flex-start;
+  }
+
+  .characterLibraryHeader > div:last-child {
+    align-items: flex-end;
+  }
+
+  .characterLibraryGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .bgRow {
   display: flex;
   align-items: center;
@@ -777,6 +933,13 @@
   color: var(--text-dim);
   font-size: 13px;
   padding: 12px 0;
+}
+
+.deferredPanelLoader {
+  display: grid;
+  min-height: 240px;
+  width: 100%;
+  place-items: center;
 }
 
 .spinner {

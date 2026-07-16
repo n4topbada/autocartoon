@@ -9,6 +9,7 @@ import {
   LuCheck,
   LuChevronRight,
   LuClapperboard,
+  LuFileText,
   LuFolderKanban,
   LuImage,
   LuLoaderCircle,
@@ -26,7 +27,22 @@ import {
   LuVolume2,
   LuWandSparkles,
   LuX,
+  LuCopy,
+  LuArrowUp,
+  LuArrowDown,
+  LuDownload,
+  LuStar,
+  LuBookOpen,
 } from "react-icons/lu";
+import { PROJECT_BRIEF_TEMPLATE } from "@/lib/project-brief";
+import GenerationNotifications from "./GenerationNotifications";
+import {
+  buildStudioGenerationPrompt,
+  CAMERA_ANGLES,
+  DEFAULT_STUDIO_SCENE,
+  normalizeStudioSceneSettings,
+  type StudioSceneSettings,
+} from "@/lib/studio-scene";
 import styles from "./StudioWorkspace.module.css";
 
 const CanvasEditor = dynamic(() => import("./CanvasEditor"), { ssr: false });
@@ -41,6 +57,8 @@ interface ProjectSummary {
   updatedAt: string;
   cuts: ProjectCut[];
   _count: { cuts: number; assets: number; jobs: number };
+  coverCutId?: string | null;
+  coverCut?: Pick<ProjectCut, "id" | "imageUrl" | "thumbnailUrl"> | null;
 }
 
 interface ProjectCut {
@@ -51,10 +69,13 @@ interface ProjectCut {
   prompt: string;
   negativePrompt: string | null;
   dialogue: string | null;
+  dialoguePlan: unknown;
   speakerPresetId: string | null;
   imageUrl: string | null;
   thumbnailUrl: string | null;
   videoUrl: string | null;
+  scene: unknown;
+  canvas: unknown;
 }
 
 interface ProjectAsset {
@@ -84,6 +105,7 @@ interface GenerationJob {
   error: string | null;
   createdAt: string;
   artifacts: JobArtifact[];
+  cutId: string | null;
 }
 
 interface StudioProject extends Omit<ProjectSummary, "_count"> {
@@ -107,8 +129,42 @@ interface CharacterPreset {
   name: string;
   userId?: string | null;
   description?: string | null;
+  voiceConfig?: Array<{ label: string; voiceId: string }> | null;
   images: CharacterImage[];
   representativeImage: CharacterImage | null;
+}
+
+interface SavedBrief {
+  id: string;
+  title: string;
+  content: string;
+  updatedAt: string;
+}
+
+interface VideoDialogue {
+  id: string;
+  text: string;
+  speakerPresetId: string | null;
+}
+
+function dialoguesForCut(cut: ProjectCut): VideoDialogue[] {
+  if (Array.isArray(cut.dialoguePlan)) {
+    const items = cut.dialoguePlan.flatMap((item, index): VideoDialogue[] => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+      const record = item as Record<string, unknown>;
+      const text = typeof record.text === "string" ? record.text : "";
+      if (!text.trim()) return [];
+      return [{
+        id: typeof record.id === "string" ? record.id : `dialogue_${index}`,
+        text,
+        speakerPresetId: typeof record.speakerPresetId === "string" ? record.speakerPresetId : null,
+      }];
+    });
+    if (items.length > 0) return items;
+  }
+  return cut.dialogue?.trim()
+    ? [{ id: `dialogue_${cut.id}`, text: cut.dialogue, speakerPresetId: cut.speakerPresetId }]
+    : [];
 }
 
 interface CutDraft {
@@ -117,6 +173,7 @@ interface CutDraft {
   negativePrompt: string;
   dialogue: string;
   durationMs: number;
+  scene: StudioSceneSettings;
 }
 
 const EMPTY_DRAFT: CutDraft = {
@@ -125,6 +182,12 @@ const EMPTY_DRAFT: CutDraft = {
   negativePrompt: "",
   dialogue: "",
   durationMs: 5000,
+  scene: {
+    ...DEFAULT_STUDIO_SCENE,
+    characterDirections: {},
+    characterPresetIds: [],
+    referenceAssetIds: [],
+  },
 };
 
 const VIEW_LABELS: Record<string, string> = {
@@ -162,23 +225,44 @@ function announceCompletion(job: GenerationJob) {
   }
 }
 
-export default function StudioWorkspace() {
+export default function StudioWorkspace({ initialMode = "scene" }: { initialMode?: StudioMode }) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<StudioProject | null>(null);
   const [selectedCutId, setSelectedCutId] = useState<string | null>(null);
+  const [exportingZip, setExportingZip] = useState(false);
   const [characters, setCharacters] = useState<CharacterPreset[]>([]);
   const [selectedCharacterIds, setSelectedCharacterIds] = useState<string[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [draft, setDraft] = useState<CutDraft>(EMPTY_DRAFT);
-  const [mode, setMode] = useState<StudioMode>("scene");
+  const [mode, setMode] = useState<StudioMode>(initialMode);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [imageSize, setImageSize] = useState<"1K" | "2K">("1K");
   const [uploading, setUploading] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [draftDirty, setDraftDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [assetPanelOpen, setAssetPanelOpen] = useState(true);
   const [editingCut, setEditingCut] = useState(false);
+  const [briefDialogOpen, setBriefDialogOpen] = useState(false);
+  const [briefTitle, setBriefTitle] = useState("");
+  const [briefMarkdown, setBriefMarkdown] = useState(PROJECT_BRIEF_TEMPLATE);
+  const [briefAspectRatio, setBriefAspectRatio] = useState<"1:1" | "4:5" | "3:4" | "8:11" | "9:16" | "16:9">("4:5");
+  const [briefCharacterIds, setBriefCharacterIds] = useState<string[]>([]);
+  const [briefAutoGenerate, setBriefAutoGenerate] = useState(true);
+  const [briefGenerating, setBriefGenerating] = useState(false);
+  const [briefProgress, setBriefProgress] = useState("");
+  const [briefLibraryOpen, setBriefLibraryOpen] = useState(false);
+  const [briefLibraryLoading, setBriefLibraryLoading] = useState(false);
+  const [briefSaving, setBriefSaving] = useState(false);
+  const [savedBriefs, setSavedBriefs] = useState<SavedBrief[]>([]);
+  const [videoPlanOpen, setVideoPlanOpen] = useState(false);
+  const [videoPlanDrafts, setVideoPlanDrafts] = useState<Record<string, VideoDialogue[]>>({});
+  const [videoPlanAnalyzing, setVideoPlanAnalyzing] = useState(false);
+  const [videoPlanSaving, setVideoPlanSaving] = useState(false);
+  const [videoBatchStarting, setVideoBatchStarting] = useState(false);
+  const [previewingDialogueId, setPreviewingDialogueId] = useState<string | null>(null);
   const [videoOptions, setVideoOptions] = useState({
     aspectRatio: "9:16" as "9:16" | "16:9",
     durationSeconds: 8 as 4 | 6 | 8,
@@ -202,6 +286,12 @@ export default function StudioWorkspace() {
     [characters, selectedCharacterIds]
   );
 
+  useEffect(() => {
+    if (loading) return;
+    const validIds = new Set(characters.map((character) => character.id));
+    setSelectedCharacterIds((current) => current.filter((id) => validIds.has(id)));
+  }, [characters, loading]);
+
   const loadProjects = useCallback(async () => {
     const data = await readJson<{ projects: ProjectSummary[] }>(
       await fetch("/api/studio/projects", { cache: "no-store" })
@@ -222,6 +312,26 @@ export default function StudioWorkspace() {
       knownStatuses.current.set(job.id, job.status);
     }
     setProject(data.project);
+    setProjects((current) => current
+      .map((item) => item.id === data.project.id
+        ? {
+            ...item,
+            title: data.project.title,
+            aspectRatio: data.project.aspectRatio,
+            updatedAt: data.project.updatedAt,
+            coverCutId: data.project.coverCutId,
+            coverCut: data.project.coverCut,
+            cuts: data.project.cuts.slice(0, 1),
+            _count: {
+              cuts: data.project.cuts.length,
+              assets: data.project.assets.length,
+              jobs: data.project.jobs.length,
+            },
+          }
+        : item
+      )
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    );
     setSelectedCutId((current) =>
       data.project.cuts.some((cut) => cut.id === current)
         ? current
@@ -244,7 +354,14 @@ export default function StudioWorkspace() {
     void Promise.all([loadProjects(), loadCharacters()])
       .then(async ([items]) => {
         if (!active || items.length === 0) return;
-        await loadProject(items[0].id);
+        const search = new URLSearchParams(window.location.search);
+        const requestedProjectId = search.get("project");
+        const targetProject = items.find((item) => item.id === requestedProjectId) || items[0];
+        const loaded = await loadProject(targetProject.id);
+        const requestedCutId = search.get("cut");
+        if (requestedCutId && loaded.cuts.some((cut) => cut.id === requestedCutId)) {
+          setSelectedCutId(requestedCutId);
+        }
       })
       .catch((reason) => active && setError(reason instanceof Error ? reason.message : "초기화 실패"))
       .finally(() => active && setLoading(false));
@@ -261,13 +378,17 @@ export default function StudioWorkspace() {
     }
     if (draftCutId.current === selectedCut.id) return;
     draftCutId.current = selectedCut.id;
+    const scene = normalizeStudioSceneSettings(selectedCut.scene);
+    setSelectedCharacterIds(scene.characterPresetIds);
     setDraft({
       title: selectedCut.title,
       prompt: selectedCut.prompt,
       negativePrompt: selectedCut.negativePrompt || "",
       dialogue: selectedCut.dialogue || "",
       durationMs: selectedCut.durationMs,
+      scene,
     });
+    setDraftDirty(false);
     setSaveState("idle");
   }, [selectedCut]);
 
@@ -287,7 +408,7 @@ export default function StudioWorkspace() {
         await fetch("/api/studio/projects", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: `새 프로젝트 ${projects.length + 1}` }),
+          body: JSON.stringify({ title: `새 프로젝트 ${projects.length + 1}`, aspectRatio: "4:5" }),
         })
       );
       await loadProjects();
@@ -296,6 +417,152 @@ export default function StudioWorkspace() {
       setError(reason instanceof Error ? reason.message : "프로젝트 생성 실패");
     } finally {
       setCreating(false);
+    }
+  };
+
+  const openBriefDialog = () => {
+    setBriefCharacterIds((current) => {
+      if (current.length > 0) return current;
+      if (selectedCharacterIds.length > 0) return selectedCharacterIds;
+      return characters[0] ? [characters[0].id] : [];
+    });
+    setBriefDialogOpen(true);
+  };
+
+  const loadSavedBriefs = async () => {
+    setBriefLibraryLoading(true);
+    try {
+      const data = await readJson<{ briefs: SavedBrief[] }>(
+        await fetch("/api/studio/briefs", { cache: "no-store" })
+      );
+      setSavedBriefs(data.briefs);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "저장된 기획서를 불러오지 못했습니다.");
+    } finally {
+      setBriefLibraryLoading(false);
+    }
+  };
+
+  const toggleBriefLibrary = () => {
+    const next = !briefLibraryOpen;
+    setBriefLibraryOpen(next);
+    if (next) void loadSavedBriefs();
+  };
+
+  const saveCurrentBrief = async () => {
+    if (!briefMarkdown.trim()) return;
+    setBriefSaving(true);
+    try {
+      const data = await readJson<{ brief: SavedBrief }>(
+        await fetch("/api/studio/briefs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: briefTitle, content: briefMarkdown }),
+        })
+      );
+      setBriefTitle(data.brief.title);
+      setSavedBriefs((current) => [data.brief, ...current]);
+      setBriefLibraryOpen(true);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "기획서를 저장하지 못했습니다.");
+    } finally {
+      setBriefSaving(false);
+    }
+  };
+
+  const loadSavedBrief = (brief: SavedBrief) => {
+    setBriefTitle(brief.title);
+    setBriefMarkdown(brief.content);
+    setBriefLibraryOpen(false);
+  };
+
+  const deleteSavedBrief = async (briefId: string) => {
+    try {
+      await readJson(await fetch(`/api/studio/briefs/${briefId}`, { method: "DELETE" }));
+      setSavedBriefs((current) => current.filter((brief) => brief.id !== briefId));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "기획서를 삭제하지 못했습니다.");
+    }
+  };
+
+  const toggleBriefCharacter = (id: string) => {
+    setBriefCharacterIds((current) => {
+      if (current.includes(id)) return current.filter((item) => item !== id);
+      return current.length >= 4 ? current : [...current, id];
+    });
+  };
+
+  const createProjectFromBrief = async () => {
+    if (!briefMarkdown.trim() || briefCharacterIds.length === 0) return;
+    setBriefGenerating(true);
+    setError(null);
+    try {
+      const data = await readJson<{ project: StudioProject }>(
+        await fetch("/api/studio/projects/from-brief", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: briefTitle,
+            brief: briefMarkdown,
+            aspectRatio: briefAspectRatio,
+            characterPresetIds: briefCharacterIds,
+          }),
+        })
+      );
+      await loadProjects();
+      let queued = 0;
+      const failures: string[] = [];
+      if (briefAutoGenerate) {
+        const briefCharacters = characters.filter((character) => briefCharacterIds.includes(character.id));
+        for (const [index, cut] of data.project.cuts.entries()) {
+          setBriefProgress(`컷 이미지 작업 등록 ${index + 1}/${data.project.cuts.length}`);
+          const scene = normalizeStudioSceneSettings(cut.scene);
+          const prompt = buildStudioGenerationPrompt({
+            prompt: cut.prompt,
+            mode: "scene",
+            settings: scene,
+            characters: briefCharacters.map((character) => ({ id: character.id, name: character.name })),
+          });
+          try {
+            await readJson(await fetch("/api/generate", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Idempotency-Key": `brief-${data.project.id}-${cut.id}`,
+              },
+              body: JSON.stringify({
+                presetIds: briefCharacterIds,
+                mode: "text",
+                aspectRatio: data.project.aspectRatio === "3:4" || data.project.aspectRatio === "8:11"
+                  ? "4:5"
+                  : data.project.aspectRatio,
+                imageSize,
+                jobKind: "image",
+                prompt,
+                projectId: data.project.id,
+                cutId: cut.id,
+              }),
+            }));
+            queued += 1;
+          } catch (reason) {
+            failures.push(reason instanceof Error ? reason.message : `${index + 1}번 컷 등록 실패`);
+          }
+        }
+      }
+      await loadProject(data.project.id);
+      setSelectedCharacterIds(briefCharacterIds);
+      setBriefDialogOpen(false);
+      setBriefLibraryOpen(false);
+      if (failures.length > 0) {
+        setError(`${queued}개 컷은 생성 대기열에 등록했고 ${failures.length}개는 등록하지 못했습니다. ${failures[0]}`);
+      } else if (briefAutoGenerate && "Notification" in window && Notification.permission === "default") {
+        void Notification.requestPermission();
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "기획서 자동 생성 실패");
+    } finally {
+      setBriefProgress("");
+      setBriefGenerating(false);
     }
   };
 
@@ -354,8 +621,109 @@ export default function StudioWorkspace() {
     }
   };
 
-  const saveCut = useCallback(async () => {
+  const duplicateCut = async () => {
     if (!project || !selectedCut) return;
+    try {
+      const data = await readJson<{ cut: ProjectCut }>(await fetch(`/api/studio/projects/${project.id}/cuts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceCutId: selectedCut.id }),
+      }));
+      await loadProject(project.id);
+      setSelectedCutId(data.cut.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "컷 복제 실패");
+    }
+  };
+
+  const moveCut = async (direction: "up" | "down") => {
+    if (!project || !selectedCut) return;
+    const currentIndex = project.cuts.findIndex((cut) => cut.id === selectedCut.id);
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= project.cuts.length) return;
+    const next = [...project.cuts];
+    [next[currentIndex], next[targetIndex]] = [next[targetIndex], next[currentIndex]];
+    setProject((current) => current ? { ...current, cuts: next.map((cut, order) => ({ ...cut, order })) } : current);
+    try {
+      await readJson(await fetch(`/api/studio/projects/${project.id}/cuts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderedIds: next.map((cut) => cut.id) }),
+      }));
+      await loadProject(project.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "컷 순서 저장 실패");
+      await loadProject(project.id);
+    }
+  };
+
+  const setCoverCut = async () => {
+    if (!project || !selectedCut) return;
+    try {
+      await readJson(await fetch(`/api/studio/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ coverCutId: selectedCut.id }),
+      }));
+      await Promise.all([loadProject(project.id), loadProjects()]);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "표지 지정 실패");
+    }
+  };
+
+  const downloadBlob = async (url: string, filename: string) => {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("이미지를 내려받지 못했습니다.");
+    const objectUrl = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(objectUrl);
+  };
+
+  const downloadCurrentCut = async () => {
+    if (!selectedCut?.imageUrl) return;
+    try {
+      await downloadBlob(selectedCut.imageUrl, `${String(selectedCut.order + 1).padStart(2, "0")}-${selectedCut.title}.png`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "이미지 다운로드 실패");
+    }
+  };
+
+  const downloadAllCuts = async () => {
+    if (!project) return;
+    const imageCuts = project.cuts.filter((cut) => cut.imageUrl);
+    if (imageCuts.length === 0) {
+      setError("다운로드할 컷 이미지가 없습니다.");
+      return;
+    }
+    setExportingZip(true);
+    setError(null);
+    try {
+      const { default: JSZip } = await import("jszip");
+      const zip = new JSZip();
+      await Promise.all(imageCuts.map(async (cut) => {
+        const response = await fetch(cut.imageUrl!);
+        if (!response.ok) throw new Error(`${cut.title} 이미지를 불러오지 못했습니다.`);
+        zip.file(`${String(cut.order + 1).padStart(2, "0")}-${cut.title.replace(/[\\/:*?"<>|]/g, "-")}.png`, await response.blob());
+      }));
+      const archive = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+      const objectUrl = URL.createObjectURL(archive);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `${project.title.replace(/[\\/:*?"<>|]/g, "-")}.zip`;
+      anchor.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "ZIP 내보내기 실패");
+    } finally {
+      setExportingZip(false);
+    }
+  };
+
+  const saveCut = useCallback(async () => {
+    if (!project || !selectedCut) return false;
     setSaveState("saving");
     try {
       const data = await readJson<{ cut: ProjectCut }>(
@@ -369,24 +737,95 @@ export default function StudioWorkspace() {
         ? { ...current, cuts: current.cuts.map((cut) => cut.id === data.cut.id ? data.cut : cut) }
         : current
       );
+      setDraftDirty(false);
       setSaveState("saved");
       window.setTimeout(() => setSaveState("idle"), 1500);
+      return true;
     } catch (reason) {
       setSaveState("error");
       setError(reason instanceof Error ? reason.message : "컷 저장 실패");
+      return false;
     }
   }, [draft, project, selectedCut]);
 
+  useEffect(() => {
+    if (!draftDirty || !selectedCut || saveState === "saving") return;
+    const timer = window.setTimeout(() => void saveCut(), 1_000);
+    return () => window.clearTimeout(timer);
+  }, [draftDirty, saveCut, saveState, selectedCut]);
+
+  const selectCut = useCallback(async (cutId: string) => {
+    if (cutId === selectedCut?.id || saveState === "saving") return;
+    if (draftDirty && !(await saveCut())) return;
+    setSelectedCutId(cutId);
+  }, [draftDirty, saveCut, saveState, selectedCut?.id]);
+
+  const selectProject = useCallback(async (projectId: string) => {
+    if (projectId === project?.id || saveState === "saving") return;
+    if (draftDirty && !(await saveCut())) return;
+    await loadProject(projectId);
+  }, [draftDirty, loadProject, project?.id, saveCut, saveState]);
+
+  useEffect(() => {
+    if (editingCut || !project || !selectedCut) return;
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName || "")) return;
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      const currentIndex = project.cuts.findIndex((cut) => cut.id === selectedCut.id);
+      const nextIndex = event.key === "ArrowLeft" ? currentIndex - 1 : currentIndex + 1;
+      const nextCut = project.cuts[nextIndex];
+      if (!nextCut) return;
+      event.preventDefault();
+      void selectCut(nextCut.id);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [editingCut, project, selectCut, selectedCut]);
+
   const updateDraft = <K extends keyof CutDraft>(key: K, value: CutDraft[K]) => {
     setDraft((current) => ({ ...current, [key]: value }));
+    setDraftDirty(true);
     setSaveState("idle");
   };
 
   const toggleCharacter = (id: string) => {
     setSelectedCharacterIds((current) => {
-      if (current.includes(id)) return current.filter((item) => item !== id);
-      return current.length >= 4 ? current : [...current, id];
+      const next = current.includes(id)
+        ? current.filter((item) => item !== id)
+        : current.length >= 4 ? current : [...current, id];
+      setDraft((draftState) => ({
+        ...draftState,
+        scene: { ...draftState.scene, characterPresetIds: next },
+      }));
+      setDraftDirty(true);
+      setSaveState("idle");
+      return next;
     });
+  };
+
+  const updateScene = <K extends keyof StudioSceneSettings>(key: K, value: StudioSceneSettings[K]) => {
+    setDraft((current) => ({
+      ...current,
+      scene: { ...current.scene, [key]: value },
+    }));
+    setDraftDirty(true);
+    setSaveState("idle");
+  };
+
+  const updateCharacterDirection = (characterId: string, direction: string) => {
+    updateScene("characterDirections", {
+      ...draft.scene.characterDirections,
+      [characterId]: direction,
+    });
+  };
+
+  const toggleReferenceAsset = (assetId: string) => {
+    const current = draft.scene.referenceAssetIds;
+    const next = current.includes(assetId)
+      ? current.filter((id) => id !== assetId)
+      : current.length >= 3 ? current : [...current, assetId];
+    updateScene("referenceAssetIds", next);
   };
 
   const setCharacterImageView = async (presetId: string, imageId: string, view: string) => {
@@ -410,17 +849,33 @@ export default function StudioWorkspace() {
   };
 
   const startImageGeneration = async () => {
-    if (!project || !selectedCut || selectedCharacterIds.length === 0 || !draft.prompt.trim()) {
-      setError("캐릭터와 장면 프롬프트를 선택하세요.");
+    const hasGestureReference = mode === "gesture" && draft.scene.referenceAssetIds.length > 0;
+    if (!project || !selectedCut || (!hasGestureReference && selectedCharacterIds.length === 0) || !draft.prompt.trim()) {
+      setError(mode === "gesture"
+        ? "캐릭터 프리셋 또는 참고 이미지와 제스처 프롬프트를 선택하세요."
+        : "캐릭터와 장면 프롬프트를 선택하세요.");
+      return;
+    }
+    const hasTwoUploadedCharacters = selectedCharacterIds.length === 0 && draft.scene.referenceAssetIds.length >= 2;
+    if (
+      mode === "gesture" &&
+      draft.scene.gestureLayout === "two" &&
+      selectedCharacterIds.length !== 2 &&
+      !hasTwoUploadedCharacters
+    ) {
+      setError("2캐릭터 장면은 프리셋 2명 또는 참고 이미지 2장 이상이 필요합니다.");
       return;
     }
     setGenerating(true);
     setError(null);
     try {
       await saveCut();
-      const prompt = mode === "gesture"
-        ? `${draft.prompt}\n\n[제스처 지시] 캐릭터의 전신 포즈와 손동작, 표정을 명확하게 표현하고 캐릭터 일관성을 유지하세요.`
-        : draft.prompt;
+      const prompt = buildStudioGenerationPrompt({
+        prompt: draft.prompt,
+        mode: mode === "gesture" ? "gesture" : "scene",
+        settings: draft.scene,
+        characters: selectedCharacters.map((character) => ({ id: character.id, name: character.name })),
+      });
       await readJson(await fetch("/api/generate", {
         method: "POST",
         headers: {
@@ -430,11 +885,15 @@ export default function StudioWorkspace() {
         body: JSON.stringify({
           presetIds: selectedCharacterIds,
           mode: "text",
-          aspectRatio: project.aspectRatio,
+          aspectRatio: project.aspectRatio === "3:4" || project.aspectRatio === "8:11"
+            ? "4:5"
+            : project.aspectRatio,
+          imageSize,
           jobKind: mode === "gesture" ? "gesture" : "image",
           prompt,
           projectId: project.id,
           cutId: selectedCut.id,
+          referenceAssetIds: draft.scene.referenceAssetIds,
         }),
       }));
       await loadProject(project.id);
@@ -484,6 +943,167 @@ export default function StudioWorkspace() {
     }
   };
 
+  const openVideoPlan = () => {
+    if (!project) return;
+    setVideoPlanDrafts(Object.fromEntries(project.cuts.map((cut) => [cut.id, dialoguesForCut(cut)])));
+    setVideoPlanOpen(true);
+  };
+
+  const analyzeVideoPlan = async () => {
+    if (!project) return;
+    setVideoPlanAnalyzing(true);
+    setError(null);
+    try {
+      await saveCut();
+      const data = await readJson<{ plan: Array<{ cutId: string; dialogues: VideoDialogue[] }> }>(
+        await fetch(`/api/studio/projects/${project.id}/video-plan`, { method: "POST" })
+      );
+      setVideoPlanDrafts(Object.fromEntries(data.plan.map((item) => [item.cutId, item.dialogues])));
+      await loadProject(project.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "영상 대사 분석 실패");
+    } finally {
+      setVideoPlanAnalyzing(false);
+    }
+  };
+
+  const updateVideoDialogue = (cutId: string, dialogueId: string, updates: Partial<VideoDialogue>) => {
+    setVideoPlanDrafts((current) => ({
+      ...current,
+      [cutId]: (current[cutId] || []).map((dialogue) => dialogue.id === dialogueId ? { ...dialogue, ...updates } : dialogue),
+    }));
+  };
+
+  const addVideoDialogue = (cutId: string) => {
+    setVideoPlanDrafts((current) => ({
+      ...current,
+      [cutId]: [
+        ...(current[cutId] || []),
+        { id: `dialogue_${crypto.randomUUID()}`, text: "", speakerPresetId: null },
+      ].slice(0, 12),
+    }));
+  };
+
+  const removeVideoDialogue = (cutId: string, dialogueId: string) => {
+    setVideoPlanDrafts((current) => ({
+      ...current,
+      [cutId]: (current[cutId] || []).filter((dialogue) => dialogue.id !== dialogueId),
+    }));
+  };
+
+  const moveVideoDialogue = (cutId: string, index: number, direction: "up" | "down") => {
+    setVideoPlanDrafts((current) => {
+      const dialogues = [...(current[cutId] || [])];
+      const target = direction === "up" ? index - 1 : index + 1;
+      if (target < 0 || target >= dialogues.length) return current;
+      [dialogues[index], dialogues[target]] = [dialogues[target], dialogues[index]];
+      return { ...current, [cutId]: dialogues };
+    });
+  };
+
+  const saveVideoPlan = async () => {
+    if (!project) return;
+    setVideoPlanSaving(true);
+    setError(null);
+    try {
+      await Promise.all(project.cuts.map(async (cut) => {
+        const dialogues = (videoPlanDrafts[cut.id] || []).filter((dialogue) => dialogue.text.trim());
+        return readJson(await fetch(`/api/studio/cuts/${cut.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dialoguePlan: dialogues,
+            dialogue: dialogues.map((dialogue) => dialogue.text.trim()).join("\n"),
+            speakerPresetId: dialogues[0]?.speakerPresetId || "",
+          }),
+        }));
+      }));
+      await loadProject(project.id);
+    } finally {
+      setVideoPlanSaving(false);
+    }
+  };
+
+  const previewPlannedDialogue = async (dialogue: VideoDialogue) => {
+    const character = characters.find((item) => item.id === dialogue.speakerPresetId);
+    const voiceId = character?.voiceConfig?.[0]?.voiceId;
+    if (!voiceId || !dialogue.text.trim()) {
+      setError("화자 캐릭터의 음성을 먼저 설정해주세요.");
+      return;
+    }
+    setPreviewingDialogueId(dialogue.id);
+    setError(null);
+    try {
+      const response = await fetch("/api/tts/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voiceId, text: dialogue.text.trim() }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error || "음성을 생성하지 못했습니다.");
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const audio = new Audio(url);
+      audio.onended = () => { URL.revokeObjectURL(url); setPreviewingDialogueId(null); };
+      await audio.play();
+    } catch (reason) {
+      setPreviewingDialogueId(null);
+      setError(reason instanceof Error ? reason.message : "음성 미리듣기 실패");
+    }
+  };
+
+  const startProjectVideos = async () => {
+    if (!project) return;
+    const eligibleCuts = project.cuts.filter((cut) => cut.prompt.trim());
+    if (eligibleCuts.length === 0) {
+      setError("영상으로 만들 컷 프롬프트가 없습니다.");
+      return;
+    }
+    setVideoBatchStarting(true);
+    setError(null);
+    try {
+      await saveVideoPlan();
+      const failures: string[] = [];
+      for (const cut of eligibleCuts) {
+        if (project.jobs.some((job) => job.kind === "video" && job.cutId === cut.id && ["queued", "running"].includes(job.status))) continue;
+        const dialogues = (videoPlanDrafts[cut.id] || []).filter((dialogue) => dialogue.text.trim());
+        const dialogueDirection = dialogues.length > 0
+          ? `\n\n[한국어 대사 및 음성 연출]\n${dialogues.map((dialogue) => {
+              const speaker = characters.find((character) => character.id === dialogue.speakerPresetId)?.name || "내레이터";
+              return `${speaker}: ${dialogue.text.trim()}`;
+            }).join("\n")}`
+          : "";
+        const sourceAsset = project.assets.find((asset) => asset.kind === "image" && asset.blobUrl === cut.imageUrl);
+        try {
+          await readJson(await fetch("/api/jobs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+            body: JSON.stringify({
+              kind: "video",
+              projectId: project.id,
+              cutId: cut.id,
+              prompt: cut.prompt + dialogueDirection,
+              negativePrompt: cut.negativePrompt || undefined,
+              sourceAssetId: sourceAsset?.id,
+              ...videoOptions,
+            }),
+          }));
+        } catch {
+          failures.push(cut.title);
+        }
+      }
+      await loadProject(project.id);
+      if (failures.length > 0) throw new Error(`${failures.join(", ")} 영상 작업을 시작하지 못했습니다.`);
+      if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
+      setVideoPlanOpen(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "프로젝트 영상 작업 시작 실패");
+    } finally {
+      setVideoBatchStarting(false);
+    }
+  };
+
   const retryJob = async (jobId: string) => {
     try {
       await readJson(await fetch(`/api/jobs/${jobId}`, {
@@ -499,6 +1119,7 @@ export default function StudioWorkspace() {
 
   const uploadAssets = async (files: FileList) => {
     if (!project || files.length === 0) return;
+    const existingAssetIds = new Set(project.assets.map((asset) => asset.id));
     setUploading(true);
     setError(null);
     try {
@@ -512,7 +1133,27 @@ export default function StudioWorkspace() {
         });
       }
       await new Promise((resolve) => setTimeout(resolve, 1200));
-      await loadProject(project.id);
+      const refreshed = await loadProject(project.id);
+      if (mode === "gesture") {
+        const addedImageIds = refreshed.assets
+          .filter((asset) => asset.kind === "image" && !existingAssetIds.has(asset.id))
+          .map((asset) => asset.id)
+          .slice(0, 3);
+        if (addedImageIds.length > 0) {
+          setDraft((current) => ({
+            ...current,
+            scene: {
+              ...current.scene,
+              referenceAssetIds: Array.from(new Set([
+                ...current.scene.referenceAssetIds,
+                ...addedImageIds,
+              ])).slice(0, 3),
+            },
+          }));
+          setDraftDirty(true);
+          setSaveState("idle");
+        }
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "자산 업로드 실패");
     } finally {
@@ -568,6 +1209,7 @@ export default function StudioWorkspace() {
           />
         )}
         <div className={styles.headerActions}>
+          <GenerationNotifications />
           <span className={styles.saveIndicator}>
             {saveState === "saving" && <><LuLoaderCircle className={styles.spin} /> 저장 중</>}
             {saveState === "saved" && <><LuCheck /> 저장됨</>}
@@ -596,20 +1238,25 @@ export default function StudioWorkspace() {
         <aside className={styles.projectRail}>
           <div className={styles.panelHeading}>
             <span><LuFolderKanban /> 프로젝트</span>
-            <button className={styles.smallIconButton} onClick={() => void createProject()} disabled={creating} title="새 프로젝트">
-              {creating ? <LuLoaderCircle className={styles.spin} /> : <LuPlus />}
-            </button>
+            <div className={styles.panelActions}>
+              <button className={styles.smallIconButton} onClick={openBriefDialog} title="기획서로 자동 생성">
+                <LuFileText />
+              </button>
+              <button className={styles.smallIconButton} onClick={() => void createProject()} disabled={creating} title="새 프로젝트">
+                {creating ? <LuLoaderCircle className={styles.spin} /> : <LuPlus />}
+              </button>
+            </div>
           </div>
           <div className={styles.projectList}>
             {projects.map((item) => (
               <button
                 key={item.id}
                 className={`${styles.projectItem} ${project?.id === item.id ? styles.projectItemActive : ""}`}
-                onClick={() => void loadProject(item.id)}
+                onClick={() => void selectProject(item.id)}
               >
                 <span className={styles.projectThumb}>
-                  {item.cuts[0]?.thumbnailUrl || item.cuts[0]?.imageUrl ? (
-                    <img src={item.cuts[0].thumbnailUrl || item.cuts[0].imageUrl || ""} alt="" />
+                  {item.coverCut?.thumbnailUrl || item.coverCut?.imageUrl || item.cuts[0]?.thumbnailUrl || item.cuts[0]?.imageUrl ? (
+                    <img src={item.coverCut?.thumbnailUrl || item.coverCut?.imageUrl || item.cuts[0]?.thumbnailUrl || item.cuts[0]?.imageUrl || ""} alt="" />
                   ) : (
                     <LuImage size={18} />
                   )}
@@ -631,7 +1278,7 @@ export default function StudioWorkspace() {
           {project && (
             <>
               <div className={styles.panelHeading}>
-                <span><LuClapperboard /> 컷</span>
+                <span><LuClapperboard /> 페이지</span>
                 <button className={styles.smallIconButton} onClick={() => void addCut()} title="새 컷">
                   <LuPlus />
                 </button>
@@ -641,37 +1288,60 @@ export default function StudioWorkspace() {
                   <button
                     key={cut.id}
                     className={`${styles.cutItem} ${selectedCut?.id === cut.id ? styles.cutItemActive : ""}`}
-                    onClick={() => setSelectedCutId(cut.id)}
+                    onClick={() => void selectCut(cut.id)}
                   >
-                    <span>{String(cut.order + 1).padStart(2, "0")}</span>
+                    <span className={styles.cutThumb}>
+                      {cut.thumbnailUrl || cut.imageUrl
+                        ? <img src={cut.thumbnailUrl || cut.imageUrl || ""} alt="" />
+                        : <span>{String(cut.order + 1).padStart(2, "0")}</span>}
+                    </span>
                     <div>
                       <strong>{cut.title}</strong>
                       <small>{(cut.durationMs / 1000).toFixed(0)}초</small>
                     </div>
-                    {cut.videoUrl ? <LuVideo /> : cut.imageUrl ? <LuImage /> : null}
+                    <span className={styles.cutIndicators}>
+                      {project.coverCutId === cut.id && <LuStar className={styles.coverStar} />}
+                      {cut.videoUrl ? <LuVideo /> : cut.imageUrl ? <LuImage /> : null}
+                    </span>
                   </button>
                 ))}
               </div>
-              <button
-                className={styles.deleteCutButton}
-                onClick={() => void deleteCut()}
-                disabled={project.cuts.length <= 1}
-              >
-                <LuTrash2 /> 현재 컷 삭제
-              </button>
+              <div className={styles.cutActions}>
+                <button onClick={() => void moveCut("up")} disabled={!selectedCut || selectedCut.order === 0} title="앞으로 이동"><LuArrowUp /></button>
+                <button onClick={() => void moveCut("down")} disabled={!selectedCut || selectedCut.order === project.cuts.length - 1} title="뒤로 이동"><LuArrowDown /></button>
+                <button onClick={() => void duplicateCut()} disabled={!selectedCut || project.cuts.length >= 30} title="페이지 복제"><LuCopy /></button>
+                <button onClick={() => void setCoverCut()} disabled={!selectedCut} title="표지 지정" className={project.coverCutId === selectedCut?.id ? styles.cutActionActive : ""}><LuStar /></button>
+                <button onClick={() => void downloadCurrentCut()} disabled={!selectedCut?.imageUrl} title="현재 PNG 다운로드"><LuDownload /></button>
+                <button onClick={() => void downloadAllCuts()} disabled={exportingZip || !project.cuts.some((cut) => cut.imageUrl)} title="전체 ZIP 다운로드">
+                  {exportingZip ? <LuLoaderCircle className={styles.spin} /> : <LuFolderKanban />}
+                </button>
+                <button onClick={() => void deleteCut()} disabled={project.cuts.length <= 1} title="현재 페이지 삭제" className={styles.cutDeleteAction}><LuTrash2 /></button>
+              </div>
             </>
           )}
         </aside>
 
         <main className={styles.stageColumn}>
           <div className={styles.modeBar} aria-label="생성 모드">
-            <button className={mode === "scene" ? styles.modeActive : ""} onClick={() => setMode("scene")}>
+            <button
+              className={mode === "scene" ? styles.modeActive : ""}
+              aria-pressed={mode === "scene"}
+              onClick={() => setMode("scene")}
+            >
               <LuImage /> 장면
             </button>
-            <button className={mode === "gesture" ? styles.modeActive : ""} onClick={() => setMode("gesture")}>
+            <button
+              className={mode === "gesture" ? styles.modeActive : ""}
+              aria-pressed={mode === "gesture"}
+              onClick={() => setMode("gesture")}
+            >
               <LuWandSparkles /> 제스처
             </button>
-            <button className={mode === "video" ? styles.modeActive : ""} onClick={() => setMode("video")}>
+            <button
+              className={mode === "video" ? styles.modeActive : ""}
+              aria-pressed={mode === "video"}
+              onClick={() => setMode("video")}
+            >
               <LuVideo /> Veo 영상
             </button>
           </div>
@@ -833,6 +1503,33 @@ export default function StudioWorkspace() {
                       );
                     })}
                   </div>
+                  {mode === "gesture" && (
+                    <div className={styles.gestureUploadRow}>
+                      <button onClick={() => fileRef.current?.click()} disabled={uploading}>
+                        {uploading ? <LuLoaderCircle className={styles.spin} /> : <LuUpload />}
+                        캐릭터·그림체 이미지 업로드
+                      </button>
+                      <small>업로드한 이미지는 아래 참고 자산에 자동 선택됩니다.</small>
+                    </div>
+                  )}
+                  {mode === "gesture" && (
+                    <div className={styles.segmentControl} aria-label="제스처 구성">
+                      <button
+                        className={draft.scene.gestureLayout === "single" ? styles.segmentActive : ""}
+                        aria-pressed={draft.scene.gestureLayout === "single"}
+                        onClick={() => updateScene("gestureLayout", "single")}
+                      >
+                        단일 제스처
+                      </button>
+                      <button
+                        className={draft.scene.gestureLayout === "two" ? styles.segmentActive : ""}
+                        aria-pressed={draft.scene.gestureLayout === "two"}
+                        onClick={() => updateScene("gestureLayout", "two")}
+                      >
+                        2캐릭터 장면
+                      </button>
+                    </div>
+                  )}
                   {selectedCharacters.map((character) => (
                     <div className={styles.characterViews} key={character.id}>
                       <strong>{character.name} · 4면 참조</strong>
@@ -849,8 +1546,97 @@ export default function StudioWorkspace() {
                           </label>
                         ))}
                       </div>
+                      {(mode === "gesture" || selectedCharacters.length > 1) && (
+                        <label className={styles.characterDirectionField}>
+                          <span>{character.name} 표정·포즈</span>
+                          <input
+                            value={draft.scene.characterDirections[character.id] || ""}
+                            onChange={(event) => updateCharacterDirection(character.id, event.target.value)}
+                            placeholder="예: 따뜻하게 설명하며 오른손을 든다"
+                          />
+                        </label>
+                      )}
                     </div>
                   ))}
+                </div>
+              )}
+
+              {mode !== "video" && (
+                <div className={styles.inspectorSection}>
+                  <div className={styles.sectionTitleRow}>
+                    <h2>연출 설정</h2>
+                    <span>참고 {draft.scene.referenceAssetIds.length}/3</span>
+                  </div>
+                  <label className={styles.field}>
+                    <span>카메라 앵글</span>
+                    <select
+                      value={draft.scene.cameraAngle}
+                      onChange={(event) => updateScene("cameraAngle", event.target.value as StudioSceneSettings["cameraAngle"])}
+                    >
+                      {CAMERA_ANGLES.map((angle) => (
+                        <option key={angle.id} value={angle.id}>{angle.label} · {angle.description}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className={styles.field}>
+                    <span>배경</span>
+                    <div className={styles.segmentControl} aria-label="배경 포함 여부">
+                      <button
+                        className={draft.scene.backgroundMode === "scene" ? styles.segmentActive : ""}
+                        onClick={() => updateScene("backgroundMode", "scene")}
+                      >
+                        배경 있음
+                      </button>
+                      <button
+                        className={draft.scene.backgroundMode === "none" ? styles.segmentActive : ""}
+                        onClick={() => updateScene("backgroundMode", "none")}
+                      >
+                        배경 없음
+                      </button>
+                    </div>
+                  </div>
+                  <div className={styles.field}>
+                    <span>출력 품질</span>
+                    <div className={styles.segmentControl} aria-label="이미지 출력 품질">
+                      <button
+                        className={imageSize === "1K" ? styles.segmentActive : ""}
+                        onClick={() => setImageSize("1K")}
+                        aria-pressed={imageSize === "1K"}
+                      >
+                        빠른 1K
+                      </button>
+                      <button
+                        className={imageSize === "2K" ? styles.segmentActive : ""}
+                        onClick={() => setImageSize("2K")}
+                        aria-pressed={imageSize === "2K"}
+                      >
+                        고품질 2K
+                      </button>
+                    </div>
+                  </div>
+                  <div className={styles.field}>
+                    <span>구도·분위기 참고 자산</span>
+                    <div className={styles.referenceAssetGrid}>
+                      {project?.assets.filter((asset) => asset.kind === "image").map((asset) => {
+                        const selected = draft.scene.referenceAssetIds.includes(asset.id);
+                        return (
+                          <button
+                            key={asset.id}
+                            className={selected ? styles.referenceAssetActive : ""}
+                            onClick={() => toggleReferenceAsset(asset.id)}
+                            aria-pressed={selected}
+                            title={asset.name}
+                          >
+                            <img src={asset.thumbnailUrl || asset.blobUrl} alt="" />
+                            {selected && <LuCheck />}
+                          </button>
+                        );
+                      })}
+                      {!project?.assets.some((asset) => asset.kind === "image") && (
+                        <small className={styles.emptyReferences}>프로젝트 자산에 이미지를 올리면 참고로 선택할 수 있습니다.</small>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -905,6 +1691,9 @@ export default function StudioWorkspace() {
                       <><LuImage /> 자산에서 시작 이미지를 선택할 수 있습니다.</>
                     )}
                   </div>
+                  <button className={styles.videoPlanButton} onClick={openVideoPlan}>
+                    <LuFileText /> 프로젝트 전체 대사·영상 구성
+                  </button>
                 </div>
               )}
 
@@ -926,18 +1715,265 @@ export default function StudioWorkspace() {
       {editingCut && project && selectedCut?.imageUrl && (
         <CanvasEditor
           initialImage={{ id: `cut:${selectedCut.id}`, dataUrl: selectedCut.imageUrl }}
-          initialAspect={project.aspectRatio as "1:1" | "4:5" | "9:16" | "16:9"}
+          initialAspect={project.aspectRatio as "1:1" | "4:5" | "3:4" | "8:11" | "9:16" | "16:9"}
           galleryImages={project.assets
             .filter((asset) => asset.kind === "image")
             .map((asset) => ({ id: asset.id, dataUrl: asset.blobUrl }))}
           projectId={project.id}
           cutId={selectedCut.id}
+          initialCanvas={selectedCut.canvas}
           onClose={() => setEditingCut(false)}
           onSave={() => {
             setEditingCut(false);
             void loadProject(project.id);
           }}
         />
+      )}
+
+      {videoPlanOpen && project && (
+        <div className={styles.dialogBackdrop} role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !videoPlanAnalyzing && !videoPlanSaving && !videoBatchStarting) setVideoPlanOpen(false);
+        }}>
+          <section className={styles.videoPlanDialog} role="dialog" aria-modal="true" aria-labelledby="video-plan-title">
+            <header className={styles.dialogHeader}>
+              <div>
+                <span>PROJECT VIDEO</span>
+                <h2 id="video-plan-title">대사·화자·컷 영상 구성</h2>
+              </div>
+              <button className={styles.iconButton} onClick={() => setVideoPlanOpen(false)} disabled={videoPlanAnalyzing || videoPlanSaving || videoBatchStarting} title="닫기"><LuX /></button>
+            </header>
+
+            <div className={styles.videoPlanToolbar}>
+              <button onClick={() => void analyzeVideoPlan()} disabled={videoPlanAnalyzing || videoPlanSaving || videoBatchStarting}>
+                {videoPlanAnalyzing ? <LuLoaderCircle className={styles.spin} /> : <LuSparkles />} AI 대사 분석
+              </button>
+              <button onClick={() => void saveVideoPlan()} disabled={videoPlanAnalyzing || videoPlanSaving || videoBatchStarting}>
+                {videoPlanSaving ? <LuLoaderCircle className={styles.spin} /> : <LuSave />} 저장
+              </button>
+              <button className={styles.videoBatchButton} onClick={() => void startProjectVideos()} disabled={videoPlanAnalyzing || videoPlanSaving || videoBatchStarting || !project.cuts.some((cut) => cut.prompt.trim())}>
+                {videoBatchStarting ? <LuLoaderCircle className={styles.spin} /> : <LuPlay />} 전체 Veo 시작 · {project.cuts.filter((cut) => cut.prompt.trim()).length}컷
+              </button>
+            </div>
+
+            {error && <div className={styles.dialogError}>{error}<button onClick={() => setError(null)} title="닫기"><LuX /></button></div>}
+
+            <div className={styles.videoPlanBody}>
+              {project.cuts.map((cut) => {
+                const dialogues = videoPlanDrafts[cut.id] || [];
+                return (
+                  <article className={styles.videoCut} key={cut.id}>
+                    <header>
+                      <span>{String(cut.order + 1).padStart(2, "0")}</span>
+                      {cut.thumbnailUrl || cut.imageUrl
+                        ? <img src={cut.thumbnailUrl || cut.imageUrl || ""} alt="" />
+                        : <div className={styles.videoCutPlaceholder}><LuImage /></div>}
+                      <div>
+                        <strong>{cut.title}</strong>
+                        <small>{Math.round(cut.durationMs / 1000)}초 · {cut.videoUrl ? "영상 완료" : "영상 대기"}</small>
+                      </div>
+                      <button className={styles.smallIconButton} onClick={() => addVideoDialogue(cut.id)} disabled={dialogues.length >= 12} title="대사 추가"><LuPlus /></button>
+                    </header>
+                    <div className={styles.dialogueRows}>
+                      {dialogues.map((dialogue, index) => (
+                        <div className={styles.dialogueRow} key={dialogue.id}>
+                          <div className={styles.dialogueOrder}>
+                            <button onClick={() => moveVideoDialogue(cut.id, index, "up")} disabled={index === 0} title="위로"><LuArrowUp /></button>
+                            <button onClick={() => moveVideoDialogue(cut.id, index, "down")} disabled={index === dialogues.length - 1} title="아래로"><LuArrowDown /></button>
+                          </div>
+                          <select value={dialogue.speakerPresetId || ""} onChange={(event) => updateVideoDialogue(cut.id, dialogue.id, { speakerPresetId: event.target.value || null })} aria-label="화자">
+                            <option value="">내레이터</option>
+                            {characters.map((character) => (
+                              <option value={character.id} key={character.id}>{character.name}{character.voiceConfig?.[0] ? " · 음성" : ""}</option>
+                            ))}
+                          </select>
+                          <textarea rows={2} value={dialogue.text} maxLength={1_000} onChange={(event) => updateVideoDialogue(cut.id, dialogue.id, { text: event.target.value })} aria-label="대사" />
+                          <button onClick={() => void previewPlannedDialogue(dialogue)} disabled={previewingDialogueId === dialogue.id || !dialogue.text.trim()} title="음성 미리듣기">
+                            {previewingDialogueId === dialogue.id ? <LuLoaderCircle className={styles.spin} /> : <LuVolume2 />}
+                          </button>
+                          <button onClick={() => removeVideoDialogue(cut.id, dialogue.id)} title="대사 삭제"><LuTrash2 /></button>
+                        </div>
+                      ))}
+                      {dialogues.length === 0 && (
+                        <button className={styles.emptyDialogue} onClick={() => addVideoDialogue(cut.id)}><LuPlus /> 대사 추가</button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {briefDialogOpen && (
+        <div className={styles.dialogBackdrop} role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !briefGenerating) setBriefDialogOpen(false);
+        }}>
+          <section className={styles.briefDialog} role="dialog" aria-modal="true" aria-labelledby="brief-dialog-title">
+            <header className={styles.dialogHeader}>
+              <div>
+                <span>AI 콘티</span>
+                <h2 id="brief-dialog-title">기획서로 프로젝트 자동 생성</h2>
+              </div>
+              <button className={styles.iconButton} onClick={() => setBriefDialogOpen(false)} disabled={briefGenerating} title="닫기">
+                <LuX />
+              </button>
+            </header>
+
+            <div className={styles.briefDialogBody}>
+              <div className={styles.briefEditorColumn}>
+                <div className={styles.dialogSectionTitle}>
+                  <strong>기획서 마크다운</strong>
+                  <div className={styles.briefEditorActions}>
+                    <button onClick={toggleBriefLibrary}><LuBookOpen /> 저장된 기획서</button>
+                    <button onClick={() => void saveCurrentBrief()} disabled={briefSaving || !briefMarkdown.trim()}>
+                      {briefSaving ? <LuLoaderCircle className={styles.spin} /> : <LuSave />} 현재 저장
+                    </button>
+                    <button onClick={() => { setBriefTitle(""); setBriefMarkdown(PROJECT_BRIEF_TEMPLATE); }}>템플릿</button>
+                  </div>
+                </div>
+                <input
+                  className={styles.briefTitleInput}
+                  value={briefTitle}
+                  onChange={(event) => setBriefTitle(event.target.value)}
+                  maxLength={120}
+                  placeholder="프로젝트와 저장 기획서 제목 (선택)"
+                  aria-label="기획서 제목"
+                />
+                <textarea
+                  className={styles.briefTextarea}
+                  value={briefMarkdown}
+                  onChange={(event) => setBriefMarkdown(event.target.value)}
+                  maxLength={20_000}
+                  aria-label="기획서 마크다운"
+                />
+                <small className={styles.characterCounter}>{briefMarkdown.length.toLocaleString()} / 20,000자</small>
+              </div>
+
+              <div className={styles.briefOptionsColumn}>
+                <div className={styles.dialogSectionTitle}>
+                  <strong>주인공 캐릭터</strong>
+                  <span>{briefCharacterIds.length}/4</span>
+                </div>
+                <div className={styles.briefCharacterGrid}>
+                  {characters.map((character) => {
+                    const image = character.representativeImage || character.images[0];
+                    const selected = briefCharacterIds.includes(character.id);
+                    return (
+                      <button
+                        key={character.id}
+                        className={selected ? styles.briefCharacterActive : ""}
+                        onClick={() => toggleBriefCharacter(character.id)}
+                        aria-pressed={selected}
+                      >
+                        <span>{image ? <img src={image.thumbnailUrl || image.dataUrl} alt="" /> : <LuImage />}</span>
+                        <small>{character.name}</small>
+                        {selected && <LuCheck />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <label className={styles.field}>
+                  <span>캔버스 규격</span>
+                  <select value={briefAspectRatio} onChange={(event) => setBriefAspectRatio(event.target.value as typeof briefAspectRatio)}>
+                    <option value="1:1">인스타 1:1 · 1080×1080</option>
+                    <option value="4:5">인스타 4:5 · 1080×1350</option>
+                    <option value="3:4">카드뉴스 3:4 · 960×1280</option>
+                    <option value="8:11">원고 800×1100</option>
+                    <option value="9:16">숏폼 9:16 · 1080×1920</option>
+                    <option value="16:9">가로 16:9 · 1920×1080</option>
+                  </select>
+                </label>
+
+                <div className={styles.field}>
+                  <span>이미지 출력 품질</span>
+                  <div className={styles.segmentControl} aria-label="기획서 이미지 출력 품질">
+                    <button
+                      className={imageSize === "1K" ? styles.segmentActive : ""}
+                      onClick={() => setImageSize("1K")}
+                      aria-pressed={imageSize === "1K"}
+                    >
+                      Gemini 빠른 1K
+                    </button>
+                    <button
+                      className={imageSize === "2K" ? styles.segmentActive : ""}
+                      onClick={() => setImageSize("2K")}
+                      aria-pressed={imageSize === "2K"}
+                    >
+                      Gemini 고품질 2K
+                    </button>
+                  </div>
+                </div>
+
+                <label className={styles.briefAutoOption}>
+                  <input
+                    type="checkbox"
+                    checked={briefAutoGenerate}
+                    onChange={(event) => setBriefAutoGenerate(event.target.checked)}
+                  />
+                  <span>
+                    <strong>컷 이미지까지 자동 생성</strong>
+                    <small>콘티를 만든 뒤 각 컷을 생성 대기열에 자동 등록합니다.</small>
+                  </span>
+                </label>
+
+                <div className={styles.platformModelNote}>
+                  <LuSparkles />
+                  <div>
+                    <strong>플랫폼 Vertex AI</strong>
+                    <span>사용자 API 키 없이 기획 분석과 컷 구성을 처리합니다.</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {briefLibraryOpen && (
+              <aside className={styles.briefLibrary} aria-label="저장된 기획서">
+                <header>
+                  <div>
+                    <strong>저장된 기획서</strong>
+                    <span>{savedBriefs.length}/50</span>
+                  </div>
+                  <button className={styles.iconButton} onClick={() => setBriefLibraryOpen(false)} title="닫기">
+                    <LuX />
+                  </button>
+                </header>
+                <div className={styles.briefLibraryList}>
+                  {briefLibraryLoading ? (
+                    <div className={styles.briefLibraryEmpty}><LuLoaderCircle className={styles.spin} /> 불러오는 중</div>
+                  ) : savedBriefs.length === 0 ? (
+                    <div className={styles.briefLibraryEmpty}>저장된 기획서가 없습니다.</div>
+                  ) : savedBriefs.map((brief) => (
+                    <div className={styles.briefLibraryRow} key={brief.id}>
+                      <button onClick={() => loadSavedBrief(brief)}>
+                        <strong>{brief.title}</strong>
+                        <span>{new Date(brief.updatedAt).toLocaleString("ko-KR")}</span>
+                      </button>
+                      <button onClick={() => void deleteSavedBrief(brief.id)} title="저장된 기획서 삭제">
+                        <LuTrash2 />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </aside>
+            )}
+
+            <footer className={styles.dialogFooter}>
+              <button className={styles.secondaryButton} onClick={() => setBriefDialogOpen(false)} disabled={briefGenerating}>취소</button>
+              <button
+                className={styles.primaryButton}
+                onClick={() => void createProjectFromBrief()}
+                disabled={briefGenerating || !briefMarkdown.trim() || briefCharacterIds.length === 0}
+              >
+                {briefGenerating ? <LuLoaderCircle className={styles.spin} /> : <LuSparkles />}
+                {briefGenerating
+                  ? briefProgress || "콘티를 구성하고 있습니다"
+                  : briefAutoGenerate ? "콘티와 컷 이미지 자동 생성" : "프로젝트와 컷 자동 생성"}
+              </button>
+            </footer>
+          </section>
+        </div>
       )}
     </div>
   );

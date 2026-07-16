@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import styles from "./page.module.css";
-import BackgroundGenerator from "@/components/BackgroundGenerator";
 import UserAvatar from "@/components/UserAvatar";
 import { useAuth } from "@/components/AuthProvider";
 import {
@@ -26,21 +26,40 @@ import {
   LuUserRoundCog,
   LuSettings,
   LuClapperboard,
+  LuFilm,
+  LuPersonStanding,
+  LuUsers,
 } from "react-icons/lu";
 import { resizeFromFile, fetchImageFromUrl } from "@/lib/image-resize";
-import Board from "@/components/Board";
-import ChatBot from "@/components/ChatBot";
-import CharacterManagementModal from "@/components/CharacterManagementModal";
 import PromptInput from "@/components/PromptInput";
-import CanvasEditor from "@/components/CanvasEditor";
-import InstagramTab from "@/components/InstagramTab";
-import MyContents from "@/components/MyContents";
-import CharacterDesigner from "@/components/CharacterDesigner";
-import AccountSettings from "@/components/AccountSettings";
 import { canAccessCharacterDesigner } from "@/lib/character-designer-access";
+
+function DeferredPanelLoader() {
+  return (
+    <div className={styles.deferredPanelLoader} role="status" aria-label="화면 불러오는 중">
+      <span className={styles.spinner} />
+    </div>
+  );
+}
+
+const BackgroundGenerator = dynamic(() => import("@/components/BackgroundGenerator"), { loading: DeferredPanelLoader });
+const Board = dynamic(() => import("@/components/Board"), { loading: DeferredPanelLoader });
+const InstagramTab = dynamic(() => import("@/components/InstagramTab"), { loading: DeferredPanelLoader });
+const MyContents = dynamic(() => import("@/components/MyContents"), { loading: DeferredPanelLoader });
+const CharacterDesigner = dynamic(() => import("@/components/CharacterDesigner"), { loading: DeferredPanelLoader });
+const CharacterCreator = dynamic(() => import("@/components/CharacterCreator"), { loading: DeferredPanelLoader });
+const AccountSettings = dynamic(() => import("@/components/AccountSettings"), { loading: DeferredPanelLoader });
+const CanvasEditor = dynamic(() => import("@/components/CanvasEditor"), { loading: DeferredPanelLoader, ssr: false });
+const CharacterManagementModal = dynamic(
+  () => import("@/components/CharacterManagementModal"),
+  { loading: DeferredPanelLoader },
+);
+const ChatBot = dynamic(() => import("@/components/ChatBot"), { loading: DeferredPanelLoader, ssr: false });
+const GenerationNotifications = dynamic(() => import("@/components/GenerationNotifications"), { loading: () => null });
 
 type Tab =
   | "character"
+  | "characterCreator"
   | "designer"
   | "background"
   | "board"
@@ -52,6 +71,7 @@ interface PresetImageData {
   id: string;
   dataUrl: string;
   thumbnailUrl?: string;
+  view?: string;
 }
 
 interface Preset {
@@ -61,6 +81,9 @@ interface Preset {
   groupId?: string | null;
   order?: number;
   userId?: string | null;
+  isDefault?: boolean;
+  description?: string | null;
+  voiceConfig?: Array<{ label: string; voiceId: string }> | null;
   representativeImage: PresetImageData | null;
   images: PresetImageData[];
 }
@@ -227,7 +250,7 @@ interface UserOption {
 }
 
 export default function Home() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("character");
   const [charGroups, setCharGroups] = useState<CharacterGroupData[]>([]);
   const [ungroupedPresets, setUngroupedPresets] = useState<Preset[]>([]);
@@ -235,6 +258,7 @@ export default function Home() {
   const [selectedPresets, setSelectedPresets] = useState<Preset[]>([]);
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [managingPreset, setManagingPreset] = useState<Preset | null>(null);
+  const [showCharacterLibrary, setShowCharacterLibrary] = useState(false);
   const [editingImage, setEditingImage] = useState<FlatImage | null>(null);
 
   // 태그 시스템
@@ -262,18 +286,33 @@ export default function Home() {
   // 챗봇
   const [chatOpen, setChatOpen] = useState(false);
   const [showDesignerAccessDenied, setShowDesignerAccessDenied] = useState(false);
+  const [designerTabPending, setDesignerTabPending] = useState(false);
 
   useEffect(() => {
     if (user?.mustChangePassword) setActiveTab("settings");
   }, [user?.mustChangePassword]);
 
   const handleDesignerTabClick = useCallback(() => {
+    if (authLoading) {
+      setDesignerTabPending(true);
+      return;
+    }
     if (!canAccessCharacterDesigner(user)) {
       setShowDesignerAccessDenied(true);
       return;
     }
     setActiveTab("designer");
-  }, [user]);
+  }, [authLoading, user]);
+
+  useEffect(() => {
+    if (!designerTabPending || authLoading) return;
+    setDesignerTabPending(false);
+    if (canAccessCharacterDesigner(user)) {
+      setActiveTab("designer");
+    } else {
+      setShowDesignerAccessDenied(true);
+    }
+  }, [authLoading, designerTabPending, user]);
 
   useEffect(() => {
     if (!showDesignerAccessDenied) return;
@@ -316,16 +355,6 @@ export default function Home() {
   const [marketplaceItems, setMarketplaceItems] = useState<MarketplaceItem[]>([]);
   const [marketplaceLoading, setMarketplaceLoading] = useState(false);
   const [purchasing, setPurchasing] = useState<string | null>(null);
-
-  // 관리자: 유저 목록 로드
-  useEffect(() => {
-    if (isAdmin) {
-      fetch("/api/admin/users")
-        .then((r) => r.json())
-        .then((data: UserOption[]) => setAllUsers(data))
-        .catch(() => setAllUsers([]));
-    }
-  }, [isAdmin]);
 
   // API 호출 시 userId 파라미터 생성
   const userParam = isAdmin && viewingUserId ? `userId=${viewingUserId}` : "";
@@ -387,14 +416,6 @@ export default function Home() {
     }).then(() => loadPromptPresets()).catch(() => {});
   }, [loadPromptPresets]);
 
-  // 태그 로드
-  const loadTags = useCallback(() => {
-    fetch("/api/tags")
-      .then((r) => r.json())
-      .then((data) => { if (Array.isArray(data)) setAllTags(data); })
-      .catch(() => setAllTags([]));
-  }, []);
-
   const loadSavedBackgrounds = useCallback(() => {
     const q = userParam ? `?${userParam}` : "";
     fetch(`/api/backgrounds${q}`)
@@ -402,18 +423,6 @@ export default function Home() {
       .then((data) => { if (Array.isArray(data)) setSavedBackgrounds(data); })
       .catch(() => setSavedBackgrounds([]));
   }, [userParam]);
-
-  useEffect(() => {
-    loadPresets();
-    loadTags();
-    loadPromptPresets();
-  }, [loadPresets, loadTags, loadPromptPresets]);
-
-  useEffect(() => {
-    if (activeTab === "character") {
-      loadSavedBackgrounds();
-    }
-  }, [activeTab, loadSavedBackgrounds]);
 
   // 히스토리 로드 (전체 데이터, 필터는 클라이언트에서)
   const loadHistory = useCallback(() => {
@@ -427,8 +436,43 @@ export default function Home() {
   }, [isAdmin, viewingUserId]);
 
   useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
+    const controller = new AbortController();
+    setPresetsLoading(true);
+    const query = userParam ? `?${userParam}` : "";
+    void fetch(`/api/home/bootstrap${query}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "초기 데이터를 불러오지 못했습니다.");
+        const groups: CharacterGroupData[] = data.presets?.groups ?? [];
+        const ungrouped: Preset[] = data.presets?.ungrouped ?? [];
+        setCharGroups(groups);
+        setUngroupedPresets(ungrouped);
+        setSelectedPresets((previous) => {
+          if (previous.length > 0) return previous;
+          const available = [...ungrouped, ...groups.flatMap((group) => group.presets)];
+          const preferred = available.find((preset) => preset.isDefault)
+            ?? available.find((preset) => preset.alias === "wony")
+            ?? available[0];
+          return preferred ? [preferred] : [];
+        });
+        setHistory(Array.isArray(data.history) ? data.history : []);
+        setAllTags(Array.isArray(data.tags) ? data.tags : []);
+        setPromptPresets(Array.isArray(data.promptPresets) ? data.promptPresets : []);
+        setSavedBackgrounds(Array.isArray(data.backgrounds) ? data.backgrounds : []);
+        setAllUsers(Array.isArray(data.users) ? data.users : []);
+      })
+      .catch((cause) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") return;
+        setError(cause instanceof Error ? cause.message : "초기 데이터를 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setPresetsLoading(false);
+      });
+    return () => controller.abort();
+  }, [userParam]);
 
   // 히스토리를 플랫 이미지 배열로 변환 + 클라이언트 필터링
   const flatImages: FlatImage[] = useMemo(() => {
@@ -508,6 +552,41 @@ export default function Home() {
       // Keep the lightweight preset open if detail loading fails.
     }
   };
+
+  const handlePresetDeleted = useCallback((presetId: string) => {
+    setSelectedPresets((current) => current.filter((item) => item.id !== presetId));
+    setUngroupedPresets((current) => current.filter((item) => item.id !== presetId));
+    setCharGroups((current) => current
+      .map((group) => ({ ...group, presets: group.presets.filter((item) => item.id !== presetId) }))
+      .filter((group) => group.presets.length > 0)
+    );
+    setManagingPreset(null);
+    void loadPresets();
+  }, [loadPresets]);
+
+  const deleteOwnedPreset = async (preset: Preset) => {
+    if (!window.confirm(`'${preset.name}' 캐릭터를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) return;
+    try {
+      const response = await fetch(`/api/presets/${preset.id}`, { method: "DELETE" });
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "캐릭터를 삭제하지 못했습니다.");
+      handlePresetDeleted(preset.id);
+      setToast("캐릭터를 삭제했습니다.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "캐릭터를 삭제하지 못했습니다.");
+    }
+  };
+
+  const ownedPresets = useMemo(() => {
+    const byId = new Map<string, Preset>();
+    for (const preset of [...ungroupedPresets, ...charGroups.flatMap((group) => group.presets)]) {
+      if (preset.userId === user?.id) byId.set(preset.id, preset);
+    }
+    return Array.from(byId.values()).sort((left, right) =>
+      Number(Boolean(right.isDefault)) - Number(Boolean(left.isDefault)) ||
+      (left.order || 0) - (right.order || 0)
+    );
+  }, [charGroups, ungroupedPresets, user?.id]);
 
   // 관리자: 유저 전환
   const handleUserSwitch = (userId: string) => {
@@ -1010,11 +1089,19 @@ export default function Home() {
             onClick={() => setActiveTab("character")}
           >
             <LuPaintbrush size={14} />
-            캐릭터 생성
+            장면 생성
+          </button>
+          <button
+            className={`${styles.tab} ${activeTab === "characterCreator" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("characterCreator")}
+          >
+            <LuPlus size={14} />
+            캐릭터 만들기
           </button>
           <button
             className={`${styles.tab} ${activeTab === "designer" ? styles.tabActive : ""}`}
             onClick={handleDesignerTabClick}
+            aria-busy={designerTabPending}
           >
             <LuUserRoundCog size={14} />
             캐릭터 설계
@@ -1026,9 +1113,28 @@ export default function Home() {
             <LuImage size={14} />
             배경 생성
           </button>
+          <Link className={styles.tab} href="/studio?mode=gesture">
+            <LuPersonStanding size={14} />
+            제스처 생성
+          </Link>
+          <button
+            className={`${styles.tab} ${showCharacterLibrary ? styles.tabActive : ""}`}
+            onClick={() => setShowCharacterLibrary(true)}
+          >
+            <LuUsers size={14} />
+            내 캐릭터
+          </button>
           <Link className={styles.tab} href="/studio">
             <LuClapperboard size={14} />
             통합 스튜디오
+          </Link>
+          <Link className={styles.tab} href="/shorts">
+            <LuFilm size={14} />
+            숏폼 제작
+          </Link>
+          <Link className={styles.tab} href="/archive">
+            <LuImage size={14} />
+            작업 보관함
           </Link>
           <button
             className={`${styles.tab} ${activeTab === "board" ? styles.tabActive : ""}`}
@@ -1067,6 +1173,7 @@ export default function Home() {
               ))}
             </select>
           )}
+          <GenerationNotifications />
           <UserAvatar />
           <button
             className={styles.chatToggleBtn}
@@ -1079,7 +1186,9 @@ export default function Home() {
       </header>
 
       <main className={styles.main}>
-        {activeTab === "designer" ? (
+        {activeTab === "characterCreator" ? (
+          <CharacterCreator onPresetSaved={() => { loadPresets(); loadHistory(); }} />
+        ) : activeTab === "designer" ? (
           <CharacterDesigner />
         ) : activeTab === "background" ? (
           <BackgroundGenerator />
@@ -1663,28 +1772,86 @@ export default function Home() {
       )}
 
       {/* 캐릭터 관리 모달 */}
+      {showCharacterLibrary && (
+        <div className={styles.modalOverlay} onClick={() => setShowCharacterLibrary(false)}>
+          <section className={`${styles.modal} ${styles.characterLibraryModal}`} onClick={(event) => event.stopPropagation()} aria-labelledby="character-library-title">
+            <div className={styles.characterLibraryHeader}>
+              <div>
+                <h2 id="character-library-title">내 캐릭터 관리</h2>
+                <span>{ownedPresets.length}명</span>
+              </div>
+              <div>
+                <button
+                  className={styles.characterLibraryAdd}
+                  onClick={() => { setShowCharacterLibrary(false); setShowUploadModal(true); }}
+                >
+                  <LuPlus /> 새 캐릭터 등록
+                </button>
+                <button className={styles.characterLibraryClose} onClick={() => setShowCharacterLibrary(false)} title="닫기"><LuX /></button>
+              </div>
+            </div>
+
+            {presetsLoading ? (
+              <div className={styles.characterLibraryEmpty}><span className={styles.spinner} /> 불러오는 중</div>
+            ) : ownedPresets.length === 0 ? (
+              <div className={styles.characterLibraryEmpty}>등록한 캐릭터가 없습니다.</div>
+            ) : (
+              <div className={styles.characterLibraryGrid}>
+                {ownedPresets.map((preset) => (
+                  <article className={styles.characterLibraryCard} key={preset.id}>
+                    <div className={styles.characterLibraryViews}>
+                      {["front", "left", "right", "back"].map((view, index) => {
+                        const image = preset.images.find((item) => item.view === view) || preset.images[index];
+                        return image
+                          ? <img key={view} src={image.thumbnailUrl || image.dataUrl} alt={`${preset.name} ${view}`} />
+                          : <span key={view}><LuImage /></span>;
+                      })}
+                    </div>
+                    <div className={styles.characterLibraryInfo}>
+                      <div>
+                        <h3>{preset.name}</h3>
+                        <span>{preset.isDefault ? "기본 캐릭터" : preset.voiceConfig?.[0]?.label || "음성 미설정"}</span>
+                      </div>
+                      <div className={styles.characterLibraryActions}>
+                        <button type="button" title="캐릭터 편집" onClick={() => { setShowCharacterLibrary(false); void handleManagePreset(preset); }}><LuPencil /></button>
+                        <button type="button" title="캐릭터 삭제" onClick={() => void deleteOwnedPreset(preset)}><LuTrash2 /></button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
       {managingPreset && (
         <CharacterManagementModal
           preset={managingPreset}
           onClose={() => setManagingPreset(null)}
+          onDelete={handlePresetDeleted}
           onUpdate={(updated) => {
+            const mergePreset = (current: Preset) =>
+              current.id === updated.id
+                ? { ...current, ...updated }
+                : updated.isDefault
+                  ? { ...current, isDefault: false }
+                  : current;
             // 선택 목록 갱신
             setSelectedPresets((prev) =>
-              prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p))
+              prev.map(mergePreset)
             );
             // 그룹/독립 프리셋 목록 갱신
             setUngroupedPresets((prev) =>
-              prev.map((p) => (p.id === updated.id ? { ...p, ...updated } : p))
+              prev.map(mergePreset)
             );
             setCharGroups((prev) =>
               prev.map((g) => ({
                 ...g,
-                presets: g.presets.map((p) =>
-                  p.id === updated.id ? { ...p, ...updated } : p
-                ),
+                presets: g.presets.map(mergePreset),
               }))
             );
-            setManagingPreset(null);
+            setManagingPreset((current) => current?.id === updated.id ? { ...current, ...updated } : current);
           }}
         />
       )}
@@ -1831,7 +1998,7 @@ export default function Home() {
       )}
 
       {/* 챗봇 패널 */}
-      <ChatBot open={chatOpen} onClose={() => setChatOpen(false)} />
+      {chatOpen && <ChatBot open onClose={() => setChatOpen(false)} />}
 
       {/* Toast */}
       {toast && <div className={styles.toast}>{toast}</div>}

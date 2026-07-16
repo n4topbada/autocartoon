@@ -285,18 +285,87 @@
 }
 
 .cutItem {
-  min-height: 44px;
+  min-height: 52px;
   padding: 7px 8px;
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 16px;
+  grid-template-columns: 38px minmax(0, 1fr) 16px;
   gap: 8px;
   align-items: center;
 }
 
-.cutItem > span {
+.cutThumb {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--studio-line);
+  border-radius: 4px;
+  background: #20201e;
+}
+
+.cutThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cutThumb span {
   color: #85847d;
   font-family: monospace;
   font-size: 11px;
+}
+
+.cutIndicators {
+  min-width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  color: var(--studio-muted);
+}
+
+.coverStar {
+  color: #e5b94e;
+}
+
+.cutActions {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+  padding: 2px 8px 12px;
+}
+
+.cutActions button {
+  min-width: 0;
+  height: 30px;
+  border: 1px solid var(--studio-line);
+  border-radius: 5px;
+  background: #20201e;
+  color: var(--studio-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cutActions button:hover:not(:disabled) {
+  color: var(--studio-text);
+  border-color: #62615b;
+}
+
+.cutActions button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.cutActions .cutActionActive {
+  border-color: #b28a32;
+  color: #e5b94e;
+}
+
+.cutActions .cutDeleteAction:hover:not(:disabled) {
+  border-color: #874b42;
+  color: #f09b8d;
 }
 
 .cutItem > div {
@@ -788,6 +857,42 @@
   color: var(--studio-text);
 }
 
+.gestureUploadRow {
+  margin-top: 8px;
+  display: grid;
+  gap: 5px;
+}
+
+.gestureUploadRow > button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px dashed #4b6762;
+  border-radius: 5px;
+  background: #131a18;
+  color: #80c7ba;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.gestureUploadRow > button:hover {
+  border-color: var(--studio-teal);
+  color: var(--studio-text);
+}
+
+.gestureUploadRow > button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.gestureUploadRow > small {
+  color: var(--studio-muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
 .characterCheck {
   position: absolute;
   top: 7px;
@@ -842,6 +947,111 @@
   background: #151514;
   color: var(--studio-muted);
   font-size: 9px;
+}
+
+.segmentControl {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 3px;
+  border: 1px solid var(--studio-line);
+  border-radius: 5px;
+  background: #111110;
+}
+
+.segmentControl button {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--studio-muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.segmentControl .segmentActive {
+  background: #2a4f49;
+  color: #e8f8f5;
+}
+
+.characterDirectionField {
+  margin-top: 7px;
+}
+
+.characterDirectionField span {
+  color: var(--studio-muted);
+  font-size: 10px;
+}
+
+.characterDirectionField input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--studio-line);
+  border-radius: 4px;
+  outline: 0;
+  background: #151514;
+  color: var(--studio-text);
+  font-size: 11px;
+}
+
+.characterDirectionField input:focus {
+  border-color: var(--studio-teal);
+}
+
+.referenceAssetGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.referenceAssetGrid button {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 1;
+  padding: 2px;
+  overflow: hidden;
+  border: 1px solid var(--studio-line);
+  border-radius: 4px;
+  background: #111110;
+  cursor: pointer;
+}
+
+.referenceAssetGrid img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 2px;
+  object-fit: cover;
+}
+
+.referenceAssetGrid button > svg {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  padding: 3px;
+  border-radius: 50%;
+  background: var(--studio-teal);
+  color: #10221f;
+}
+
+.referenceAssetGrid .referenceAssetActive {
+  border-color: var(--studio-teal);
+}
+
+.emptyReferences {
+  grid-column: 1 / -1;
+  padding: 8px;
+  border: 1px dashed var(--studio-line);
+  border-radius: 4px;
+  color: var(--studio-muted);
+  font-size: 10px;
+  line-height: 1.5;
 }
 
 .twoColumnFields {
@@ -913,6 +1123,684 @@
   color: var(--studio-muted);
   text-align: center;
   font-size: 12px;
+}
+
+.panelActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.videoPlanButton {
+  width: calc(100% - 28px);
+  min-height: 38px;
+  margin: 8px 14px 0;
+  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #4a6d68;
+  border-radius: 6px;
+  background: #1d302d;
+  color: #d7f2ed;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.videoPlanButton:hover {
+  border-color: var(--studio-teal);
+  background: #24403b;
+}
+
+.dialogBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 8, 8, 0.78);
+  backdrop-filter: blur(5px);
+}
+
+.videoPlanDialog {
+  width: min(1180px, 100%);
+  max-height: min(900px, calc(100dvh - 48px));
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #3a3a37;
+  border-radius: 8px;
+  background: #161615;
+  color: var(--studio-text);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+
+.videoPlanToolbar {
+  min-height: 52px;
+  padding: 8px 18px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-bottom: 1px solid var(--studio-line);
+  background: #1b1b1a;
+}
+
+.videoPlanToolbar button {
+  min-height: 34px;
+  padding: 7px 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--studio-line);
+  border-radius: 5px;
+  background: #242422;
+  color: var(--studio-text);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.videoPlanToolbar button:hover:not(:disabled) {
+  border-color: #66665f;
+  background: #2b2b28;
+}
+
+.videoPlanToolbar button:disabled {
+  opacity: 0.48;
+  cursor: wait;
+}
+
+.videoPlanToolbar .videoBatchButton {
+  margin-left: auto;
+  border-color: #4c9186;
+  background: #267f72;
+  color: white;
+}
+
+.videoPlanToolbar .videoBatchButton:hover:not(:disabled) {
+  background: #2b9585;
+}
+
+.dialogError {
+  min-height: 38px;
+  padding: 7px 14px 7px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #82483e;
+  background: #3b211d;
+  color: #ffd1c9;
+  font-size: 12px;
+}
+
+.dialogError button {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.videoPlanBody {
+  min-height: 0;
+  padding: 12px 18px 20px;
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  overflow-y: auto;
+}
+
+.videoCut {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--studio-line);
+  border-radius: 6px;
+  background: #1b1b1a;
+}
+
+.videoCut > header {
+  min-height: 58px;
+  padding: 7px 9px;
+  display: grid;
+  grid-template-columns: 28px 70px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 9px;
+  border-bottom: 1px solid #30302d;
+}
+
+.videoCut > header > span {
+  color: var(--studio-teal);
+  font-family: var(--font-geist-mono), Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.videoCut > header > img,
+.videoCutPlaceholder {
+  width: 70px;
+  height: 42px;
+  border-radius: 4px;
+  background: #292927;
+  object-fit: cover;
+}
+
+.videoCutPlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #73736d;
+}
+
+.videoCut > header > div:not(.videoCutPlaceholder) {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.videoCut > header strong,
+.videoCut > header small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.videoCut > header strong {
+  font-size: 12px;
+}
+
+.videoCut > header small {
+  color: var(--studio-muted);
+  font-size: 10px;
+}
+
+.dialogueRows {
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.dialogueRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 26px 130px minmax(220px, 1fr) 32px 32px;
+  align-items: stretch;
+  gap: 5px;
+}
+
+.dialogueOrder {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+}
+
+.dialogueOrder button,
+.dialogueRow > button {
+  min-width: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--studio-line);
+  border-radius: 4px;
+  background: #242422;
+  color: var(--studio-muted);
+  cursor: pointer;
+}
+
+.dialogueOrder button:hover:not(:disabled),
+.dialogueRow > button:hover:not(:disabled) {
+  color: var(--studio-text);
+  border-color: #66665f;
+}
+
+.dialogueOrder button:disabled,
+.dialogueRow > button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.dialogueRow select,
+.dialogueRow textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--studio-line);
+  border-radius: 4px;
+  outline: 0;
+  background: #111110;
+  color: var(--studio-text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.dialogueRow select {
+  padding: 7px;
+}
+
+.dialogueRow textarea {
+  min-height: 48px;
+  padding: 7px 9px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.dialogueRow select:focus,
+.dialogueRow textarea:focus {
+  border-color: var(--studio-teal);
+}
+
+.emptyDialogue {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px dashed #4c4c47;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--studio-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.emptyDialogue:hover {
+  border-color: var(--studio-teal);
+  color: var(--studio-text);
+}
+
+.briefDialog {
+  position: relative;
+  width: min(1040px, 100%);
+  max-height: min(860px, calc(100vh - 48px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid #3a3a37;
+  border-radius: 8px;
+  background: #161615;
+  color: var(--studio-text);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+
+.dialogHeader,
+.dialogFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--studio-line);
+}
+
+.dialogHeader > div > span {
+  color: var(--studio-teal);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.dialogHeader h2 {
+  margin: 3px 0 0;
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.dialogFooter {
+  justify-content: flex-end;
+  border-top: 1px solid var(--studio-line);
+  border-bottom: 0;
+}
+
+.briefDialogBody {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.7fr);
+  overflow: hidden;
+}
+
+.briefEditorColumn,
+.briefOptionsColumn {
+  min-width: 0;
+  min-height: 0;
+  padding: 18px;
+  overflow: auto;
+}
+
+.briefOptionsColumn {
+  border-left: 1px solid var(--studio-line);
+}
+
+.dialogSectionTitle {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.dialogSectionTitle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--studio-teal);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.dialogSectionTitle button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.briefEditorActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialogSectionTitle span,
+.characterCounter {
+  color: var(--studio-muted);
+  font-size: 10px;
+}
+
+.briefTextarea {
+  width: 100%;
+  min-height: 520px;
+  resize: vertical;
+  padding: 14px;
+  border: 1px solid var(--studio-line);
+  border-radius: 6px;
+  outline: 0;
+  background: #10100f;
+  color: #deded8;
+  font-family: var(--font-geist-mono), Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.briefTitleInput {
+  width: 100%;
+  min-height: 36px;
+  margin-bottom: 8px;
+  padding: 8px 11px;
+  border: 1px solid var(--studio-line);
+  border-radius: 5px;
+  outline: 0;
+  background: #10100f;
+  color: var(--studio-text);
+  font-size: 12px;
+}
+
+.briefTitleInput:focus {
+  border-color: var(--studio-teal);
+}
+
+.briefTextarea:focus {
+  border-color: var(--studio-teal);
+}
+
+.characterCounter {
+  display: block;
+  margin-top: 6px;
+  text-align: right;
+}
+
+.briefCharacterGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 18px;
+}
+
+.briefCharacterGrid button {
+  position: relative;
+  min-width: 0;
+  padding: 5px;
+  display: grid;
+  grid-template-rows: 64px auto;
+  gap: 5px;
+  border: 1px solid var(--studio-line);
+  border-radius: 5px;
+  background: #111110;
+  color: var(--studio-muted);
+  cursor: pointer;
+}
+
+.briefCharacterGrid button > span {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #252523;
+}
+
+.briefCharacterGrid img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.briefCharacterGrid small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.briefCharacterGrid button > svg {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px;
+  border-radius: 50%;
+  background: var(--studio-teal);
+  color: #08110f;
+}
+
+.briefCharacterGrid .briefCharacterActive {
+  border-color: var(--studio-teal);
+  color: var(--studio-text);
+}
+
+.platformModelNote {
+  margin-top: 18px;
+  padding: 12px;
+  display: flex;
+  gap: 9px;
+  border: 1px solid #31534e;
+  border-radius: 6px;
+  background: #14201e;
+  color: var(--studio-teal);
+}
+
+.briefAutoOption {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  color: var(--studio-text);
+  cursor: pointer;
+}
+
+.briefAutoOption input {
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: var(--studio-teal);
+}
+
+.briefAutoOption span {
+  display: grid;
+  gap: 3px;
+}
+
+.briefAutoOption strong {
+  font-size: 11px;
+}
+
+.briefAutoOption small {
+  color: var(--studio-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.briefLibrary {
+  position: absolute;
+  z-index: 4;
+  top: 76px;
+  bottom: 68px;
+  left: 18px;
+  width: min(480px, calc(100% - 36px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid #454540;
+  border-radius: 6px;
+  background: #141413;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+
+.briefLibrary > header {
+  min-height: 52px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--studio-line);
+}
+
+.briefLibrary > header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.briefLibrary > header strong {
+  font-size: 13px;
+}
+
+.briefLibrary > header span {
+  color: var(--studio-muted);
+  font-size: 10px;
+}
+
+.briefLibraryList {
+  min-height: 0;
+  overflow: auto;
+}
+
+.briefLibraryRow {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  border-bottom: 1px solid var(--studio-line);
+}
+
+.briefLibraryRow > button {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--studio-muted);
+  cursor: pointer;
+}
+
+.briefLibraryRow > button:first-child {
+  padding: 10px 12px;
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  text-align: left;
+}
+
+.briefLibraryRow > button:first-child:hover {
+  background: #1b2422;
+}
+
+.briefLibraryRow strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--studio-text);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.briefLibraryRow span {
+  font-size: 9px;
+}
+
+.briefLibraryRow > button:last-child:hover {
+  color: #e76a61;
+}
+
+.briefLibraryEmpty {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--studio-muted);
+  font-size: 11px;
+}
+
+.platformModelNote div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.platformModelNote strong {
+  color: var(--studio-text);
+  font-size: 11px;
+}
+
+.platformModelNote span {
+  color: var(--studio-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.primaryButton,
+.secondaryButton {
+  min-height: 36px;
+  padding: 8px 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: 1px solid #4c9186;
+  background: #267f72;
+  color: #fff;
+}
+
+.secondaryButton {
+  border: 1px solid var(--studio-line);
+  background: transparent;
+  color: var(--studio-muted);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.5;
+  cursor: wait;
 }
 
 .spin {
@@ -1051,5 +1939,90 @@
 
   .jobRow {
     grid-template-columns: 22px minmax(80px, 1fr) 72px 34px 26px;
+  }
+
+  .dialogBackdrop {
+    padding: 0;
+  }
+
+  .briefDialog {
+    min-height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .videoPlanDialog {
+    min-height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .videoPlanToolbar {
+    padding: 8px;
+    flex-wrap: wrap;
+  }
+
+  .videoPlanToolbar .videoBatchButton {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .videoPlanBody {
+    padding: 8px;
+  }
+
+  .dialogueRow {
+    grid-template-columns: 26px minmax(0, 1fr) 32px 32px;
+  }
+
+  .dialogueRow select {
+    grid-column: 2 / -1;
+  }
+
+  .dialogueRow textarea {
+    grid-column: 2;
+  }
+
+  .dialogueOrder {
+    grid-row: 1 / 3;
+  }
+
+  .briefDialogBody {
+    display: block;
+    overflow: auto;
+  }
+
+  .briefEditorColumn,
+  .briefOptionsColumn {
+    overflow: visible;
+  }
+
+  .briefOptionsColumn {
+    border-top: 1px solid var(--studio-line);
+    border-left: 0;
+  }
+
+  .briefTextarea {
+    min-height: 420px;
+  }
+
+  .briefEditorColumn .dialogSectionTitle {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .briefEditorActions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .briefLibrary {
+    top: 68px;
+    right: 8px;
+    bottom: 64px;
+    left: 8px;
+    width: auto;
   }
 }

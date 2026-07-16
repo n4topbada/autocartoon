@@ -86,8 +86,8 @@ PLATFORM_AI_PROVIDER=vertex
 GOOGLE_CLOUD_PROJECT=
 GOOGLE_CLOUD_LOCATION=global
 GOOGLE_CLOUD_VIDEO_LOCATION=us-central1
-VERTEX_TEXT_MODEL=gemini-3.1-flash-lite-preview
-VERTEX_IMAGE_MODEL=gemini-3.1-flash-image-preview
+VERTEX_TEXT_MODEL=gemini-3.1-flash-lite
+VERTEX_IMAGE_MODEL=gemini-3.1-flash-image
 VERTEX_VIDEO_MODEL=veo-3.1-fast-generate-001
 VERTEX_VIDEO_OUTPUT_GCS_URI=gs://BUCKET/autocartoon/veo
 ```

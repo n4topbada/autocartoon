@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, AuthError } from "@/lib/auth";
-import { deleteBlob } from "@/lib/blob";
+import { deleteBlobIfUnreferenced } from "@/lib/blob-references";
 
 // 즐겨찾기 토글
 export async function PATCH(
@@ -62,15 +62,7 @@ export async function DELETE(
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
     }
 
-    // Blob 파일 삭제
-    if (image.blobUrl) {
-      await deleteBlob(image.blobUrl);
-    }
-    if (image.thumbnailUrl) {
-      await deleteBlob(image.thumbnailUrl);
-    }
-
-    // DB 레코드 삭제
+    // DB 참조를 먼저 제거하고, 다른 기능에서 사용하지 않는 Blob만 정리한다.
     await prisma.generatedImage.delete({ where: { id } });
 
     // 해당 요청의 남은 이미지 수 확인 → 0이면 요청도 삭제
@@ -82,6 +74,11 @@ export async function DELETE(
         where: { id: image.requestId },
       });
     }
+
+    await Promise.all([
+      deleteBlobIfUnreferenced(image.blobUrl),
+      deleteBlobIfUnreferenced(image.thumbnailUrl),
+    ]);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

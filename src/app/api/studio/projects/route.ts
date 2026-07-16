@@ -7,6 +7,8 @@ const ASPECT_SIZES: Record<string, { width: number; height: number }> = {
   "16:9": { width: 1920, height: 1080 },
   "1:1": { width: 1080, height: 1080 },
   "4:5": { width: 1080, height: 1350 },
+  "3:4": { width: 960, height: 1280 },
+  "8:11": { width: 800, height: 1100 },
 };
 
 export async function GET() {
@@ -15,12 +17,22 @@ export async function GET() {
     const projects = await prisma.creativeProject.findMany({
       where: { userId: session.userId },
       include: {
-        cuts: { orderBy: { order: "asc" }, take: 1 },
+        cuts: {
+          orderBy: { order: "asc" },
+          select: { id: true, imageUrl: true, thumbnailUrl: true },
+        },
+        coverCut: { select: { id: true, imageUrl: true, thumbnailUrl: true } },
         _count: { select: { cuts: true, assets: true, jobs: true } },
       },
       orderBy: { updatedAt: "desc" },
     });
-    return NextResponse.json({ projects });
+    return NextResponse.json({
+      projects: projects.map((project) => ({
+        ...project,
+        usableCutCount: project.cuts.filter((cut) => Boolean(cut.imageUrl)).length,
+        cuts: project.cuts.slice(0, 1),
+      })),
+    });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
@@ -40,7 +52,7 @@ export async function POST(req: NextRequest) {
     const title = body.title?.trim().slice(0, 120) || "새 웹툰 프로젝트";
     const aspectRatio = body.aspectRatio && ASPECT_SIZES[body.aspectRatio]
       ? body.aspectRatio
-      : "9:16";
+      : "4:5";
     const size = ASPECT_SIZES[aspectRatio];
     const project = await prisma.creativeProject.create({
       data: {

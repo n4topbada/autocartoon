@@ -25,11 +25,14 @@ async function performImageGeneration(jobId: string) {
       presetIds: input.presetIds,
       mode: input.mode,
       aspectRatio: input.aspectRatio,
+      imageSize: input.imageSize,
+      count: input.count,
       prompt: input.prompt,
       background: input.background,
       backgroundImageId: input.backgroundImageId,
       inputImageUrl: input.inputImage,
       inputImageUrls: input.inputImages,
+      referenceAssetUrls: input.referenceAssets,
     });
     return { status: "succeeded" };
   } catch (error) {

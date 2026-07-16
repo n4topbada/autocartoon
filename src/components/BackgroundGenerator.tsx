@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { LuDownload, LuMaximize2, LuRefreshCw, LuSave } from "react-icons/lu";
 import WorkflowCard from "./WorkflowCard";
 import ImageModal from "./ImageModal";
 import styles from "./BackgroundGenerator.module.css";
@@ -10,8 +11,24 @@ interface CardEntry {
 }
 
 interface SavingImage {
-  base64: string;
+  base64?: string;
+  artifactId?: string;
+  url?: string;
   mimeType: string;
+}
+
+interface BackgroundHistoryArtifact {
+  id: string;
+  blobUrl: string;
+  thumbnailUrl: string | null;
+  mimeType: string;
+}
+
+interface BackgroundHistoryJob {
+  id: string;
+  prompt: string;
+  createdAt: string;
+  artifacts: BackgroundHistoryArtifact[];
 }
 
 export default function BackgroundGenerator() {
@@ -24,6 +41,32 @@ export default function BackgroundGenerator() {
   const [saveName, setSaveName] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [history, setHistory] = useState<BackgroundHistoryJob[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  const loadHistory = useCallback(async (showLoading = false) => {
+    if (showLoading) setHistoryLoading(true);
+    try {
+      const response = await fetch("/api/jobs?kind=background&status=succeeded&limit=20", { cache: "no-store" });
+      const data = await response.json() as { jobs?: BackgroundHistoryJob[]; error?: string };
+      if (!response.ok) throw new Error(data.error || "배경 기록을 불러오지 못했습니다.");
+      setHistory(data.jobs || []);
+      setHistoryError(null);
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : "배경 기록을 불러오지 못했습니다.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadHistory(true);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadHistory();
+    }, 30_000);
+    return () => window.clearInterval(interval);
+  }, [loadHistory]);
 
   const addCard = useCallback(() => {
     setCards((prev) => [{ id: nextId }, ...prev]);
@@ -63,7 +106,7 @@ export default function BackgroundGenerator() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: saveName.trim(),
-          imageData: savingImage.base64,
+          ...(savingImage.artifactId ? { artifactId: savingImage.artifactId } : { imageData: savingImage.base64 }),
           mimeType: savingImage.mimeType,
         }),
       });
@@ -79,6 +122,12 @@ export default function BackgroundGenerator() {
       setSaving(false);
     }
   };
+
+  const historyItems = history.flatMap((job) =>
+    job.artifacts
+      .filter((artifact) => artifact.mimeType.startsWith("image/"))
+      .map((artifact) => ({ job, artifact }))
+  );
 
   return (
     <div className={styles.container}>
@@ -114,10 +163,60 @@ export default function BackgroundGenerator() {
                 onDelete={() => deleteCard(card.id)}
                 onPreview={openPreview}
                 onSaveBackground={handleSaveBackground}
+                onJobComplete={() => void loadHistory()}
               />
             ))}
           </div>
         )}
+
+        <section className={styles.history} aria-labelledby="background-history-title">
+          <div className={styles.historyHeader}>
+            <div>
+              <h2 id="background-history-title">최근 생성 결과</h2>
+              <span>{historyItems.length}개</span>
+            </div>
+            <button type="button" title="최근 결과 새로고침" onClick={() => void loadHistory(true)} disabled={historyLoading}>
+              <LuRefreshCw className={historyLoading ? styles.spin : ""} />
+            </button>
+          </div>
+          {historyError ? (
+            <div className={styles.historyMessage}>{historyError}</div>
+          ) : historyLoading && historyItems.length === 0 ? (
+            <div className={styles.historyMessage}>불러오는 중</div>
+          ) : historyItems.length === 0 ? (
+            <div className={styles.historyMessage}>아직 완료된 배경 생성이 없습니다.</div>
+          ) : (
+            <div className={styles.historyGrid}>
+              {historyItems.map(({ job, artifact }) => (
+                <article className={styles.historyItem} key={artifact.id}>
+                  <button
+                    type="button"
+                    className={styles.historyPreview}
+                    onClick={() => openPreview(artifact.blobUrl)}
+                    aria-label={`${job.prompt.slice(0, 80)} 미리보기`}
+                  >
+                    <img src={artifact.thumbnailUrl || artifact.blobUrl} alt="" />
+                  </button>
+                  <div className={styles.historyMeta}>
+                    <p title={job.prompt}>{job.prompt}</p>
+                    <time>{new Date(job.createdAt).toLocaleString("ko-KR")}</time>
+                  </div>
+                  <div className={styles.historyActions}>
+                    <button type="button" title="미리보기" onClick={() => openPreview(artifact.blobUrl)}><LuMaximize2 /></button>
+                    <a href={artifact.blobUrl} download={`background-${artifact.id}.png`} title="다운로드"><LuDownload /></a>
+                    <button
+                      type="button"
+                      title="내 배경에 저장"
+                      onClick={() => handleSaveBackground({ artifactId: artifact.id, url: artifact.blobUrl, mimeType: artifact.mimeType })}
+                    >
+                      <LuSave />
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
 
       {modalSrc && <ImageModal src={modalSrc} onClose={closePreview} />}
@@ -132,7 +231,7 @@ export default function BackgroundGenerator() {
 
             <div className={styles.modalPreview}>
               <img
-                src={`data:${savingImage.mimeType};base64,${savingImage.base64}`}
+                src={savingImage.url || `data:${savingImage.mimeType};base64,${savingImage.base64 || ""}`}
                 alt="저장할 배경"
               />
             </div>

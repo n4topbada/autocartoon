@@ -13,12 +13,62 @@ import {
   LuSave,
   LuLayers,
   LuUndo2,
+  LuRedo2,
   LuEye,
   LuMessageCircle,
   LuEyeOff,
   LuPaintBucket,
   LuChevronUp,
   LuChevronDown,
+  LuType,
+  LuPencil,
+  LuLock,
+  LuLockOpen,
+  LuShapes,
+  LuSquare,
+  LuCircle,
+  LuMinus,
+  LuStar,
+  LuGroup,
+  LuUngroup,
+  LuCopy,
+  LuLayoutTemplate,
+  LuColumns2,
+  LuRows2,
+  LuColumns3,
+  LuPanelsTopLeft,
+  LuGrid3X3,
+  LuGrid2X2,
+  LuPanelTop,
+  LuPanelRightOpen,
+  LuPanelRightClose,
+  LuPanelLeft,
+  LuRefreshCw,
+  LuChevronsDown,
+  LuChevronsUp,
+  LuImagePlus,
+  LuMaximize2,
+  LuPipette,
+  LuZoomIn,
+  LuZoomOut,
+  LuAlignHorizontalJustifyCenter,
+  LuAlignHorizontalJustifyEnd,
+  LuAlignHorizontalJustifyStart,
+  LuAlignHorizontalSpaceBetween,
+  LuAlignVerticalJustifyCenter,
+  LuAlignVerticalJustifyEnd,
+  LuAlignVerticalJustifyStart,
+  LuAlignVerticalSpaceBetween,
+  LuCaptions,
+  LuPanelBottom,
+  LuStamp,
+  LuZap,
+  LuLoaderCircle,
+  LuScanText,
+  LuScanLine,
+  LuRotateCw,
+  LuWandSparkles,
+  LuX,
 } from "react-icons/lu";
 import {
   type SpeechBubble,
@@ -32,7 +82,12 @@ import {
 interface GalleryImage {
   id: string;
   dataUrl: string;
+  thumbnailUrl?: string | null;
+  label?: string;
+  view?: string;
 }
+
+type AssetLibraryTab = "project" | "character" | "gesture" | "background";
 
 export interface SavedCanvasImage {
   id: string;
@@ -43,9 +98,14 @@ export interface SavedCanvasImage {
 
 interface Layer {
   id: string;
+  name: string;
+  locked: boolean;
+  groupId: string | null;
   image: HTMLImageElement | null;
   imageUrl: string | null;
   opacity: number;
+  scale: number;
+  rotation: number;
   x: number;
   y: number;
   width: number;
@@ -61,7 +121,7 @@ const FILL_COLORS = [
   "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#6b7280",
 ];
 
-export type CanvasAspectRatio = "1:1" | "4:5" | "9:16" | "16:9";
+export type CanvasAspectRatio = "1:1" | "4:5" | "3:4" | "8:11" | "9:16" | "16:9";
 
 interface Props {
   initialImage: GalleryImage;
@@ -71,6 +131,33 @@ interface Props {
   initialAspect?: CanvasAspectRatio;
   projectId?: string;
   cutId?: string;
+  initialCanvas?: unknown;
+}
+
+interface SerializedCanvasLayer {
+  id: string;
+  name: string;
+  locked: boolean;
+  groupId: string | null;
+  pixelUrl: string | null;
+  opacity: number;
+  scale?: number;
+  rotation?: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  visible: boolean;
+  fillColor: string | null;
+  bubbles: SpeechBubble[];
+}
+
+interface SerializedCanvasState {
+  version: 1;
+  aspect: AspectRatio;
+  width: number;
+  height: number;
+  layers: SerializedCanvasLayer[];
 }
 
 const MIN_CANVAS = 540;
@@ -82,6 +169,8 @@ const ASPECT_CONFIG: Record<
 > = {
   "1:1": { heightRatio: 1, exportW: 1080, exportH: 1080 },
   "4:5": { heightRatio: 5 / 4, exportW: 1080, exportH: 1350 },
+  "3:4": { heightRatio: 4 / 3, exportW: 960, exportH: 1280 },
+  "8:11": { heightRatio: 11 / 8, exportW: 800, exportH: 1100 },
   "9:16": { heightRatio: 16 / 9, exportW: 1080, exportH: 1920 },
   "16:9": { heightRatio: 9 / 16, exportW: 1920, exportH: 1080 },
 };
@@ -99,9 +188,14 @@ function closestAspect(width: number, height: number): AspectRatio {
 function createLayer(id?: string, w = MIN_CANVAS, h = MIN_CANVAS): Layer {
   return {
     id: id || `layer_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    name: "새 레이어",
+    locked: false,
+    groupId: null,
     image: null,
     imageUrl: null,
     opacity: 1,
+    scale: 1,
+    rotation: 0,
     x: 0,
     y: 0,
     width: w,
@@ -111,6 +205,43 @@ function createLayer(id?: string, w = MIN_CANVAS, h = MIN_CANVAS): Layer {
     canvas: null,
     bubbles: [],
   };
+}
+
+function parseSerializedCanvas(value: unknown): SerializedCanvasState | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const state = value as Partial<SerializedCanvasState>;
+  if (
+    state.version !== 1 ||
+    !state.aspect ||
+    !(state.aspect in ASPECT_CONFIG) ||
+    typeof state.width !== "number" ||
+    typeof state.height !== "number" ||
+    !Array.isArray(state.layers)
+  ) return null;
+  return state as SerializedCanvasState;
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("레이어 이미지를 만들지 못했습니다.")), "image/png");
+  });
+}
+
+function cloneLayers(source: Layer[]): Layer[] {
+  return source.map((layer) => {
+    let clonedCanvas: HTMLCanvasElement | null = null;
+    if (layer.canvas) {
+      clonedCanvas = document.createElement("canvas");
+      clonedCanvas.width = layer.canvas.width;
+      clonedCanvas.height = layer.canvas.height;
+      clonedCanvas.getContext("2d")!.drawImage(layer.canvas, 0, 0);
+    }
+    return {
+      ...layer,
+      canvas: clonedCanvas,
+      bubbles: layer.bubbles.map((bubble) => ({ ...bubble })),
+    };
+  });
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -123,6 +254,172 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
+function layerDrawRect(layer: Layer, canvasW: number, canvasH: number) {
+  const scale = Math.max(0.1, Math.min(4, layer.scale || 1));
+  const width = canvasW * scale;
+  const height = canvasH * scale;
+  return {
+    x: layer.x + (canvasW - width) / 2,
+    y: layer.y + (canvasH - height) / 2,
+    width,
+    height,
+  };
+}
+
+interface LayerBounds {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  centerX: number;
+  centerY: number;
+}
+
+interface PixelBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+const alphaBoundsCache = new WeakMap<HTMLCanvasElement, PixelBounds | null>();
+
+function canvasAlphaBounds(canvas: HTMLCanvasElement): PixelBounds | null {
+  if (alphaBoundsCache.has(canvas)) return alphaBoundsCache.get(canvas) ?? null;
+  try {
+    const { width, height } = canvas;
+    const pixels = canvas.getContext("2d")!.getImageData(0, 0, width, height).data;
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        if (pixels[(y * width + x) * 4 + 3] < 8) continue;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+    const bounds = maxX >= minX && maxY >= minY ? { minX, minY, maxX, maxY } : null;
+    alphaBoundsCache.set(canvas, bounds);
+    return bounds;
+  } catch {
+    alphaBoundsCache.set(canvas, null);
+    return null;
+  }
+}
+
+function rotatePoint(x: number, y: number, centerX: number, centerY: number, degrees: number) {
+  const radians = degrees * Math.PI / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  const dx = x - centerX;
+  const dy = y - centerY;
+  return {
+    x: centerX + dx * cosine - dy * sine,
+    y: centerY + dx * sine + dy * cosine,
+  };
+}
+
+function drawLayerCanvas(
+  context: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  rect: { x: number; y: number; width: number; height: number },
+  rotation: number
+) {
+  const centerX = rect.x + rect.width / 2;
+  const centerY = rect.y + rect.height / 2;
+  context.save();
+  context.translate(centerX, centerY);
+  context.rotate((rotation || 0) * Math.PI / 180);
+  context.drawImage(canvas, -rect.width / 2, -rect.height / 2, rect.width, rect.height);
+  context.restore();
+}
+
+function canvasPointToLayer(layer: Layer, canvasW: number, canvasH: number, x: number, y: number) {
+  const rect = layerDrawRect(layer, canvasW, canvasH);
+  const point = rotatePoint(
+    x,
+    y,
+    rect.x + rect.width / 2,
+    rect.y + rect.height / 2,
+    -(layer.rotation || 0)
+  );
+  return {
+    x: (point.x - rect.x) * (layer.canvas?.width || canvasW) / rect.width,
+    y: (point.y - rect.y) * (layer.canvas?.height || canvasH) / rect.height,
+  };
+}
+
+function getLayerBounds(layer: Layer, canvasW: number, canvasH: number): LayerBounds {
+  let left = Number.POSITIVE_INFINITY;
+  let top = Number.POSITIVE_INFINITY;
+  let right = Number.NEGATIVE_INFINITY;
+  let bottom = Number.NEGATIVE_INFINITY;
+  const include = (nextLeft: number, nextTop: number, nextRight: number, nextBottom: number) => {
+    left = Math.min(left, nextLeft);
+    top = Math.min(top, nextTop);
+    right = Math.max(right, nextRight);
+    bottom = Math.max(bottom, nextBottom);
+  };
+
+  if (layer.fillColor && !layer.canvas) include(0, 0, canvasW, canvasH);
+  if (layer.canvas) {
+    const rect = layerDrawRect(layer, canvasW, canvasH);
+    const pixels = canvasAlphaBounds(layer.canvas);
+    const source = pixels
+      ? {
+          left: rect.x + pixels.minX / layer.canvas.width * rect.width,
+          top: rect.y + pixels.minY / layer.canvas.height * rect.height,
+          right: rect.x + (pixels.maxX + 1) / layer.canvas.width * rect.width,
+          bottom: rect.y + (pixels.maxY + 1) / layer.canvas.height * rect.height,
+        }
+      : { left: rect.x, top: rect.y, right: rect.x + rect.width, bottom: rect.y + rect.height };
+    const centerX = rect.x + rect.width / 2;
+    const centerY = rect.y + rect.height / 2;
+    const corners = [
+      rotatePoint(source.left, source.top, centerX, centerY, layer.rotation),
+      rotatePoint(source.right, source.top, centerX, centerY, layer.rotation),
+      rotatePoint(source.right, source.bottom, centerX, centerY, layer.rotation),
+      rotatePoint(source.left, source.bottom, centerX, centerY, layer.rotation),
+    ];
+    include(
+      Math.min(...corners.map((point) => point.x)),
+      Math.min(...corners.map((point) => point.y)),
+      Math.max(...corners.map((point) => point.x)),
+      Math.max(...corners.map((point) => point.y))
+    );
+  }
+  for (const bubble of layer.bubbles) {
+    include(
+      bubble.x - bubble.width / 2,
+      bubble.y - bubble.height / 2,
+      bubble.x + bubble.width / 2,
+      bubble.y + bubble.height / 2
+    );
+    if (bubble.tailEnabled) include(bubble.tailTipX, bubble.tailTipY, bubble.tailTipX, bubble.tailTipY);
+  }
+  if (!Number.isFinite(left)) include(layer.x, layer.y, layer.x + layer.width, layer.y + layer.height);
+  return { left, top, right, bottom, centerX: (left + right) / 2, centerY: (top + bottom) / 2 };
+}
+
+function translateLayer(layer: Layer, dx: number, dy: number): Layer {
+  return {
+    ...layer,
+    x: layer.x + dx,
+    y: layer.y + dy,
+    bubbles: layer.bubbles.map((bubble) => ({
+      ...bubble,
+      x: bubble.x + dx,
+      y: bubble.y + dy,
+      tailTipX: bubble.tailTipX + dx,
+      tailTipY: bubble.tailTipY + dy,
+    })),
+  };
+}
+
 export default function CanvasEditor({
   initialImage,
   galleryImages,
@@ -131,13 +428,18 @@ export default function CanvasEditor({
   initialAspect,
   projectId,
   cutId,
+  initialCanvas,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasViewportRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [layers, setLayers] = useState<Layer[]>([]);
   const [activeLayerId, setActiveLayerId] = useState<string>("");
-  const [tool, setTool] = useState<"move" | "crop" | "bubble">("move");
+  const [tool, setTool] = useState<"move" | "crop" | "pipette" | "bubble" | "text" | "shape" | "brush" | "eraser">("move");
   const [bubbleType, setBubbleType] = useState<BubbleType>("classic");
+  const [shapeType, setShapeType] = useState<Extract<BubbleType, "rectangle" | "ellipse" | "line" | "star">>("rectangle");
   const [selectedBubbleId, setSelectedBubbleId] = useState<string | null>(null);
+  const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
   const bubbleDragMode = useRef<"none" | "move" | "resize" | "tail">("none");
   const bubbleDragHandle = useRef("");
   const bubbleDragStart = useRef({ x: 0, y: 0 });
@@ -147,46 +449,101 @@ export default function CanvasEditor({
   const [aspect, setAspect] = useState<AspectRatio>("1:1");
   const [canvasW, setCanvasW] = useState(MIN_CANVAS);
   const [canvasH, setCanvasH] = useState(MIN_CANVAS);
+  const [brushColor, setBrushColor] = useState("#111111");
+  const [brushSize, setBrushSize] = useState(12);
+  const [backgroundRemoved, setBackgroundRemoved] = useState(false);
+  const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
+  const [showGuides, setShowGuides] = useState(false);
+  const [showTransparencyGrid, setShowTransparencyGrid] = useState(true);
+  const [showOverflow, setShowOverflow] = useState(false);
+  const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
+  const [zoom, setZoom] = useState(100);
+  const [fitScale, setFitScale] = useState(1);
+  const [ocrOpen, setOcrOpen] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrText, setOcrText] = useState("");
+  const [redrawOpen, setRedrawOpen] = useState(false);
+  const [redrawLoading, setRedrawLoading] = useState(false);
+  const [redrawPrompt, setRedrawPrompt] = useState("");
+  const [editorMessage, setEditorMessage] = useState<string | null>(null);
+  const [assetTab, setAssetTab] = useState<AssetLibraryTab>("project");
+  const [characterView, setCharacterView] = useState("front");
+  const [assetReloadVersion, setAssetReloadVersion] = useState(0);
+  const [layerPanelCollapsed, setLayerPanelCollapsed] = useState(false);
+  const [assetPanelCollapsed, setAssetPanelCollapsed] = useState(false);
+  const [layerPanelSide, setLayerPanelSide] = useState<"left" | "right">("right");
+  const [assetLibrary, setAssetLibrary] = useState<Record<Exclude<AssetLibraryTab, "project">, GalleryImage[]>>({
+    character: [],
+    gesture: [],
+    background: [],
+  });
+  const [assetLibraryLoading, setAssetLibraryLoading] = useState(true);
+  const drawing = useRef(false);
 
-  // Undo: 이전 레이어 상태 1개 저장
-  const undoSnapshot = useRef<Layer[] | null>(null);
+  const undoStack = useRef<Layer[][]>([]);
+  const redoStack = useRef<Layer[][]>([]);
+  const [, rerenderHistory] = useState(0);
 
   const saveUndo = useCallback(() => {
-    // 현재 레이어들의 canvas를 복제하여 저장
-    undoSnapshot.current = layers.map((l) => {
-      let clonedCanvas: HTMLCanvasElement | null = null;
-      if (l.canvas) {
-        clonedCanvas = document.createElement("canvas");
-        clonedCanvas.width = l.canvas.width;
-        clonedCanvas.height = l.canvas.height;
-        clonedCanvas.getContext("2d")!.drawImage(l.canvas, 0, 0);
-      }
-      return { ...l, canvas: clonedCanvas, bubbles: l.bubbles.map((b) => ({ ...b })) };
-    });
+    undoStack.current.push(cloneLayers(layers));
+    if (undoStack.current.length > 30) undoStack.current.shift();
+    redoStack.current = [];
+    rerenderHistory((value) => value + 1);
   }, [layers]);
 
   const handleUndo = useCallback(() => {
-    if (!undoSnapshot.current) return;
-    setLayers(undoSnapshot.current);
-    undoSnapshot.current = null;
+    const previous = undoStack.current.pop();
+    if (!previous) return;
+    setLayers((current) => {
+      redoStack.current.push(cloneLayers(current));
+      return cloneLayers(previous);
+    });
+    rerenderHistory((value) => value + 1);
   }, []);
+
+  const handleRedo = useCallback(() => {
+    const next = redoStack.current.pop();
+    if (!next) return;
+    setLayers((current) => {
+      undoStack.current.push(cloneLayers(current));
+      return cloneLayers(next);
+    });
+    rerenderHistory((value) => value + 1);
+  }, []);
+
+  const toggleActiveLayerLock = useCallback(() => {
+    if (!activeLayerId) return;
+    saveUndo();
+    setLayers((current) => current.map((layer) =>
+      layer.id === activeLayerId ? { ...layer, locked: !layer.locked } : layer
+    ));
+  }, [activeLayerId, saveUndo]);
 
   // Ctrl+Z / Cmd+Z 키보드 핸들러
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && e.shiftKey) {
+        e.preventDefault();
+        handleRedo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
         e.preventDefault();
         handleUndo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        handleRedo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        toggleActiveLayerLock();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [handleUndo]);
+  }, [handleRedo, handleUndo, toggleActiveLayerLock]);
 
   // 드래그 이동
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
-  const dragLayerStart = useRef({ x: 0, y: 0 });
+  const dragLayerStarts = useRef(new Map<string, Layer>());
 
   // 크롭
   const [cropping, setCropping] = useState(false);
@@ -197,6 +554,36 @@ export default function CanvasEditor({
   useEffect(() => {
     (async () => {
       try {
+        const persisted = parseSerializedCanvas(initialCanvas);
+        if (persisted && persisted.layers.length > 0) {
+          const restored = await Promise.all(persisted.layers.map(async (saved) => {
+            let image: HTMLImageElement | null = null;
+            let layerCanvas: HTMLCanvasElement | null = null;
+            if (saved.pixelUrl) {
+              image = await loadImage(saved.pixelUrl);
+              layerCanvas = document.createElement("canvas");
+              layerCanvas.width = persisted.width;
+              layerCanvas.height = persisted.height;
+              layerCanvas.getContext("2d")!.drawImage(image, 0, 0, persisted.width, persisted.height);
+            }
+            return {
+              ...createLayer(saved.id, persisted.width, persisted.height),
+              ...saved,
+              scale: typeof saved.scale === "number" ? Math.max(0.1, Math.min(4, saved.scale)) : 1,
+              rotation: typeof saved.rotation === "number" ? Math.max(-180, Math.min(180, saved.rotation)) : 0,
+              image,
+              imageUrl: saved.pixelUrl,
+              canvas: layerCanvas,
+              bubbles: saved.bubbles.map((bubble) => ({ ...bubble })),
+            } satisfies Layer;
+          }));
+          setCanvasW(persisted.width);
+          setCanvasH(persisted.height);
+          setAspect(persisted.aspect);
+          setLayers(restored);
+          setActiveLayerId(restored[restored.length - 1].id);
+          return;
+        }
         const img = await loadImage(initialImage.dataUrl);
         const targetAspect = initialAspect ?? closestAspect(img.width, img.height);
         const heightRatio = ASPECT_CONFIG[targetAspect].heightRatio;
@@ -221,6 +608,7 @@ export default function CanvasEditor({
           ...createLayer("layer_initial", cw, ch),
           image: img,
           imageUrl: initialImage.dataUrl,
+          name: "원본 이미지",
           canvas: layerCanvas,
           width: cw,
           height: ch,
@@ -233,7 +621,70 @@ export default function CanvasEditor({
         setActiveLayerId(layer.id);
       }
     })();
-  }, [initialAspect, initialImage.dataUrl]);
+  }, [initialAspect, initialCanvas, initialImage.dataUrl]);
+
+  useEffect(() => {
+    const viewport = canvasViewportRef.current;
+    if (!viewport) return;
+    const updateFitScale = () => {
+      const availableWidth = Math.max(120, viewport.clientWidth - 24);
+      const availableHeight = Math.max(120, viewport.clientHeight - 24);
+      setFitScale(Math.min(1, availableWidth / canvasW, availableHeight / canvasH));
+    };
+    updateFitScale();
+    const observer = new ResizeObserver(updateFitScale);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [canvasH, canvasW]);
+
+  useEffect(() => {
+    let active = true;
+    setAssetLibraryLoading(true);
+    void Promise.allSettled([
+      fetch("/api/presets", { cache: "no-store" }).then((response) => response.ok ? response.json() : Promise.reject()),
+      fetch("/api/archive?kind=gesture&page=1", { cache: "no-store" }).then((response) => response.ok ? response.json() : Promise.reject()),
+      fetch("/api/archive?kind=background&page=1", { cache: "no-store" }).then((response) => response.ok ? response.json() : Promise.reject()),
+    ]).then(([presetResult, gestureResult, backgroundResult]) => {
+      if (!active) return;
+      const presetData = presetResult.status === "fulfilled" ? presetResult.value : {};
+      const gestureData = gestureResult.status === "fulfilled" ? gestureResult.value : {};
+      const backgroundData = backgroundResult.status === "fulfilled" ? backgroundResult.value : {};
+      const presets = [
+        ...(Array.isArray(presetData.ungrouped) ? presetData.ungrouped : []),
+        ...(Array.isArray(presetData.groups) ? presetData.groups.flatMap((group: { presets?: unknown[] }) => Array.isArray(group.presets) ? group.presets : []) : []),
+      ] as Array<{ id: string; name: string; images?: Array<{ id: string; view: string; dataUrl: string; thumbnailUrl?: string | null }> }>;
+      const archiveImages = (data: unknown): GalleryImage[] => {
+        if (!data || typeof data !== "object" || Array.isArray(data)) return [];
+        const items = (data as { items?: unknown }).items;
+        if (!Array.isArray(items)) return [];
+        return items.flatMap((item): GalleryImage[] => {
+          if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+          const record = item as Record<string, unknown>;
+          if (record.mediaType !== "image" || typeof record.url !== "string") return [];
+          return [{
+            id: String(record.key || record.id || record.url),
+            dataUrl: record.url,
+            thumbnailUrl: typeof record.thumbnailUrl === "string" ? record.thumbnailUrl : record.url,
+            label: typeof record.prompt === "string" ? record.prompt : "생성 이미지",
+          }];
+        });
+      };
+      setAssetLibrary({
+        character: presets.flatMap((preset) => (preset.images || []).map((image) => ({
+          id: `preset:${preset.id}:${image.id}`,
+          dataUrl: image.dataUrl,
+          thumbnailUrl: image.thumbnailUrl || image.dataUrl,
+          label: `${preset.name} · ${image.view}`,
+          view: image.view,
+        }))),
+        gesture: archiveImages(gestureData),
+        background: archiveImages(backgroundData),
+      });
+    }).finally(() => {
+      if (active) setAssetLibraryLoading(false);
+    });
+    return () => { active = false; };
+  }, [assetReloadVersion]);
 
   // 캔버스 렌더링
   const render = useCallback(() => {
@@ -252,13 +703,46 @@ export default function CanvasEditor({
         ctx.fillStyle = layer.fillColor;
         ctx.fillRect(0, 0, canvasW, canvasH);
       } else if (layer.canvas) {
-        ctx.drawImage(layer.canvas, layer.x, layer.y);
+        const rect = layerDrawRect(layer, canvasW, canvasH);
+        drawLayerCanvas(ctx, layer.canvas, rect, layer.rotation);
       }
       // 말풍선 렌더링
       for (const bubble of layer.bubbles) {
         drawBubble(ctx, bubble);
       }
       ctx.restore();
+    }
+
+    if (!selectedBubbleId && tool === "move") {
+      const selectedLayer = layers.find((layer) => layer.id === activeLayerId && layer.visible);
+      if (selectedLayer) {
+        const bounds = getLayerBounds(selectedLayer, canvasW, canvasH);
+        const overflows = bounds.left < 0 || bounds.top < 0 || bounds.right > canvasW || bounds.bottom > canvasH;
+        ctx.save();
+        ctx.strokeStyle = overflows && showOverflow ? "#ef4444" : "#14b8a6";
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.lineWidth = Math.max(2, canvasW / 500);
+        ctx.setLineDash([8, 5]);
+        ctx.strokeRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
+        ctx.setLineDash([]);
+        const handleRadius = Math.max(4, canvasW / 180);
+        for (const [x, y] of [
+          [bounds.left, bounds.top],
+          [bounds.right, bounds.top],
+          [bounds.right, bounds.bottom],
+          [bounds.left, bounds.bottom],
+        ]) {
+          ctx.beginPath();
+          ctx.arc(x, y, handleRadius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        if (overflows && showOverflow) {
+          ctx.strokeStyle = "rgba(239, 68, 68, 0.9)";
+          ctx.lineWidth = Math.max(4, canvasW / 250);
+          ctx.strokeRect(2, 2, canvasW - 4, canvasH - 4);
+        }
+        ctx.restore();
+      }
     }
 
     // 선택된 말풍선 오버레이
@@ -287,7 +771,27 @@ export default function CanvasEditor({
       ctx.fillRect(0, cropRect.y + cropRect.h, canvasW, canvasH - cropRect.y - cropRect.h);
       ctx.restore();
     }
-  }, [layers, cropRect, tool, canvasH, canvasW, selectedBubbleId]);
+
+    if (showGuides) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(20, 184, 166, 0.82)";
+      ctx.lineWidth = Math.max(1, canvasW / 900);
+      ctx.setLineDash([7, 6]);
+      for (const x of [canvasW / 3, canvasW / 2, canvasW * 2 / 3]) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvasH);
+        ctx.stroke();
+      }
+      for (const y of [canvasH / 3, canvasH / 2, canvasH * 2 / 3]) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvasW, y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }, [activeLayerId, layers, cropRect, tool, canvasH, canvasW, selectedBubbleId, showGuides, showOverflow]);
 
   useEffect(() => {
     render();
@@ -309,13 +813,58 @@ export default function CanvasEditor({
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const { x: mx, y: my } = getCanvasCoords(e);
 
-    if (tool === "move") {
-      // 먼저 활성 레이어의 말풍선 히트 테스트
-      const activeLayer = layers.find((l) => l.id === activeLayerId);
-      if (activeLayer) {
-        for (const bubble of [...activeLayer.bubbles].reverse()) {
+    if (tool === "pipette") {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const pixel = canvas.getContext("2d")?.getImageData(
+        Math.max(0, Math.min(canvas.width - 1, Math.floor(mx))),
+        Math.max(0, Math.min(canvas.height - 1, Math.floor(my))),
+        1,
+        1
+      ).data;
+      if (pixel && pixel[3] > 0) {
+        setBrushColor(`#${[pixel[0], pixel[1], pixel[2]].map((channel) => channel.toString(16).padStart(2, "0")).join("")}`);
+      }
+      setTool("brush");
+    } else if (tool === "brush" || tool === "eraser") {
+      const activeLayer = layers.find((layer) => layer.id === activeLayerId);
+      if (!activeLayer || activeLayer.locked) return;
+      saveUndo();
+      let drawingCanvas = activeLayer.canvas;
+      if (!drawingCanvas) {
+        drawingCanvas = document.createElement("canvas");
+        drawingCanvas.width = canvasW;
+        drawingCanvas.height = canvasH;
+        if (activeLayer.fillColor) {
+          const fill = drawingCanvas.getContext("2d")!;
+          fill.fillStyle = activeLayer.fillColor;
+          fill.fillRect(0, 0, canvasW, canvasH);
+        }
+        const nextCanvas = drawingCanvas;
+        setLayers((current) => current.map((layer) =>
+          layer.id === activeLayerId ? { ...layer, canvas: nextCanvas, fillColor: null } : layer
+        ));
+      }
+      const ctx = drawingCanvas.getContext("2d")!;
+      ctx.save();
+      ctx.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over";
+      ctx.strokeStyle = brushColor;
+      ctx.lineWidth = brushSize;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      const point = canvasPointToLayer(activeLayer, canvasW, canvasH, mx, my);
+      ctx.moveTo(point.x, point.y);
+      drawing.current = true;
+    } else if (tool === "move") {
+      // 가장 위에 보이는 말풍선부터 선택한다.
+      for (const layer of [...layers].reverse()) {
+        if (!layer.visible || layer.locked) continue;
+        for (const bubble of [...layer.bubbles].reverse()) {
           const hit = hitTestBubble(mx, my, bubble);
           if (hit) {
+            saveUndo();
+            setActiveLayerId(layer.id);
             setSelectedBubbleId(bubble.id);
             bubbleDragStart.current = { x: mx, y: my };
             bubbleOriginal.current = { ...bubble };
@@ -326,20 +875,40 @@ export default function CanvasEditor({
           }
         }
       }
-      // 말풍선 안 맞으면 레이어 이동
+
+      // 말풍선이 아니면 실제 불투명 영역이 맞는 최상단 레이어를 선택한다.
       setSelectedBubbleId(null);
-      if (!activeLayer) return;
+      const selectedLayer = [...layers].reverse().find((layer) => {
+        if (!layer.visible || layer.locked) return false;
+        const bounds = getLayerBounds(layer, canvasW, canvasH);
+        return mx >= bounds.left && mx <= bounds.right && my >= bounds.top && my <= bounds.bottom;
+      });
+      if (!selectedLayer) return;
+      setActiveLayerId(selectedLayer.id);
+      const movingLayers = selectedLayer.groupId
+        ? layers.filter((layer) => layer.groupId === selectedLayer.groupId)
+        : [selectedLayer];
+      if (movingLayers.some((layer) => layer.locked)) return;
+      saveUndo();
       isDragging.current = true;
       dragStart.current = { x: mx, y: my };
-      dragLayerStart.current = { x: activeLayer.x, y: activeLayer.y };
+      dragLayerStarts.current = new Map(
+        movingLayers.map((layer) => [layer.id, { ...layer, bubbles: layer.bubbles.map((bubble) => ({ ...bubble })) }])
+      );
     } else if (tool === "crop") {
+      const activeLayer = layers.find((layer) => layer.id === activeLayerId);
+      if (activeLayer?.locked) return;
+      if (activeLayer && Math.abs(activeLayer.rotation) > 0.01) {
+        setEditorMessage("크롭 전에 이미지 회전을 0°로 초기화해주세요.");
+        return;
+      }
       setCropping(true);
       cropStart.current = { x: mx, y: my };
       setCropRect({ x: mx, y: my, w: 0, h: 0 });
-    } else if (tool === "bubble") {
-      // 활성 레이어의 말풍선 히트 테스트
+    } else if (tool === "bubble" || tool === "text" || tool === "shape") {
+      // 활성 레이어의 말풍선/텍스트 히트 테스트
       const activeLayer = layers.find((l) => l.id === activeLayerId);
-      if (!activeLayer) return;
+      if (!activeLayer || activeLayer.locked) return;
 
       // 선택된 말풍선부터 체크
       for (const bubble of [...activeLayer.bubbles].reverse()) {
@@ -362,9 +931,13 @@ export default function CanvasEditor({
         }
       }
 
-      // 아무것도 안 맞으면 새 말풍선 생성
+      // 아무것도 안 맞으면 새 말풍선 또는 독립 텍스트 생성
       saveUndo();
-      const newBubble = createBubble(bubbleType, mx, my);
+      const newBubble = createBubble(
+        tool === "text" ? "text" : tool === "shape" ? shapeType : bubbleType,
+        mx,
+        my
+      );
       setLayers((prev) =>
         prev.map((l) =>
           l.id === activeLayerId ? { ...l, bubbles: [...l.bubbles, newBubble] } : l
@@ -377,8 +950,20 @@ export default function CanvasEditor({
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const { x: mx, y: my } = getCanvasCoords(e);
 
+    if ((tool === "brush" || tool === "eraser") && drawing.current) {
+      const activeLayer = layers.find((layer) => layer.id === activeLayerId);
+      if (!activeLayer?.canvas) return;
+      const ctx = activeLayer.canvas.getContext("2d")!;
+      const point = canvasPointToLayer(activeLayer, canvasW, canvasH, mx, my);
+      ctx.lineTo(point.x, point.y);
+      ctx.stroke();
+      alphaBoundsCache.delete(activeLayer.canvas);
+      setLayers((current) => [...current]);
+      return;
+    }
+
     // move 도구에서도 말풍선 드래그 처리
-    if ((tool === "move" || tool === "bubble") && bubbleDragMode.current !== "none" && selectedBubbleId) {
+    if ((tool === "move" || tool === "bubble" || tool === "text" || tool === "shape") && bubbleDragMode.current !== "none" && selectedBubbleId) {
       const dx = mx - bubbleDragStart.current.x;
       const dy = my - bubbleDragStart.current.y;
       const orig = bubbleOriginal.current;
@@ -416,11 +1001,10 @@ export default function CanvasEditor({
       const dx = mx - dragStart.current.x;
       const dy = my - dragStart.current.y;
       setLayers((prev) =>
-        prev.map((l) =>
-          l.id === activeLayerId
-            ? { ...l, x: dragLayerStart.current.x + dx, y: dragLayerStart.current.y + dy }
-            : l
-        )
+        prev.map((layer) => {
+          const start = dragLayerStarts.current.get(layer.id);
+          return start ? translateLayer(start, dx, dy) : layer;
+        })
       );
     } else if (tool === "crop" && cropping) {
       const x = Math.min(mx, cropStart.current.x);
@@ -432,6 +1016,11 @@ export default function CanvasEditor({
   };
 
   const handleMouseUp = () => {
+    if (drawing.current) {
+      const activeLayer = layers.find((layer) => layer.id === activeLayerId);
+      activeLayer?.canvas?.getContext("2d")?.restore();
+      drawing.current = false;
+    }
     isDragging.current = false;
     bubbleDragMode.current = "none";
     if (tool === "crop" && cropping && cropRect && cropRect.w > 5 && cropRect.h > 5) {
@@ -445,15 +1034,22 @@ export default function CanvasEditor({
     if (!cropRect) return;
     saveUndo(); // Undo 저장
     const activeLayer = layers.find((l) => l.id === activeLayerId);
-    if (!activeLayer?.canvas) return;
+    if (!activeLayer?.canvas || activeLayer.locked) return;
 
     const srcCtx = activeLayer.canvas.getContext("2d")!;
-    const imageData = srcCtx.getImageData(
-      cropRect.x - activeLayer.x,
-      cropRect.y - activeLayer.y,
-      cropRect.w,
-      cropRect.h
+    const drawRect = layerDrawRect(activeLayer, canvasW, canvasH);
+    const sourceX = Math.max(0, Math.floor((cropRect.x - drawRect.x) * activeLayer.canvas.width / drawRect.width));
+    const sourceY = Math.max(0, Math.floor((cropRect.y - drawRect.y) * activeLayer.canvas.height / drawRect.height));
+    const sourceW = Math.min(
+      activeLayer.canvas.width - sourceX,
+      Math.max(1, Math.round(cropRect.w * activeLayer.canvas.width / drawRect.width))
     );
+    const sourceH = Math.min(
+      activeLayer.canvas.height - sourceY,
+      Math.max(1, Math.round(cropRect.h * activeLayer.canvas.height / drawRect.height))
+    );
+    if (sourceW <= 0 || sourceH <= 0) return;
+    const imageData = srcCtx.getImageData(sourceX, sourceY, sourceW, sourceH);
 
     const newCanvas = document.createElement("canvas");
     newCanvas.width = canvasW;
@@ -461,11 +1057,15 @@ export default function CanvasEditor({
     const newCtx = newCanvas.getContext("2d")!;
     const cx = (canvasW - cropRect.w) / 2;
     const cy = (canvasH - cropRect.h) / 2;
-    newCtx.putImageData(imageData, cx, cy);
+    const cropped = document.createElement("canvas");
+    cropped.width = sourceW;
+    cropped.height = sourceH;
+    cropped.getContext("2d")!.putImageData(imageData, 0, 0);
+    newCtx.drawImage(cropped, cx, cy, cropRect.w, cropRect.h);
 
     setLayers((prev) =>
       prev.map((l) =>
-        l.id === activeLayerId ? { ...l, canvas: newCanvas, x: 0, y: 0 } : l
+        l.id === activeLayerId ? { ...l, canvas: newCanvas, scale: 1, rotation: 0, x: 0, y: 0 } : l
       )
     );
     setCropRect(null);
@@ -474,7 +1074,7 @@ export default function CanvasEditor({
   // 배경 제거 (Flood Fill: 가장자리에서 흰색→투명, 캐릭터 내부 보존)
   const handleRemoveBackground = () => {
     const activeLayer = layers.find((l) => l.id === activeLayerId);
-    if (!activeLayer?.canvas) return;
+    if (!activeLayer?.canvas || activeLayer.locked) return;
 
     saveUndo(); // Undo 저장
 
@@ -542,7 +1142,9 @@ export default function CanvasEditor({
     }
 
     ctx.putImageData(imageData, 0, 0);
+    alphaBoundsCache.delete(activeLayer.canvas);
     setLayers((prev) => [...prev]); // 리렌더 트리거
+    setBackgroundRemoved(true);
   };
 
   // 투명도 조절
@@ -578,9 +1180,28 @@ export default function CanvasEditor({
             ctx.fillRect(0, 0, newW, newH);
           }
           ctx.drawImage(l.canvas, 0, dy);
-          return { ...l, canvas: newCanvas, y: l.y + dy, width: newW, height: newH };
+          return {
+            ...l,
+            canvas: newCanvas,
+            width: newW,
+            height: newH,
+            bubbles: l.bubbles.map((bubble) => ({
+              ...bubble,
+              y: bubble.y + dy,
+              tailTipY: bubble.tailTipY + dy,
+            })),
+          };
         }
-        return { ...l, width: newW, height: newH };
+        return {
+          ...l,
+          width: newW,
+          height: newH,
+          bubbles: l.bubbles.map((bubble) => ({
+            ...bubble,
+            y: bubble.y + dy,
+            tailTipY: bubble.tailTipY + dy,
+          })),
+        };
       })
     );
   };
@@ -611,6 +1232,7 @@ export default function CanvasEditor({
 
   // 레이어 추가
   const addLayer = (position: "above" | "below") => {
+    saveUndo();
     const idx = layers.findIndex((l) => l.id === activeLayerId);
     const newLayer = createLayer(undefined, canvasW, canvasH);
     const newLayers = [...layers];
@@ -623,11 +1245,309 @@ export default function CanvasEditor({
     setActiveLayerId(newLayer.id);
   };
 
+  const addPanelLayout = (layout: "single" | "columns" | "rows" | "three" | "twoOne" | "four" | "threeColumns") => {
+    saveUndo();
+    const padding = Math.max(18, Math.round(Math.min(canvasW, canvasH) * 0.035));
+    const gap = Math.max(16, Math.round(Math.min(canvasW, canvasH) * 0.025));
+    const innerW = canvasW - padding * 2;
+    const innerH = canvasH - padding * 2;
+    const rectangles: Array<{ x: number; y: number; width: number; height: number }> = [];
+
+    if (layout === "single") {
+      rectangles.push({ x: canvasW / 2, y: canvasH / 2, width: innerW, height: innerH });
+    } else if (layout === "columns") {
+      const width = (innerW - gap) / 2;
+      rectangles.push(
+        { x: padding + width / 2, y: canvasH / 2, width, height: innerH },
+        { x: padding + width + gap + width / 2, y: canvasH / 2, width, height: innerH }
+      );
+    } else if (layout === "rows") {
+      const height = (innerH - gap) / 2;
+      rectangles.push(
+        { x: canvasW / 2, y: padding + height / 2, width: innerW, height },
+        { x: canvasW / 2, y: padding + height + gap + height / 2, width: innerW, height }
+      );
+    } else if (layout === "three") {
+      const height = (innerH - gap) / 2;
+      const bottomWidth = (innerW - gap) / 2;
+      rectangles.push(
+        { x: canvasW / 2, y: padding + height / 2, width: innerW, height },
+        { x: padding + bottomWidth / 2, y: padding + height + gap + height / 2, width: bottomWidth, height },
+        { x: padding + bottomWidth + gap + bottomWidth / 2, y: padding + height + gap + height / 2, width: bottomWidth, height }
+      );
+    } else if (layout === "twoOne") {
+      const height = (innerH - gap) / 2;
+      const topWidth = (innerW - gap) / 2;
+      rectangles.push(
+        { x: padding + topWidth / 2, y: padding + height / 2, width: topWidth, height },
+        { x: padding + topWidth + gap + topWidth / 2, y: padding + height / 2, width: topWidth, height },
+        { x: canvasW / 2, y: padding + height + gap + height / 2, width: innerW, height }
+      );
+    } else if (layout === "four") {
+      const width = (innerW - gap) / 2;
+      const height = (innerH - gap) / 2;
+      rectangles.push(
+        { x: padding + width / 2, y: padding + height / 2, width, height },
+        { x: padding + width + gap + width / 2, y: padding + height / 2, width, height },
+        { x: padding + width / 2, y: padding + height + gap + height / 2, width, height },
+        { x: padding + width + gap + width / 2, y: padding + height + gap + height / 2, width, height }
+      );
+    } else {
+      const width = (innerW - gap * 2) / 3;
+      rectangles.push(
+        { x: padding + width / 2, y: canvasH / 2, width, height: innerH },
+        { x: padding + width + gap + width / 2, y: canvasH / 2, width, height: innerH },
+        { x: padding + (width + gap) * 2 + width / 2, y: canvasH / 2, width, height: innerH }
+      );
+    }
+
+    const bubbles = rectangles.flatMap((rectangle, index) => {
+      const outer = createBubble("rectangle", rectangle.x, rectangle.y);
+      const inner = createBubble("rectangle", rectangle.x, rectangle.y);
+      return [
+        {
+          ...outer,
+          id: `panel_outer_${Date.now()}_${index}`,
+          ...rectangle,
+          fillColor: "transparent",
+          strokeColor: "#ffffff",
+          strokeWidth: Math.max(10, gap * 0.72),
+        },
+        {
+          ...inner,
+          id: `panel_inner_${Date.now()}_${index}`,
+          ...rectangle,
+          fillColor: "transparent",
+          strokeColor: "#111111",
+          strokeWidth: Math.max(2, Math.round(Math.min(canvasW, canvasH) / 180)),
+        },
+      ];
+    });
+    const newLayer = {
+      ...createLayer(undefined, canvasW, canvasH),
+      name: "패널 레이아웃",
+      bubbles,
+    };
+    const activeIndex = layers.findIndex((layer) => layer.id === activeLayerId);
+    const next = [...layers];
+    next.splice(activeIndex >= 0 ? activeIndex + 1 : layers.length, 0, newLayer);
+    setLayers(next);
+    setActiveLayerId(newLayer.id);
+    setSelectedBubbleId(null);
+    setTool("move");
+    setLayoutPickerOpen(false);
+  };
+
+  const duplicateLayer = () => {
+    const sourceIndex = layers.findIndex((layer) => layer.id === activeLayerId);
+    if (sourceIndex < 0) return;
+    saveUndo();
+    const duplicate = cloneLayers([layers[sourceIndex]])[0];
+    duplicate.id = `layer_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    duplicate.name = `${duplicate.name || "레이어"} 복사본`.slice(0, 40);
+    duplicate.groupId = null;
+    duplicate.x += 12;
+    duplicate.y += 12;
+    duplicate.bubbles = duplicate.bubbles.map((bubble) => ({
+      ...bubble,
+      id: `bubble_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      x: bubble.x + 12,
+      y: bubble.y + 12,
+      tailTipX: bubble.tailTipX + 12,
+      tailTipY: bubble.tailTipY + 12,
+    }));
+    const next = [...layers];
+    next.splice(sourceIndex + 1, 0, duplicate);
+    setLayers(next);
+    setActiveLayerId(duplicate.id);
+  };
+
+  const groupSelectedLayers = () => {
+    const selected = selectedLayerIds.filter((id) => layers.some((layer) => layer.id === id));
+    if (selected.length < 2) return;
+    saveUndo();
+    const groupId = `group_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    setLayers((current) => current.map((layer) =>
+      selected.includes(layer.id) ? { ...layer, groupId } : layer
+    ));
+    setSelectedLayerIds([]);
+  };
+
+  const ungroupSelectedLayers = () => {
+    const groupIds = new Set(
+      layers
+        .filter((layer) => selectedLayerIds.includes(layer.id) && layer.groupId)
+        .map((layer) => layer.groupId as string)
+    );
+    if (groupIds.size === 0) return;
+    saveUndo();
+    setLayers((current) => current.map((layer) =>
+      layer.groupId && groupIds.has(layer.groupId) ? { ...layer, groupId: null } : layer
+    ));
+    setSelectedLayerIds([]);
+  };
+
+  const alignSelection = (alignment: "left" | "centerX" | "right" | "top" | "centerY" | "bottom") => {
+    if (selectedBubbleId) {
+      const bubble = layers.flatMap((layer) => layer.bubbles).find((item) => item.id === selectedBubbleId);
+      if (!bubble) return;
+      saveUndo();
+      const updates = alignment === "left"
+        ? { x: bubble.width / 2 }
+        : alignment === "centerX"
+          ? { x: canvasW / 2 }
+          : alignment === "right"
+            ? { x: canvasW - bubble.width / 2 }
+            : alignment === "top"
+              ? { y: bubble.height / 2 }
+              : alignment === "centerY"
+                ? { y: canvasH / 2 }
+                : { y: canvasH - bubble.height / 2 };
+      updateBubble(selectedBubbleId, updates);
+      return;
+    }
+
+    const ids = selectedLayerIds.length > 0 ? selectedLayerIds : activeLayerId ? [activeLayerId] : [];
+    const selected = layers.filter((layer) => ids.includes(layer.id) && !layer.locked);
+    if (selected.length === 0) return;
+    const bounds = new Map(selected.map((layer) => [layer.id, getLayerBounds(layer, canvasW, canvasH)]));
+    const all = Array.from(bounds.values());
+    const group = {
+      left: Math.min(...all.map((item) => item.left)),
+      right: Math.max(...all.map((item) => item.right)),
+      top: Math.min(...all.map((item) => item.top)),
+      bottom: Math.max(...all.map((item) => item.bottom)),
+    };
+    const target = alignment === "left"
+      ? (selected.length === 1 ? 0 : group.left)
+      : alignment === "centerX"
+        ? (selected.length === 1 ? canvasW / 2 : (group.left + group.right) / 2)
+        : alignment === "right"
+          ? (selected.length === 1 ? canvasW : group.right)
+          : alignment === "top"
+            ? (selected.length === 1 ? 0 : group.top)
+            : alignment === "centerY"
+              ? (selected.length === 1 ? canvasH / 2 : (group.top + group.bottom) / 2)
+              : (selected.length === 1 ? canvasH : group.bottom);
+    saveUndo();
+    setLayers((current) => current.map((layer) => {
+      const box = bounds.get(layer.id);
+      if (!box) return layer;
+      const dx = alignment === "left"
+        ? target - box.left
+        : alignment === "centerX"
+          ? target - box.centerX
+          : alignment === "right"
+            ? target - box.right
+            : 0;
+      const dy = alignment === "top"
+        ? target - box.top
+        : alignment === "centerY"
+          ? target - box.centerY
+          : alignment === "bottom"
+            ? target - box.bottom
+            : 0;
+      return translateLayer(layer, dx, dy);
+    }));
+  };
+
+  const distributeSelection = (axis: "horizontal" | "vertical") => {
+    const selected = layers.filter((layer) => selectedLayerIds.includes(layer.id) && !layer.locked);
+    if (selected.length < 3) return;
+    const bounds = new Map(selected.map((layer) => [layer.id, getLayerBounds(layer, canvasW, canvasH)]));
+    const sorted = [...selected].sort((leftLayer, rightLayer) => {
+      const leftBounds = bounds.get(leftLayer.id)!;
+      const rightBounds = bounds.get(rightLayer.id)!;
+      return axis === "horizontal"
+        ? leftBounds.centerX - rightBounds.centerX
+        : leftBounds.centerY - rightBounds.centerY;
+    });
+    const first = bounds.get(sorted[0].id)!;
+    const last = bounds.get(sorted[sorted.length - 1].id)!;
+    const start = axis === "horizontal" ? first.centerX : first.centerY;
+    const end = axis === "horizontal" ? last.centerX : last.centerY;
+    const targets = new Map(sorted.map((layer, index) => [layer.id, start + (end - start) * index / (sorted.length - 1)]));
+    saveUndo();
+    setLayers((current) => current.map((layer) => {
+      const box = bounds.get(layer.id);
+      const target = targets.get(layer.id);
+      if (!box || target === undefined) return layer;
+      return axis === "horizontal"
+        ? translateLayer(layer, target - box.centerX, 0)
+        : translateLayer(layer, 0, target - box.centerY);
+    }));
+  };
+
+  const addBubblePreset = (kind: "watermark" | "caption" | "sfx") => {
+    const bubble = kind === "watermark"
+      ? {
+          ...createBubble("text", canvasW - 125, canvasH - 38),
+          width: 220,
+          height: 52,
+          text: "워니바나나봇",
+          textColor: "#ffffff",
+          fontSize: 20,
+          fontWeight: "bold" as const,
+          opacity: 0.72,
+        }
+      : kind === "caption"
+        ? {
+            ...createBubble("rectangle", canvasW / 2, canvasH - 75),
+            width: Math.max(260, canvasW - 70),
+            height: 92,
+            text: "내레이션을 입력하세요",
+            fillColor: "#111111",
+            strokeColor: "transparent",
+            strokeWidth: 0,
+            textColor: "#ffffff",
+            fontSize: 24,
+            opacity: 0.86,
+          }
+        : {
+            ...createBubble("spiky", canvasW / 2, canvasH / 2),
+            width: 220,
+            height: 150,
+            text: "쾅!",
+            fillColor: "#fde047",
+            textColor: "#111111",
+            fontSize: 40,
+            fontWeight: "bold" as const,
+          };
+    const layer = {
+      ...createLayer(undefined, canvasW, canvasH),
+      name: kind === "watermark" ? "워터마크" : kind === "caption" ? "캡션·내레이션" : "효과음",
+      bubbles: [bubble],
+    };
+    saveUndo();
+    setLayers((current) => [...current, layer]);
+    setActiveLayerId(layer.id);
+    setSelectedBubbleId(bubble.id);
+    setTool(bubble.type === "text" ? "text" : "bubble");
+  };
+
+  const setPageBackground = (color: string) => {
+    saveUndo();
+    setLayers((current) => {
+      const existing = current.find((layer) => layer.name === "페이지 배경" && !layer.canvas);
+      if (existing) {
+        return current.map((layer) => layer.id === existing.id ? { ...layer, fillColor: color, visible: true } : layer);
+      }
+      return [{
+        ...createLayer(undefined, canvasW, canvasH),
+        name: "페이지 배경",
+        locked: true,
+        fillColor: color,
+      }, ...current];
+    });
+  };
+
   // 레이어 삭제
   const deleteLayer = (id: string) => {
     if (layers.length <= 1) return;
+    saveUndo();
     const newLayers = layers.filter((l) => l.id !== id);
     setLayers(newLayers);
+    setSelectedLayerIds((current) => current.filter((item) => item !== id));
     if (activeLayerId === id) {
       setActiveLayerId(newLayers[0].id);
     }
@@ -635,6 +1555,7 @@ export default function CanvasEditor({
 
   // 레이어 순서 이동 (layers 배열에서 위=뒤, 아래=앞 — 렌더 순서상 앞이 아래)
   const moveLayer = (id: string, direction: "up" | "down") => {
+    saveUndo();
     setLayers((prev) => {
       const idx = prev.findIndex((l) => l.id === id);
       if (idx < 0) return prev;
@@ -648,9 +1569,173 @@ export default function CanvasEditor({
     });
   };
 
+  const addImageLayer = async (imageUrl: string, name = "이미지 객체") => {
+    const img = await loadImage(imageUrl);
+    const layerCanvas = document.createElement("canvas");
+    layerCanvas.width = canvasW;
+    layerCanvas.height = canvasH;
+    const ctx = layerCanvas.getContext("2d")!;
+    const scale = Math.min(canvasW / img.width, canvasH / img.height);
+    const width = img.width * scale;
+    const height = img.height * scale;
+    ctx.drawImage(img, (canvasW - width) / 2, (canvasH - height) / 2, width, height);
+    const newLayer = {
+      ...createLayer(undefined, canvasW, canvasH),
+      name: name.slice(0, 40),
+      image: img,
+      imageUrl,
+      canvas: layerCanvas,
+    };
+    saveUndo();
+    const activeIndex = layers.findIndex((layer) => layer.id === activeLayerId);
+    const next = [...layers];
+    next.splice(activeIndex >= 0 ? activeIndex + 1 : layers.length, 0, newLayer);
+    setLayers(next);
+    setActiveLayerId(newLayer.id);
+    setSelectedBubbleId(null);
+    setTool("move");
+  };
+
+  const handleImageFiles = async (files: File[]) => {
+    const file = files.find((candidate) => candidate.type.startsWith("image/") && candidate.size <= 20 * 1024 * 1024);
+    if (!file) {
+      window.alert("20MB 이하 이미지 파일을 선택해주세요.");
+      return;
+    }
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error());
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    await addImageLayer(dataUrl, file.name.replace(/\.[^.]+$/, "") || "업로드 이미지");
+  };
+
+  const createCompositeCanvas = () => {
+    const composite = document.createElement("canvas");
+    composite.width = canvasW;
+    composite.height = canvasH;
+    const ctx = composite.getContext("2d")!;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvasW, canvasH);
+    for (const layer of layers) {
+      if (!layer.visible) continue;
+      ctx.save();
+      ctx.globalAlpha = layer.opacity;
+      if (layer.fillColor && !layer.canvas) {
+        ctx.fillStyle = layer.fillColor;
+        ctx.fillRect(0, 0, canvasW, canvasH);
+      } else if (layer.canvas) {
+        const rect = layerDrawRect(layer, canvasW, canvasH);
+        drawLayerCanvas(ctx, layer.canvas, rect, layer.rotation);
+      }
+      for (const bubble of layer.bubbles) drawBubble(ctx, bubble);
+      ctx.restore();
+    }
+    return composite;
+  };
+
+  const extractCanvasText = async () => {
+    setOcrOpen(true);
+    setOcrLoading(true);
+    setEditorMessage(null);
+    try {
+      const image = createCompositeCanvas().toDataURL("image/jpeg", 0.86);
+      const response = await fetch("/api/studio/ocr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: { base64: image.split(",")[1], mimeType: "image/jpeg" } }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "글자를 추출하지 못했습니다.");
+      setOcrText(typeof data.text === "string" ? data.text : "");
+      if (!data.text) setEditorMessage("이미지에서 읽을 수 있는 글자를 찾지 못했습니다.");
+    } catch (error) {
+      setEditorMessage(error instanceof Error ? error.message : "글자를 추출하지 못했습니다.");
+    } finally {
+      setOcrLoading(false);
+    }
+  };
+
+  const addExtractedText = () => {
+    if (!ocrText.trim()) return;
+    const lines = ocrText.trim().split("\n").length;
+    const bubble = {
+      ...createBubble("text", canvasW / 2, canvasH / 2),
+      width: Math.max(220, canvasW - 64),
+      height: Math.min(canvasH - 48, Math.max(90, lines * 38 + 36)),
+      text: ocrText.trim(),
+      fontSize: 24,
+    };
+    const layer = {
+      ...createLayer(undefined, canvasW, canvasH),
+      name: "추출한 텍스트",
+      bubbles: [bubble],
+    };
+    saveUndo();
+    setLayers((current) => [...current, layer]);
+    setActiveLayerId(layer.id);
+    setSelectedBubbleId(bubble.id);
+    setTool("text");
+    setOcrOpen(false);
+  };
+
+  const queueAiRedraw = async () => {
+    if (!projectId || !cutId) {
+      setEditorMessage("프로젝트 컷에서만 AI 다시 그리기를 사용할 수 있습니다.");
+      return;
+    }
+    if (!redrawPrompt.trim()) {
+      setEditorMessage("다시 그릴 내용을 입력해주세요.");
+      return;
+    }
+    setRedrawLoading(true);
+    setEditorMessage(null);
+    try {
+      const image = createCompositeCanvas().toDataURL("image/jpeg", 0.86);
+      const generationAspect = aspect === "3:4" || aspect === "8:11" ? "4:5" : aspect;
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          presetIds: [],
+          jobKind: "image",
+          mode: "edit",
+          aspectRatio: generationAspect,
+          imageSize: "1K",
+          projectId,
+          cutId,
+          inputImage: { base64: image.split(",")[1], mimeType: "image/jpeg" },
+          prompt: [
+            "현재 완성 컷을 참고해 같은 캐릭터 정체성, 그림체, 화면 비율을 유지하며 수정한다.",
+            `수정 요청: ${redrawPrompt.trim()}`,
+            "요청하지 않은 인물, 글자, 로고, 워터마크를 추가하지 않는다.",
+          ].join("\n"),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "AI 다시 그리기를 시작하지 못했습니다.");
+      setRedrawOpen(false);
+      setRedrawPrompt("");
+      setEditorMessage("AI 다시 그리기를 시작했습니다. 완료되면 작업 알림에 표시됩니다.");
+      if ("Notification" in window && Notification.permission === "default") {
+        void Notification.requestPermission();
+      }
+    } catch (error) {
+      setEditorMessage(error instanceof Error ? error.message : "AI 다시 그리기를 시작하지 못했습니다.");
+    } finally {
+      setRedrawLoading(false);
+    }
+  };
+
   // 갤러리 이미지를 레이어에 드롭
   const handleDropOnLayer = async (layerId: string, imageUrl: string) => {
     try {
+      if (layers.find((layer) => layer.id === layerId)?.locked) return;
+      saveUndo();
       const img = await loadImage(imageUrl);
       const layerCanvas = document.createElement("canvas");
       layerCanvas.width = canvasW;
@@ -666,7 +1751,7 @@ export default function CanvasEditor({
       setLayers((prev) =>
         prev.map((l) =>
           l.id === layerId
-            ? { ...l, image: img, imageUrl, canvas: layerCanvas, x: 0, y: 0 }
+            ? { ...l, image: img, imageUrl, canvas: layerCanvas, rotation: 0, x: 0, y: 0 }
             : l
         )
       );
@@ -695,7 +1780,13 @@ export default function CanvasEditor({
           ctx.fillStyle = layer.fillColor;
           ctx.fillRect(0, 0, exportW, exportH);
         } else if (layer.canvas) {
-          ctx.drawImage(layer.canvas, layer.x * scaleX, layer.y * scaleY, exportW, exportH);
+          const rect = layerDrawRect(layer, canvasW, canvasH);
+          drawLayerCanvas(ctx, layer.canvas, {
+            x: rect.x * scaleX,
+            y: rect.y * scaleY,
+            width: rect.width * scaleX,
+            height: rect.height * scaleY,
+          }, layer.rotation);
         }
         // 말풍선 내보내기
         for (const bubble of layer.bubbles) {
@@ -709,6 +1800,7 @@ export default function CanvasEditor({
             tailTipY: bubble.tailTipY * scaleY,
             tailWidth: bubble.tailWidth * scaleX,
             strokeWidth: bubble.strokeWidth * Math.max(scaleX, scaleY),
+            fontSize: (bubble.fontSize ?? 24) * Math.min(scaleX, scaleY),
           });
         }
         ctx.restore();
@@ -717,10 +1809,49 @@ export default function CanvasEditor({
       const blob = await new Promise<Blob>((resolve) =>
         exportCanvas.toBlob((b) => resolve(b!), "image/png")
       );
+      const clientPayload = JSON.stringify({ projectId, cutId });
+      const serializedCanvas: SerializedCanvasState | undefined = projectId && cutId
+        ? {
+            version: 1,
+            aspect,
+            width: canvasW,
+            height: canvasH,
+            layers: await Promise.all(layers.map(async (layer, index) => {
+              const pixelUrl = layer.canvas
+                ? (await upload(
+                    `edited/layers/${cutId}-${index}-${Date.now()}.png`,
+                    await canvasToBlob(layer.canvas),
+                    {
+                      access: "public",
+                      handleUploadUrl: "/api/images/upload",
+                      clientPayload,
+                    }
+                  )).url
+                : null;
+              return {
+                id: layer.id,
+                name: layer.name,
+                locked: layer.locked,
+                groupId: layer.groupId,
+                pixelUrl,
+                opacity: layer.opacity,
+                scale: layer.scale,
+                rotation: layer.rotation,
+                x: layer.x,
+                y: layer.y,
+                width: layer.width,
+                height: layer.height,
+                visible: layer.visible,
+                fillColor: layer.fillColor,
+                bubbles: layer.bubbles.map((bubble) => ({ ...bubble })),
+              };
+            })),
+          }
+        : undefined;
       const uploaded = await upload(`edited/canvas-${Date.now()}.png`, blob, {
         access: "public",
         handleUploadUrl: "/api/images/upload",
-        clientPayload: JSON.stringify({ projectId, cutId }),
+        clientPayload,
         multipart: blob.size > 5 * 1024 * 1024,
       });
 
@@ -732,6 +1863,9 @@ export default function CanvasEditor({
           mimeType: "image/png",
           ...(projectId ? { projectId } : {}),
           ...(cutId ? { cutId } : {}),
+          ...(projectId ? { aspectRatio: aspect } : {}),
+          ...(serializedCanvas ? { canvas: serializedCanvas } : {}),
+          ...(backgroundRemoved ? { operation: "cutout" } : {}),
         }),
       });
 
@@ -747,6 +1881,13 @@ export default function CanvasEditor({
   };
 
   const activeLayer = layers.find((l) => l.id === activeLayerId);
+  const displayScale = fitScale * zoom / 100;
+  const pageBackgroundColor = layers.find((layer) => layer.name === "페이지 배경" && !layer.canvas)?.fillColor || "#ffffff";
+  const displayedAssets = assetTab === "project"
+    ? galleryImages
+    : assetTab === "character"
+      ? assetLibrary.character.filter((image) => characterView === "all" || image.view === characterView)
+      : assetLibrary[assetTab];
 
   return (
     <div className={styles.overlay}>
@@ -755,6 +1896,12 @@ export default function CanvasEditor({
         <button className={styles.backBtn} onClick={onClose}>
           <LuArrowLeft size={18} /> 돌아가기
         </button>
+        {editorMessage && (
+          <div className={styles.editorNotice} role="status">
+            <span>{editorMessage}</span>
+            <button onClick={() => setEditorMessage(null)} title="알림 닫기"><LuX size={13} /></button>
+          </div>
+        )}
         <span className={styles.title}><LuLayers size={16} /> 캔버스 편집</span>
       </div>
 
@@ -762,21 +1909,31 @@ export default function CanvasEditor({
 
         {/* 중앙: 캔버스 */}
         <div className={styles.canvasArea}>
-          <div className={styles.canvasWrapper}>
-            <canvas
-              ref={canvasRef}
-              width={canvasW}
-              height={canvasH}
-              className={styles.canvas}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-            />
+          <div className={styles.canvasViewport} ref={canvasViewportRef}>
+            <div
+              className={`${styles.canvasWrapper} ${showTransparencyGrid ? "" : styles.canvasWrapperPlain}`}
+              style={{ width: `${canvasW * displayScale}px`, height: `${canvasH * displayScale}px` }}
+            >
+              <canvas
+                ref={canvasRef}
+                width={canvasW}
+                height={canvasH}
+                className={styles.canvas}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              />
+            </div>
           </div>
 
           {/* 하단 툴바 */}
-          <div className={styles.toolbar}>
+          <div className={`${styles.toolbar} ${toolbarCollapsed ? styles.toolbarCollapsed : ""}`}>
+            <button
+              className={styles.toolbarCollapseButton}
+              onClick={() => setToolbarCollapsed((value) => !value)}
+              title={toolbarCollapsed ? "도구 펼치기" : "도구 접기"}
+            >{toolbarCollapsed ? <LuChevronsUp size={16} /> : <LuChevronsDown size={16} />}</button>
             <div className={styles.toolGroup}>
               <label className={styles.opacityLabel}>
                 투명도
@@ -811,6 +1968,43 @@ export default function CanvasEditor({
               </button>
             </div>
             <div className={styles.toolGroup}>
+              <button className={styles.toolBtn} onClick={() => imageInputRef.current?.click()} title="이미지 객체 추가">
+                <LuImagePlus size={16} />
+              </button>
+              <input
+                ref={imageInputRef}
+                hidden
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                onChange={(event) => {
+                  void handleImageFiles(Array.from(event.target.files || [])).catch(() => window.alert("이미지를 추가하지 못했습니다."));
+                  event.target.value = "";
+                }}
+              />
+              <button className={`${styles.toolBtn} ${tool === "brush" ? styles.toolActive : ""}`} onClick={() => setTool("brush")} title="펜">
+                <LuPencil size={16} />
+              </button>
+              <button className={`${styles.toolBtn} ${tool === "eraser" ? styles.toolActive : ""}`} onClick={() => setTool("eraser")} title="지우개">
+                <LuEraser size={16} />
+              </button>
+              <input type="color" value={brushColor} onChange={(e) => setBrushColor(e.target.value)} className={styles.brushColor} title="펜 색상" />
+              <input
+                className={styles.colorHex}
+                value={brushColor.slice(1).toUpperCase()}
+                maxLength={6}
+                aria-label="HEX 색상 코드"
+                onChange={(event) => {
+                  const value = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6);
+                  if (value.length === 6) setBrushColor(`#${value}`);
+                }}
+              />
+              <button className={`${styles.toolBtn} ${tool === "pipette" ? styles.toolActive : ""}`} onClick={() => setTool("pipette")} title="스포이트">
+                <LuPipette size={16} />
+              </button>
+              <input type="range" min={2} max={60} value={brushSize} onChange={(e) => setBrushSize(Number(e.target.value))} className={styles.brushSize} title="펜 굵기" />
+              <span className={styles.opacityValue}>{brushSize}px</span>
+            </div>
+            <div className={styles.toolGroup}>
               <button
                 className={`${styles.toolBtn} ${aspect === "1:1" ? styles.toolActive : ""}`}
                 onClick={() => handleAspectChange("1:1")}
@@ -824,6 +2018,20 @@ export default function CanvasEditor({
                 4:5
               </button>
               <button
+                className={`${styles.toolBtn} ${aspect === "3:4" ? styles.toolActive : ""}`}
+                onClick={() => handleAspectChange("3:4")}
+                title="카드뉴스 960×1280"
+              >
+                3:4
+              </button>
+              <button
+                className={`${styles.toolBtn} ${aspect === "8:11" ? styles.toolActive : ""}`}
+                onClick={() => handleAspectChange("8:11")}
+                title="원고 800×1100"
+              >
+                8:11
+              </button>
+              <button
                 className={`${styles.toolBtn} ${aspect === "9:16" ? styles.toolActive : ""}`}
                 onClick={() => handleAspectChange("9:16")}
               >
@@ -835,6 +2043,107 @@ export default function CanvasEditor({
               >
                 16:9
               </button>
+            </div>
+            <div className={styles.toolGroup}>
+              <button className={styles.toolBtn} onClick={() => setZoom((value) => Math.max(25, value - 25))} title="축소"><LuZoomOut size={16} /></button>
+              <button className={styles.toolBtn} onClick={() => setZoom(100)} title="화면에 맞추기"><LuMaximize2 size={16} /> {zoom}%</button>
+              <button className={styles.toolBtn} onClick={() => setZoom((value) => Math.min(200, value + 25))} title="확대"><LuZoomIn size={16} /></button>
+              <button className={`${styles.toolBtn} ${showGuides ? styles.toolActive : ""}`} onClick={() => setShowGuides((value) => !value)} title="3분할·중앙 안내선"><LuGrid3X3 size={16} /></button>
+              <button className={`${styles.toolBtn} ${showTransparencyGrid ? styles.toolActive : ""}`} onClick={() => setShowTransparencyGrid((value) => !value)} title="투명 영역 보기"><LuSquare size={16} /></button>
+              <button className={`${styles.toolBtn} ${showOverflow ? styles.toolActive : ""}`} onClick={() => setShowOverflow((value) => !value)} title="캔버스 밖 객체 표시"><LuScanLine size={16} /></button>
+            </div>
+            {activeLayer?.canvas && (
+              <div className={styles.toolGroup}>
+                <label className={styles.opacityLabel}>
+                  객체 크기
+                  <input
+                    type="range"
+                    min={25}
+                    max={200}
+                    value={Math.round(activeLayer.scale * 100)}
+                    onPointerDown={saveUndo}
+                    onChange={(event) => setLayers((current) => current.map((layer) => layer.id === activeLayer.id ? { ...layer, scale: Number(event.target.value) / 100 } : layer))}
+                    className={styles.opacitySlider}
+                  />
+                  <span className={styles.opacityValue}>{Math.round(activeLayer.scale * 100)}%</span>
+                </label>
+                <label className={styles.opacityLabel}>
+                  회전
+                  <input
+                    type="range"
+                    min={-180}
+                    max={180}
+                    value={Math.round(activeLayer.rotation)}
+                    onPointerDown={saveUndo}
+                    onChange={(event) => setLayers((current) => current.map((layer) => layer.id === activeLayer.id ? { ...layer, rotation: Number(event.target.value) } : layer))}
+                    className={styles.opacitySlider}
+                  />
+                  <span className={styles.opacityValue}>{Math.round(activeLayer.rotation)}°</span>
+                </label>
+                <button
+                  className={styles.toolBtn}
+                  onClick={() => {
+                    if (activeLayer.rotation === 0) return;
+                    saveUndo();
+                    setLayers((current) => current.map((layer) => layer.id === activeLayer.id ? { ...layer, rotation: 0 } : layer));
+                  }}
+                  title="회전 초기화"
+                ><LuRotateCw size={16} /></button>
+              </div>
+            )}
+            <div className={styles.toolGroup} aria-label="정렬과 분배">
+              <button className={styles.toolBtn} onClick={() => alignSelection("left")} disabled={!selectedBubbleId && !activeLayer} title="왼쪽 정렬"><LuAlignHorizontalJustifyStart size={16} /></button>
+              <button className={styles.toolBtn} onClick={() => alignSelection("centerX")} disabled={!selectedBubbleId && !activeLayer} title="가로 가운데 정렬"><LuAlignHorizontalJustifyCenter size={16} /></button>
+              <button className={styles.toolBtn} onClick={() => alignSelection("right")} disabled={!selectedBubbleId && !activeLayer} title="오른쪽 정렬"><LuAlignHorizontalJustifyEnd size={16} /></button>
+              <button className={styles.toolBtn} onClick={() => alignSelection("top")} disabled={!selectedBubbleId && !activeLayer} title="위쪽 정렬"><LuAlignVerticalJustifyStart size={16} /></button>
+              <button className={styles.toolBtn} onClick={() => alignSelection("centerY")} disabled={!selectedBubbleId && !activeLayer} title="세로 가운데 정렬"><LuAlignVerticalJustifyCenter size={16} /></button>
+              <button className={styles.toolBtn} onClick={() => alignSelection("bottom")} disabled={!selectedBubbleId && !activeLayer} title="아래쪽 정렬"><LuAlignVerticalJustifyEnd size={16} /></button>
+              <button className={styles.toolBtn} onClick={() => distributeSelection("horizontal")} disabled={selectedLayerIds.length < 3} title="가로 균등 분배"><LuAlignHorizontalSpaceBetween size={16} /></button>
+              <button className={styles.toolBtn} onClick={() => distributeSelection("vertical")} disabled={selectedLayerIds.length < 3} title="세로 균등 분배"><LuAlignVerticalSpaceBetween size={16} /></button>
+              <button className={styles.toolBtn} onClick={toggleActiveLayerLock} disabled={!activeLayer} title="선택 레이어 잠금 또는 해제 (Ctrl+L)">
+                {activeLayer?.locked ? <LuLockOpen size={16} /> : <LuLock size={16} />}
+              </button>
+            </div>
+            <div className={styles.toolGroup} aria-label="툰 도구">
+              <button className={styles.toolBtn} onClick={() => addBubblePreset("watermark")} title="워터마크"><LuStamp size={16} /> 워터마크</button>
+              <button className={styles.toolBtn} onClick={() => addBubblePreset("caption")} title="캡션·내레이션"><LuCaptions size={16} /> 캡션</button>
+              <button className={styles.toolBtn} onClick={() => addBubblePreset("sfx")} title="효과음"><LuZap size={16} /> 효과음</button>
+              <label className={styles.pageBackgroundControl} title="페이지 배경">
+                <LuPanelBottom size={16} />
+                <input type="color" value={pageBackgroundColor} onChange={(event) => setPageBackground(event.target.value)} aria-label="페이지 배경색" />
+              </label>
+            </div>
+            <div className={styles.toolGroup} style={{ position: "relative" }}>
+              <button className={`${styles.toolBtn} ${ocrOpen ? styles.toolActive : ""}`} onClick={() => ocrOpen ? setOcrOpen(false) : void extractCanvasText()} disabled={ocrLoading} title="이미지 글자 추출">
+                {ocrLoading ? <LuLoaderCircle className={styles.spin} size={16} /> : <LuScanText size={16} />} 텍스트 추출
+              </button>
+              {ocrOpen && (
+                <div className={`${styles.bubblePopup} ${styles.aiToolPopup}`}>
+                  <strong>추출한 텍스트</strong>
+                  {ocrLoading ? (
+                    <div className={styles.aiToolLoading}><LuLoaderCircle className={styles.spin} /> 분석 중</div>
+                  ) : (
+                    <>
+                      <textarea value={ocrText} onChange={(event) => setOcrText(event.target.value)} rows={7} placeholder="추출된 글자가 여기에 표시됩니다." />
+                      <button className={styles.aiToolAction} onClick={addExtractedText} disabled={!ocrText.trim()}><LuType size={14} /> 텍스트 객체로 추가</button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className={styles.toolGroup} style={{ position: "relative" }}>
+              <button className={`${styles.toolBtn} ${redrawOpen ? styles.toolActive : ""}`} onClick={() => setRedrawOpen((value) => !value)} disabled={redrawLoading} title="현재 컷 AI 다시 그리기">
+                {redrawLoading ? <LuLoaderCircle className={styles.spin} size={16} /> : <LuWandSparkles size={16} />} AI 다시 그리기
+              </button>
+              {redrawOpen && (
+                <div className={`${styles.bubblePopup} ${styles.aiToolPopup}`}>
+                  <strong>수정 요청</strong>
+                  <textarea value={redrawPrompt} onChange={(event) => setRedrawPrompt(event.target.value)} rows={5} maxLength={2_000} placeholder="예: 배경은 유지하고 인물 표정을 놀란 표정으로 변경" />
+                  <button className={styles.aiToolAction} onClick={() => void queueAiRedraw()} disabled={redrawLoading || !redrawPrompt.trim()}>
+                    {redrawLoading ? <LuLoaderCircle className={styles.spin} /> : <LuWandSparkles />} 작업 시작
+                  </button>
+                </div>
+              )}
             </div>
             <div className={styles.toolGroup}>
               <label className={styles.opacityLabel}>
@@ -854,10 +2163,18 @@ export default function CanvasEditor({
               <button
                 className={styles.toolBtn}
                 onClick={handleUndo}
-                disabled={!undoSnapshot.current}
+                disabled={undoStack.current.length === 0}
                 title="되돌리기 (Ctrl+Z)"
               >
-                <LuUndo2 size={16} /> Undo
+                <LuUndo2 size={16} />
+              </button>
+              <button
+                className={styles.toolBtn}
+                onClick={handleRedo}
+                disabled={redoStack.current.length === 0}
+                title="다시 실행 (Ctrl+Shift+Z)"
+              >
+                <LuRedo2 size={16} />
               </button>
             </div>
             {/* 말풍선 도구 (1개 버튼 + 팝업) */}
@@ -916,6 +2233,48 @@ export default function CanvasEditor({
                     <>
                       <div className={styles.bubblePopupDivider} />
                       <div className={styles.bubblePopupProps}>
+                        <textarea
+                          className={styles.bubbleTextInput}
+                          value={selectedBubble.text ?? ""}
+                          rows={3}
+                          placeholder="대사 입력"
+                          onChange={(e) => updateBubble(selectedBubble.id, { text: e.target.value })}
+                        />
+                        <div className={styles.bubblePopupRow}>
+                          <span className={styles.bubblePopupLabel}>글자</span>
+                          <input
+                            type="color"
+                            value={selectedBubble.textColor ?? "#111111"}
+                            onChange={(e) => updateBubble(selectedBubble.id, { textColor: e.target.value })}
+                            title="글자색"
+                          />
+                          <input
+                            type="number"
+                            min={8}
+                            max={96}
+                            value={selectedBubble.fontSize ?? 24}
+                            onChange={(e) => updateBubble(selectedBubble.id, { fontSize: Number(e.target.value) })}
+                            className={styles.fontSizeInput}
+                            title="글자 크기"
+                          />
+                          <button
+                            className={`${styles.textStyleButton} ${selectedBubble.fontWeight === "bold" ? styles.textStyleActive : ""}`}
+                            onClick={() => updateBubble(selectedBubble.id, { fontWeight: selectedBubble.fontWeight === "bold" ? "normal" : "bold" })}
+                            title="굵게"
+                          >B</button>
+                        </div>
+                        <div className={styles.bubblePopupRow}>
+                          <span className={styles.bubblePopupLabel}>정렬</span>
+                          {(["left", "center", "right"] as const).map((align) => (
+                            <button
+                              key={align}
+                              className={`${styles.textAlignButton} ${(selectedBubble.textAlign ?? "center") === align ? styles.textStyleActive : ""}`}
+                              onClick={() => updateBubble(selectedBubble.id, { textAlign: align })}
+                            >
+                              {align === "left" ? "좌" : align === "right" ? "우" : "중"}
+                            </button>
+                          ))}
+                        </div>
                         <div className={styles.bubblePopupRow}>
                           <span className={styles.bubblePopupLabel}>배경</span>
                           {["#ffffff", "transparent", "#000000", "#ef4444", "#3b82f6", "#22c55e", "#eab308", "#ec4899"].map((c) => (
@@ -956,12 +2315,166 @@ export default function CanvasEditor({
                 </div>
               )}
             </div>
+            <div className={styles.toolGroup} style={{ position: "relative" }}>
+              <button
+                className={`${styles.toolBtn} ${tool === "text" ? styles.toolActive : ""}`}
+                onClick={() => {
+                  if (tool === "text") { setTool("move"); setSelectedBubbleId(null); }
+                  else setTool("text");
+                }}
+                title="텍스트"
+              >
+                <LuType size={16} /> 텍스트
+              </button>
+              {tool === "text" && selectedBubble?.type === "text" && (
+                <div className={`${styles.bubblePopup} ${styles.textPopup}`}>
+                  <textarea
+                    className={styles.bubbleTextInput}
+                    value={selectedBubble.text ?? ""}
+                    rows={3}
+                    autoFocus
+                    onChange={(e) => updateBubble(selectedBubble.id, { text: e.target.value })}
+                  />
+                  <div className={styles.bubblePopupRow}>
+                    <span className={styles.bubblePopupLabel}>글자</span>
+                    <input type="color" value={selectedBubble.textColor ?? "#111111"} onChange={(e) => updateBubble(selectedBubble.id, { textColor: e.target.value })} />
+                    <input type="number" min={8} max={96} value={selectedBubble.fontSize ?? 24} onChange={(e) => updateBubble(selectedBubble.id, { fontSize: Number(e.target.value) })} className={styles.fontSizeInput} />
+                    <button className={`${styles.textStyleButton} ${selectedBubble.fontWeight === "bold" ? styles.textStyleActive : ""}`} onClick={() => updateBubble(selectedBubble.id, { fontWeight: selectedBubble.fontWeight === "bold" ? "normal" : "bold" })}>B</button>
+                  </div>
+                  <div className={styles.bubblePopupRow}>
+                    <span className={styles.bubblePopupLabel}>정렬</span>
+                    {(["left", "center", "right"] as const).map((align) => (
+                      <button key={align} className={`${styles.textAlignButton} ${(selectedBubble.textAlign ?? "center") === align ? styles.textStyleActive : ""}`} onClick={() => updateBubble(selectedBubble.id, { textAlign: align })}>
+                        {align === "left" ? "좌" : align === "right" ? "우" : "중"}
+                      </button>
+                    ))}
+                  </div>
+                  <button className={styles.bubbleDeleteBtn} onClick={() => deleteBubble(selectedBubble.id)}><LuTrash2 size={12} /> 삭제</button>
+                </div>
+              )}
+            </div>
+            <div className={styles.toolGroup} style={{ position: "relative" }}>
+              <button
+                className={`${styles.toolBtn} ${tool === "shape" ? styles.toolActive : ""}`}
+                onClick={() => {
+                  if (tool === "shape") { setTool("move"); setSelectedBubbleId(null); }
+                  else setTool("shape");
+                }}
+                title="도형"
+              >
+                <LuShapes size={16} /> 도형
+              </button>
+              {tool === "shape" && (
+                <div className={`${styles.bubblePopup} ${styles.shapePopup}`}>
+                  <div className={styles.shapeGrid}>
+                    {([
+                      ["rectangle", "사각형", LuSquare],
+                      ["ellipse", "타원", LuCircle],
+                      ["line", "선", LuMinus],
+                      ["star", "별", LuStar],
+                    ] as const).map(([type, label, Icon]) => (
+                      <button
+                        key={type}
+                        className={`${styles.shapeButton} ${shapeType === type ? styles.textStyleActive : ""}`}
+                        onClick={() => { setShapeType(type); setSelectedBubbleId(null); }}
+                        title={label}
+                      >
+                        <Icon size={17} />
+                      </button>
+                    ))}
+                  </div>
+                  {selectedBubble && ["rectangle", "ellipse", "line", "star"].includes(selectedBubble.type) && (
+                    <div className={styles.bubblePopupProps}>
+                      {selectedBubble.type !== "line" && (
+                        <div className={styles.bubblePopupRow}>
+                          <span className={styles.bubblePopupLabel}>채움</span>
+                          {["transparent", "#ffffff", "#000000", "#ef4444", "#3b82f6", "#22c55e", "#eab308", "#ec4899"].map((color) => (
+                            <button
+                              key={color}
+                              className={`${styles.bubbleColorBtn} ${selectedBubble.fillColor === color ? styles.bubbleColorActive : ""}`}
+                              style={{ background: color === "transparent" ? "linear-gradient(45deg, #999 25%, transparent 25%, transparent 75%, #999 75%), linear-gradient(45deg, #999 25%, transparent 25%, transparent 75%, #999 75%)" : color, backgroundSize: "6px 6px", backgroundPosition: "0 0, 3px 3px" }}
+                              onClick={() => updateBubble(selectedBubble.id, { fillColor: color })}
+                              title={color === "transparent" ? "투명" : color}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      <div className={styles.bubblePopupRow}>
+                        <span className={styles.bubblePopupLabel}>선색</span>
+                        {["#000000", "#ffffff", "#ef4444", "#3b82f6", "#22c55e", "#6b7280"].map((color) => (
+                          <button
+                            key={color}
+                            className={`${styles.bubbleColorBtn} ${selectedBubble.strokeColor === color ? styles.bubbleColorActive : ""}`}
+                            style={{ background: color }}
+                            onClick={() => updateBubble(selectedBubble.id, { strokeColor: color })}
+                            title={color}
+                          />
+                        ))}
+                      </div>
+                      <div className={styles.bubblePopupRow}>
+                        <span className={styles.bubblePopupLabel}>두께</span>
+                        <input type="range" min={1} max={16} value={selectedBubble.strokeWidth} onChange={(event) => updateBubble(selectedBubble.id, { strokeWidth: Number(event.target.value) })} />
+                      </div>
+                      <div className={styles.bubblePopupRow}>
+                        <span className={styles.bubblePopupLabel}>투명도</span>
+                        <input type="range" min={0} max={100} value={Math.round(selectedBubble.opacity * 100)} onChange={(event) => updateBubble(selectedBubble.id, { opacity: Number(event.target.value) / 100 })} />
+                      </div>
+                      <button className={styles.bubbleDeleteBtn} onClick={() => deleteBubble(selectedBubble.id)}><LuTrash2 size={12} /> 삭제</button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className={styles.toolGroup} style={{ position: "relative" }}>
+              <button
+                className={`${styles.toolBtn} ${layoutPickerOpen ? styles.toolActive : ""}`}
+                onClick={() => setLayoutPickerOpen((open) => !open)}
+                title="패널 레이아웃"
+              >
+                <LuLayoutTemplate size={16} /> 레이아웃
+              </button>
+              {layoutPickerOpen && (
+                <div className={`${styles.bubblePopup} ${styles.layoutPopup}`}>
+                  <button onClick={() => addPanelLayout("single")} title="1칸"><LuSquare size={18} /></button>
+                  <button onClick={() => addPanelLayout("columns")} title="좌우 2칸"><LuColumns2 size={18} /></button>
+                  <button onClick={() => addPanelLayout("rows")} title="상하 2칸"><LuRows2 size={18} /></button>
+                  <button onClick={() => addPanelLayout("three")} title="상단 1칸, 하단 2칸"><LuPanelTop size={18} /></button>
+                  <button onClick={() => addPanelLayout("twoOne")} title="상단 2칸, 하단 1칸"><LuPanelsTopLeft size={18} /></button>
+                  <button onClick={() => addPanelLayout("four")} title="2×2 4칸"><LuGrid2X2 size={18} /></button>
+                  <button onClick={() => addPanelLayout("threeColumns")} title="세로 3칸"><LuColumns3 size={18} /></button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* 우측: 레이어 패널 */}
-        <div className={styles.layerPanel}>
-          <h3 className={styles.layerTitle}>레이어</h3>
+        <div className={`${styles.layerPanel} ${layerPanelCollapsed ? styles.layerPanelCollapsed : ""} ${layerPanelSide === "left" ? styles.layerPanelLeft : ""}`}>
+          <div className={styles.layerPanelHeader}>
+            {!layerPanelCollapsed && <h3 className={styles.layerTitle}>레이어</h3>}
+            <div>
+              {!layerPanelCollapsed && (
+                <>
+                  <button onClick={duplicateLayer} disabled={!activeLayer} title="레이어 복제"><LuCopy size={13} /></button>
+                  <button onClick={groupSelectedLayers} disabled={selectedLayerIds.length < 2} title="선택 레이어 그룹"><LuGroup size={13} /></button>
+                  <button
+                    onClick={ungroupSelectedLayers}
+                    disabled={!layers.some((layer) => selectedLayerIds.includes(layer.id) && layer.groupId)}
+                    title="선택 그룹 해제"
+                  ><LuUngroup size={13} /></button>
+                  <button
+                    onClick={() => setLayerPanelSide((value) => value === "right" ? "left" : "right")}
+                    title={layerPanelSide === "right" ? "레이어 패널을 왼쪽으로 옮기기" : "레이어 패널을 오른쪽으로 옮기기"}
+                  ><LuPanelLeft size={13} /></button>
+                </>
+              )}
+              <button
+                className={styles.collapseButton}
+                onClick={() => setLayerPanelCollapsed((value) => !value)}
+                title={layerPanelCollapsed ? "레이어 패널 열기" : "레이어 패널 접기"}
+              >{layerPanelCollapsed ? <LuPanelRightOpen size={14} /> : <LuPanelRightClose size={14} />}</button>
+            </div>
+          </div>
           <div className={styles.layerList}>
             {[...layers].reverse().map((layer, ri) => (
               <div key={layer.id}>
@@ -976,7 +2489,7 @@ export default function CanvasEditor({
                   <LuPlus size={10} />
                 </button>
                 <div
-                  className={`${styles.layerItem} ${activeLayerId === layer.id ? styles.layerActive : ""}`}
+                  className={`${styles.layerItem} ${activeLayerId === layer.id ? styles.layerActive : ""} ${layer.groupId ? styles.layerGrouped : ""}`}
                   onClick={() => setActiveLayerId(layer.id)}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
@@ -985,6 +2498,18 @@ export default function CanvasEditor({
                     if (url) handleDropOnLayer(layer.id, url);
                   }}
                 >
+                  <input
+                    className={styles.layerSelect}
+                    type="checkbox"
+                    checked={selectedLayerIds.includes(layer.id)}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={() => setSelectedLayerIds((current) =>
+                      current.includes(layer.id)
+                        ? current.filter((id) => id !== layer.id)
+                        : [...current, layer.id]
+                    )}
+                    aria-label={`${layer.name || "레이어"} 그룹 선택`}
+                  />
                   {/* 선택된 레이어: 순서 이동 화살표 */}
                   {activeLayerId === layer.id ? (
                     <div className={styles.layerArrows}>
@@ -1016,11 +2541,23 @@ export default function CanvasEditor({
                     className={styles.layerVisBtn}
                     onClick={(e) => {
                       e.stopPropagation();
+                      saveUndo();
                       setLayers((prev) => prev.map((l) => l.id === layer.id ? { ...l, visible: !l.visible } : l));
                     }}
                     title={layer.visible ? "숨기기" : "보이기"}
                   >
                     {layer.visible ? <LuEye size={12} /> : <LuEyeOff size={12} />}
+                  </button>
+
+                  <button
+                    className={styles.layerVisBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLayers((prev) => prev.map((item) => item.id === layer.id ? { ...item, locked: !item.locked } : item));
+                    }}
+                    title={layer.locked ? "잠금 해제" : "레이어 잠금"}
+                  >
+                    {layer.locked ? <LuLock size={12} /> : <LuLockOpen size={12} />}
                   </button>
 
                   <div className={styles.layerThumb}>
@@ -1034,7 +2571,13 @@ export default function CanvasEditor({
                   </div>
 
                   <div className={styles.layerInfo}>
-                    <span className={styles.layerName}>Layer {layers.length - ri}</span>
+                    <input
+                      className={styles.layerName}
+                      value={layer.name || `Layer ${layers.length - ri}`}
+                      maxLength={40}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => setLayers((prev) => prev.map((item) => item.id === layer.id ? { ...item, name: e.target.value } : item))}
+                    />
                     {!layer.imageUrl && !layer.canvas && !layer.fillColor && (
                       <span className={styles.layerHint}>드래그&드롭으로 이미지를 추가하세요</span>
                     )}
@@ -1067,6 +2610,7 @@ export default function CanvasEditor({
                         style={{ background: color }}
                         onClick={(e) => {
                           e.stopPropagation();
+                          saveUndo();
                           setLayers((prev) => prev.map((l) =>
                             l.id === layer.id ? { ...l, fillColor: l.fillColor === color ? null : color } : l
                           ));
@@ -1099,19 +2643,63 @@ export default function CanvasEditor({
         </div>
 
         {/* 우측 끝: 갤러리 이미지 리스트 */}
-        <div className={styles.imageList}>
-          {galleryImages.map((img) => (
-            <div
-              key={img.id}
-              className={styles.imageListItem}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData("text/plain", img.dataUrl);
-              }}
-            >
-              <img src={img.dataUrl} alt="" />
+        <div className={`${styles.imageList} ${assetPanelCollapsed ? styles.imageListCollapsed : ""}`}>
+          <div className={styles.assetPanelHeader}>
+            {!assetPanelCollapsed && <strong>자산</strong>}
+            <div className={styles.assetPanelHeaderActions}>
+              {!assetPanelCollapsed && (
+                <button onClick={() => setAssetReloadVersion((value) => value + 1)} disabled={assetLibraryLoading} title="자산 새로고침">
+                  <LuRefreshCw className={assetLibraryLoading ? styles.spin : ""} size={13} />
+                </button>
+              )}
+              <button
+                className={styles.collapseButton}
+                onClick={() => setAssetPanelCollapsed((value) => !value)}
+                title={assetPanelCollapsed ? "자산 패널 열기" : "자산 패널 접기"}
+              >{assetPanelCollapsed ? <LuPanelRightOpen size={14} /> : <LuPanelRightClose size={14} />}</button>
             </div>
-          ))}
+          </div>
+          <div className={styles.assetTabs} aria-label="이미지 자산 종류">
+            {([
+              ["project", "프로젝트"],
+              ["character", "내 캐릭터"],
+              ["gesture", "제스처"],
+              ["background", "배경"],
+            ] as const).map(([id, label]) => (
+              <button key={id} className={assetTab === id ? styles.assetTabActive : ""} onClick={() => setAssetTab(id)}>{label}</button>
+            ))}
+          </div>
+          {assetTab === "character" && (
+            <select className={styles.assetFilter} value={characterView} onChange={(event) => setCharacterView(event.target.value)} aria-label="캐릭터 포즈 선택">
+              <option value="all">전체 포즈</option>
+              <option value="front">정면</option>
+              <option value="left">좌측</option>
+              <option value="right">우측</option>
+              <option value="back">후면</option>
+            </select>
+          )}
+          <div className={styles.assetList}>
+            {assetLibraryLoading && assetTab !== "project" ? (
+              <div className={styles.assetEmpty}><LuLoaderCircle className={styles.spin} /></div>
+            ) : displayedAssets.length === 0 ? (
+              <div className={styles.assetEmpty}>사용할 이미지가 없습니다.</div>
+            ) : displayedAssets.map((img) => (
+              <button
+                type="button"
+                key={img.id}
+                className={styles.imageListItem}
+                draggable
+                onClick={() => void addImageLayer(img.dataUrl, img.label || "이미지 객체")}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("text/plain", img.dataUrl);
+                }}
+                title={img.label || "이미지 객체로 추가"}
+              >
+                <img src={img.thumbnailUrl || img.dataUrl} alt={img.label || ""} />
+                {img.label && <span>{img.label}</span>}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>

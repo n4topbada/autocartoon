@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
       prompt: r.prompt,
       background: r.background,
       backgroundImageName: r.backgroundImage?.name || null,
-      presetName: r.preset.name,
+      presetName: r.preset?.name || "오리지널 캐릭터",
       createdAt: r.createdAt.toISOString(),
       images: r.generatedImages.map((img) => ({
         id: img.id,

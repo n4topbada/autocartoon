@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
+import { createUserSession } from "@/lib/user-sessions";
 
 const INVALID_CREDENTIALS = "이메일 또는 비밀번호가 올바르지 않습니다.";
 
@@ -82,9 +83,17 @@ export async function POST(req: NextRequest) {
     }
 
     const session = await getSession();
+    if (session.sessionId) {
+      await prisma.userSession.deleteMany({ where: { id: session.sessionId } });
+    }
+    const registeredSession = await createUserSession(
+      user.id,
+      req.headers.get("user-agent") || ""
+    );
     session.userId = user.id;
     session.email = user.email;
     session.role = user.role;
+    session.sessionId = registeredSession.id;
     session.usedTemporaryPassword = usedTemporaryPassword;
     await session.save();
 

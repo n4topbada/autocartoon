@@ -55,6 +55,8 @@ export interface GenerateInput {
   isAdmin?: boolean;
   mode: GenerationMode;
   aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
+  imageSize?: "1K" | "2K";
+  count?: number;
   prompt: string;
   background?: string;
   backgroundImageId?: string;
@@ -64,6 +66,8 @@ export interface GenerateInput {
   /** 여러 이미지 (transform 모드) */
   inputImages?: { base64: string; mimeType: string }[];
   inputImageUrls?: { url: string; mimeType: string }[];
+  /** 프로젝트에서 선택한 구도·분위기 참고 자산 */
+  referenceAssetUrls?: { url: string; mimeType: string; label: string }[];
 }
 
 /**
@@ -83,7 +87,6 @@ async function loadStoredImages(
 export async function generate(input: GenerateInput) {
   const requestedPresetIds = [...new Set(input.presetIds)];
   if (
-    requestedPresetIds.length === 0 ||
     requestedPresetIds.length !== input.presetIds.length ||
     requestedPresetIds.some((id) => typeof id !== "string" || !id.trim())
   ) {
@@ -187,6 +190,15 @@ export async function generate(input: GenerateInput) {
     : [];
   const labeledImages: { label: string; base64: string; mimeType: string }[] =
     [...characterLabeledImages];
+  if (input.referenceAssetUrls?.length) {
+    const loadedReferenceAssets = await Promise.all(
+      input.referenceAssetUrls.map(async (asset) => {
+        const data = await fetchBlobAsBase64(asset.url);
+        return { label: asset.label, base64: data.base64, mimeType: asset.mimeType };
+      })
+    );
+    labeledImages.push(...loadedReferenceAssets);
+  }
   const storedInputImages = input.inputImageUrls
     ? await loadStoredImages(input.inputImageUrls)
     : [];
@@ -213,19 +225,23 @@ export async function generate(input: GenerateInput) {
   let prompt: string;
   const useBgImage = !!bgImageName;
 
-  switch (input.mode) {
-    case "text":
-      prompt = useBgImage ? buildTextWithBgImagePrompt(ctx) : buildTextPrompt(ctx);
-      break;
-    case "sketch":
-      prompt = useBgImage ? buildSketchWithBgImagePrompt(ctx) : buildSketchPrompt(ctx);
-      break;
-    case "edit":
-      prompt = useBgImage ? buildEditWithBgImagePrompt(ctx) : buildEditPrompt(ctx);
-      break;
-    case "transform":
-      prompt = buildTransformPrompt(ctx);
-      break;
+  if (presets.length === 0) {
+    prompt = input.prompt;
+  } else {
+    switch (input.mode) {
+      case "text":
+        prompt = useBgImage ? buildTextWithBgImagePrompt(ctx) : buildTextPrompt(ctx);
+        break;
+      case "sketch":
+        prompt = useBgImage ? buildSketchWithBgImagePrompt(ctx) : buildSketchPrompt(ctx);
+        break;
+      case "edit":
+        prompt = useBgImage ? buildEditWithBgImagePrompt(ctx) : buildEditPrompt(ctx);
+        break;
+      case "transform":
+        prompt = buildTransformPrompt(ctx);
+        break;
+    }
   }
 
   // 다중 캐릭터 참조 안내 프롬프트 추가
@@ -235,16 +251,27 @@ export async function generate(input: GenerateInput) {
   }
 
   // 5. Gemini 호출
-  const result = await generateContent({
-    prompt,
-    aspectRatio: input.aspectRatio,
-    referenceImages,
-    labeledImages: labeledImages.length > 0 ? labeledImages : undefined,
-    modalities: ["IMAGE", "TEXT"],
-  });
+  const requestedCount = Math.max(1, Math.min(5, input.count || 1));
+  const generationResults = await Promise.allSettled(
+    Array.from({ length: requestedCount }, () => generateContent({
+      prompt,
+      aspectRatio: input.aspectRatio,
+      imageSize: input.imageSize,
+      referenceImages,
+      labeledImages: labeledImages.length > 0 ? labeledImages : undefined,
+      modalities: ["IMAGE", "TEXT"],
+    }))
+  );
+  const fulfilledResults = generationResults.flatMap((result) =>
+    result.status === "fulfilled" ? [result.value] : []
+  );
+  const generatedImages = fulfilledResults.flatMap((result) => result.images).slice(0, requestedCount);
+  const resultText = fulfilledResults.map((result) => result.text).filter(Boolean).join("\n") || undefined;
 
-  if (result.images.length === 0) {
-    throw new Error(result.text || "AI가 이미지를 반환하지 않았습니다.");
+  if (generatedImages.length === 0) {
+    const failure = generationResults.find((result) => result.status === "rejected");
+    if (failure?.status === "rejected") throw failure.reason;
+    throw new Error(resultText || "AI가 이미지를 반환하지 않았습니다.");
   }
 
   // 6. Blob 업로드를 마친 뒤 관련 DB 레코드는 한 트랜잭션으로 저장한다.
@@ -254,7 +281,7 @@ export async function generate(input: GenerateInput) {
     mimeType: string;
   }> = [];
   try {
-    for (const img of result.images) {
+    for (const img of generatedImages) {
       const { blobUrl, thumbnailUrl } = await uploadBase64ImageWithThumbnail(
         img.base64,
         img.mimeType,
@@ -283,7 +310,7 @@ export async function generate(input: GenerateInput) {
   const saved = await prisma.$transaction(async (tx) => {
     const request = await tx.generationRequest.create({
       data: {
-        presetId: requestedPresetIds[0],
+        presetId: requestedPresetIds[0] ?? null,
         presetIds: requestedPresetIds,
         userId: input.userId,
         mode: input.mode,
@@ -346,8 +373,9 @@ export async function generate(input: GenerateInput) {
           error: null,
           output: {
             requestId: request.id,
-            text: result.text ?? null,
+            text: resultText ?? null,
             imageCount: uploadedImages.length,
+            imageIds: request.generatedImages.map((image) => image.id),
           },
           completedAt: new Date(),
         },
@@ -359,7 +387,7 @@ export async function generate(input: GenerateInput) {
 
   return {
     requestId: saved.id,
-    text: result.text,
+    text: resultText,
     images: saved.generatedImages.map((img) => ({
       id: img.id,
       mimeType: img.mimeType,

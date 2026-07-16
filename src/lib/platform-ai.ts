@@ -1,10 +1,23 @@
-import type { GoogleGenAI } from "@google/genai";
+import type {
+  GenerateContentParameters,
+  GenerateContentResponse,
+  GoogleGenAI,
+} from "@google/genai";
 import type { GoogleAuthOptions } from "google-auth-library";
 
 export type PlatformAIProvider = "vertex" | "gemini-api";
 
 let clientsPromise: Promise<GoogleGenAI[]> | null = null;
 let videoClientPromise: Promise<GoogleGenAI> | null = null;
+
+const MODEL_ALIASES: Record<string, string> = {
+  "gemini-3.1-flash-lite-preview": "gemini-3.1-flash-lite",
+  "gemini-3.1-flash-image-preview": "gemini-3.1-flash-image",
+};
+
+function normalizeModelId(model: string) {
+  return MODEL_ALIASES[model] || model;
+}
 
 function parseServiceAccountCredentials(): Record<string, unknown> | undefined {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -148,11 +161,77 @@ export function getPlatformAIProvider(): PlatformAIProvider {
 }
 
 export function getImageModel(): string {
-  return process.env.VERTEX_IMAGE_MODEL || "gemini-3.1-flash-image-preview";
+  return normalizeModelId(
+    process.env.VERTEX_IMAGE_MODEL || "gemini-3.1-flash-image"
+  );
 }
 
 export function getTextModel(): string {
-  return process.env.VERTEX_TEXT_MODEL || "gemini-3.1-flash-lite-preview";
+  return getTextModelCandidates()[0];
+}
+
+export function getTextModelCandidates(): string[] {
+  return Array.from(new Set([
+    normalizeModelId(
+      process.env.VERTEX_TEXT_MODEL || "gemini-3.1-flash-lite"
+    ),
+    "gemini-3.1-flash-lite",
+    "gemini-3-flash-preview",
+    "gemini-2.5-flash-lite",
+  ]));
+}
+
+function isUnavailableModelError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b404\b|NOT_FOUND|model.+not found|does not have access/i.test(message);
+}
+
+export function getPublicPlatformAIError(
+  error: unknown,
+  fallback = "AI 요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요."
+) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (/AbortError|aborted|deadline|timed?\s*out|timeout/i.test(message)) {
+    return "AI 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
+  }
+  if (/\b429\b|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(message)) {
+    return "AI 사용량이 일시적으로 많습니다. 잠시 후 다시 시도해주세요.";
+  }
+  if (/\b401\b|\b403\b|UNAUTHENTICATED|PERMISSION_DENIED/i.test(message)) {
+    return "AI 서비스 연결 권한을 확인해주세요.";
+  }
+  if (isUnavailableModelError(error)) {
+    return "현재 AI 모델을 사용할 수 없습니다. 관리자에게 알려주세요.";
+  }
+  if (/credentials?|access token|service account|GOOGLE_CLOUD_PROJECT/i.test(message)) {
+    return "AI 서비스 연결 설정을 확인해주세요.";
+  }
+  return fallback;
+}
+
+export async function generatePlatformTextContent(
+  parameters: Omit<GenerateContentParameters, "model">
+): Promise<GenerateContentResponse> {
+  const clients = await getPlatformAIClients();
+  let lastError: unknown;
+
+  for (const model of getTextModelCandidates()) {
+    let modelUnavailable = false;
+    for (const [index, client] of clients.entries()) {
+      try {
+        return await client.models.generateContent({ ...parameters, model });
+      } catch (error) {
+        lastError = error;
+        modelUnavailable = isUnavailableModelError(error);
+        console.warn(`Platform text model attempt failed (${model}):`, error);
+        if (!modelUnavailable && index === clients.length - 1) throw error;
+      }
+    }
+    if (!modelUnavailable) break;
+  }
+
+  throw lastError ?? new Error("No platform text model is available");
 }
 
 export function getVideoModel(): string {

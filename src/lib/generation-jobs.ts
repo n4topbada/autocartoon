@@ -2,7 +2,7 @@ import type { GenerationArtifact, GenerationJob, Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { refundJobCredit } from "./credit-service";
 
-export type JobKind = "image" | "background" | "gesture" | "video";
+export type JobKind = "image" | "background" | "character" | "gesture" | "video";
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
 
 export interface StoredImageReference {
@@ -10,15 +10,22 @@ export interface StoredImageReference {
   mimeType: string;
 }
 
+export interface StoredLabeledImageReference extends StoredImageReference {
+  label: string;
+}
+
 export interface StoredImageJobInput {
   presetIds: string[];
   mode: "text" | "sketch" | "edit" | "transform";
   aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
+  imageSize?: "1K" | "2K";
+  count?: number;
   prompt: string;
   background?: string;
   backgroundImageId?: string;
   inputImage?: StoredImageReference;
   inputImages?: StoredImageReference[];
+  referenceAssets?: StoredLabeledImageReference[];
   isAdmin: boolean;
 }
 

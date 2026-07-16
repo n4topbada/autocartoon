@@ -1,4 +1,4 @@
-import type { Video } from "@google/genai";
+import { GenerateVideosOperation, type Video } from "@google/genai";
 import { uploadBufferToBlob, fetchBlobAsBase64 } from "./blob";
 import {
   getGoogleAccessToken,
@@ -99,9 +99,12 @@ export async function pollAndPersistVideo(jobId: string, operationName: string) 
 
   try {
     const client = await getVideoAIClient();
-    const { GenerateVideosOperation } = await import("@google/genai");
     const operationHandle = new GenerateVideosOperation();
     operationHandle.name = operationName;
+    Object.defineProperty(operationHandle, "_fromAPIResponse", {
+      configurable: true,
+      value: GenerateVideosOperation.prototype._fromAPIResponse,
+    });
     const operation = await client.operations.getVideosOperation({
       operation: operationHandle,
     });

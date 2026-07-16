@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, AuthError } from "@/lib/auth";
-import { deleteBlob } from "@/lib/blob";
+import { deleteBlobIfUnreferenced } from "@/lib/blob-references";
 
 export async function DELETE(
   _req: NextRequest,
@@ -27,10 +27,10 @@ export async function DELETE(
 
     // DB 소유권 검증과 삭제가 끝난 뒤 연결된 Blob도 정리한다.
     if (bg?.blobUrl) {
-      await deleteBlob(bg.blobUrl);
+      await deleteBlobIfUnreferenced(bg.blobUrl);
     }
     if (bg?.thumbnailUrl) {
-      await deleteBlob(bg.thumbnailUrl);
+      await deleteBlobIfUnreferenced(bg.thumbnailUrl);
     }
 
     return NextResponse.json({ ok: true });

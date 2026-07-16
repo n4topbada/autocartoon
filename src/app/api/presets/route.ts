@@ -80,6 +80,7 @@ export async function GET(req: NextRequest) {
         description: p.description,
         persona: p.persona,
         voiceConfig: p.voiceConfig,
+        isDefault: p.isDefault,
         representativeImage: repImage
           ? { id: repImage.id, dataUrl: repImage.blobUrl, thumbnailUrl: repImage.thumbnailUrl ?? repImage.blobUrl }
           : null,

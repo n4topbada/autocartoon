@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { AuthError, requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TIER_LIMITS } from "@/lib/tier-config";
 
 export async function GET() {
-  const session = await getSession();
-
-  if (!session.userId) {
-    return NextResponse.json(null);
+  let session;
+  try {
+    session = await requireAuth();
+  } catch (error) {
+    if (error instanceof AuthError) return NextResponse.json(null);
+    throw error;
   }
 
   const user = await prisma.user.findUnique({

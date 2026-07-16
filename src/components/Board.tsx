@@ -12,6 +12,8 @@ import {
   LuSend,
   LuHeart,
   LuPin,
+  LuClock3,
+  LuTrendingUp,
 } from "react-icons/lu";
 
 interface PostSummary {
@@ -47,6 +49,7 @@ export default function Board() {
   const [loading, setLoading] = useState(true);
   const [selectedPost, setSelectedPost] = useState<PostDetail | null>(null);
   const [showWrite, setShowWrite] = useState(false);
+  const [sort, setSort] = useState<"latest" | "popular">("latest");
 
   // 글 작성 상태
   const [title, setTitle] = useState("");
@@ -63,7 +66,7 @@ export default function Board() {
 
   const loadPosts = useCallback(() => {
     setLoading(true);
-    fetch("/api/board")
+    fetch(`/api/board?sort=${sort}`)
       .then((r) => r.json())
       .then((data) => {
         const list = data?.posts ?? (Array.isArray(data) ? data : []);
@@ -86,7 +89,7 @@ export default function Board() {
       })
       .catch(() => setPosts([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [sort]);
 
   useEffect(() => {
     loadPosts();
@@ -398,6 +401,15 @@ export default function Board() {
         <h2 className={styles.boardTitle}>게시판</h2>
         <button className={styles.writeBtn} onClick={() => setShowWrite(true)}>
           <LuPlus size={14} /> 글 작성
+        </button>
+      </div>
+
+      <div className={styles.sortTabs} aria-label="게시글 정렬">
+        <button type="button" aria-pressed={sort === "latest"} onClick={() => setSort("latest")}>
+          <LuClock3 /> 최신
+        </button>
+        <button type="button" aria-pressed={sort === "popular"} onClick={() => setSort("popular")}>
+          <LuTrendingUp /> 인기
         </button>
       </div>
 

@@ -1,11 +1,28 @@
 import { getSession } from "./session";
 import { prisma } from "./prisma";
 import { canAccessCharacterDesigner } from "./character-designer-access";
+import { headers } from "next/headers";
+import { createUserSession, validateUserSession } from "./user-sessions";
 
 export async function requireAuth() {
   const session = await getSession();
   if (!session.userId) {
     throw new AuthError("로그인이 필요합니다.", 401);
+  }
+  if (session.sessionId) {
+    const registered = await validateUserSession(session.sessionId, session.userId);
+    if (!registered) {
+      session.destroy();
+      throw new AuthError("로그인 세션이 만료되었거나 다른 기기에서 해제되었습니다.", 401);
+    }
+  } else {
+    const requestHeaders = await headers();
+    const registered = await createUserSession(
+      session.userId,
+      requestHeaders.get("user-agent") || ""
+    );
+    session.sessionId = registered.id;
+    await session.save();
   }
   return session;
 }
@@ -37,8 +54,13 @@ export async function requireCharacterDesigner() {
 }
 
 export async function getCurrentUser() {
-  const session = await getSession();
-  if (!session.userId) return null;
+  let session;
+  try {
+    session = await requireAuth();
+  } catch (error) {
+    if (error instanceof AuthError) return null;
+    throw error;
+  }
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
     select: {

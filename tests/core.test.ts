@@ -4,6 +4,12 @@ import type { JobWithArtifacts } from "../src/lib/generation-jobs";
 import { jobToResponse } from "../src/lib/generation-jobs";
 import { selectCharacterReferenceImages } from "../src/lib/generation-service";
 import { buildStylizePrompt } from "../src/lib/background-prompts";
+import { normalizePlannedProject } from "../src/lib/project-brief";
+import { buildOriginalCharacterPrompt } from "../src/lib/character-creator";
+import {
+  buildStudioGenerationPrompt,
+  normalizeStudioSceneSettings,
+} from "../src/lib/studio-scene";
 
 test("single-character generation uses directional references in a stable order", () => {
   const images = [
@@ -37,6 +43,25 @@ test("background stylization always carries low-density guardrails", () => {
   assert.match(prompt, /density extremely low/i);
   assert.match(prompt, /Do NOT add any text/i);
   assert.match(prompt, /따뜻한 오후의 작은 카페/);
+});
+
+test("original character prompts preserve identity and clean output constraints", () => {
+  const prompt = buildOriginalCharacterPrompt({
+    name: "하나",
+    gender: "여성",
+    age: "20대",
+    mood: "밝고 친근한",
+    hair: "짧은 검은 단발",
+    outfit: "노란 재킷",
+    style: "현대 한국 웹툰",
+    details: "왼쪽 눈 아래 작은 점",
+    background: "scene",
+  });
+
+  assert.match(prompt, /하나/);
+  assert.match(prompt, /왼쪽 눈 아래 작은 점/);
+  assert.match(prompt, /배경의 시각적 밀도를 훨씬 낮게/);
+  assert.match(prompt, /글자·로고·워터마크·말풍선을 넣지 않는다/);
 });
 
 test("job responses expose durable progress and artifacts", () => {
@@ -84,4 +109,61 @@ test("job responses expose durable progress and artifacts", () => {
   assert.equal(response.status, "succeeded");
   assert.equal(response.progress, 100);
   assert.equal(response.artifacts[0].mimeType, "video/mp4");
+});
+
+test("project brief results are normalized into bounded production cuts", () => {
+  const project = normalizePlannedProject({
+    title: "  피부 고민 4컷  ",
+    summary: "짧은 정보형 툰",
+    cuts: [
+      {
+        title: "도입",
+        prompt: "주인공이 거울을 보며 놀라는 장면",
+        negativePrompt: "텍스트",
+        dialogue: "이게 뭐지?",
+        speakerName: "Wony",
+        durationMs: 500,
+      },
+      { title: "빈 컷", prompt: "" },
+    ],
+  });
+
+  assert.equal(project.title, "피부 고민 4컷");
+  assert.equal(project.cuts.length, 1);
+  assert.equal(project.cuts[0].durationMs, 2_000);
+  assert.equal(project.cuts[0].speakerName, "Wony");
+});
+
+test("studio scene settings bound character and reference selections", () => {
+  const settings = normalizeStudioSceneSettings({
+    cameraAngle: "low",
+    gestureLayout: "two",
+    backgroundMode: "none",
+    characterPresetIds: ["a", "b", "c", "d", "e", "a"],
+    referenceAssetIds: ["r1", "r2", "r3", "r4", "r1"],
+    characterDirections: { a: "손을 든다", b: 42 },
+  });
+
+  assert.deepEqual(settings.characterPresetIds, ["a", "b", "c", "d"]);
+  assert.deepEqual(settings.referenceAssetIds, ["r1", "r2", "r3"]);
+  assert.deepEqual(settings.characterDirections, { a: "손을 든다" });
+});
+
+test("studio prompts preserve angle, background, and per-character direction", () => {
+  const prompt = buildStudioGenerationPrompt({
+    prompt: "두 사람이 대화한다",
+    mode: "gesture",
+    settings: normalizeStudioSceneSettings({
+      cameraAngle: "over-shoulder",
+      gestureLayout: "two",
+      backgroundMode: "none",
+      characterDirections: { a: "설명한다", b: "고개를 끄덕인다" },
+    }),
+    characters: [{ id: "a", name: "A" }, { id: "b", name: "B" }],
+  });
+
+  assert.match(prompt, /오버 숄더/);
+  assert.match(prompt, /순수 흰색 또는 투명/);
+  assert.match(prompt, /A: 설명한다/);
+  assert.match(prompt, /B: 고개를 끄덕인다/);
 });

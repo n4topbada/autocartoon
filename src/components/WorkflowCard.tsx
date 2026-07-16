@@ -9,9 +9,12 @@ import {
   buildStylizePrompt,
   buildAnglesPrompt,
 } from "@/lib/background-prompts";
+import { LuSparkles, LuTrash2 } from "react-icons/lu";
 
 interface GeneratedImage {
-  base64: string;
+  base64?: string;
+  artifactId?: string;
+  url?: string;
   mimeType: string;
 }
 
@@ -21,15 +24,25 @@ interface StepState {
   selectedIndex: number | null;
   generating: boolean;
   error: string | null;
+  progress?: number;
+  stage?: string;
 }
 
 const ANGLE_OPTIONS = [
-  { label: "줌인", prompt: "줌인" },
-  { label: "줌아웃", prompt: "줌아웃" },
-  { label: "위", prompt: "위에서 본 모습" },
-  { label: "아래", prompt: "아래에서 본 모습" },
-  { label: "왼쪽", prompt: "왼쪽에서 본 모습" },
-  { label: "오른쪽", prompt: "오른쪽에서 본 모습" },
+  { label: "정면", prompt: "눈높이에서 정면으로, 자연스러운 대화와 일상 장면 구도" },
+  { label: "3/4 사선", prompt: "비스듬한 45도 옆에서 바라본 구도" },
+  { label: "측면", prompt: "바로 옆 90도에서 바라본 측면 구도" },
+  { label: "로우 앵글", prompt: "아래에서 위로 올려다보는 로우 앵글" },
+  { label: "하이 앵글", prompt: "위에서 아래로 내려다보는 하이 앵글" },
+  { label: "조감도", prompt: "머리 바로 위에서 수직으로 내려다보는 조감도" },
+  { label: "오버 숄더", prompt: "전경의 어깨 너머로 공간을 바라보는 오버 숄더 구도" },
+  { label: "더치 앵글", prompt: "카메라를 살짝 기울인 더치 앵글" },
+  { label: "클로즈업", prompt: "공간의 핵심 요소가 화면을 크게 채우는 클로즈업" },
+  { label: "익스트림 클로즈", prompt: "공간의 핵심 디테일에 바짝 다가간 익스트림 클로즈업" },
+  { label: "와이드", prompt: "넓은 공간이 보이는 와이드 구도" },
+  { label: "줌아웃", prompt: "한 발짝 멀리 물러나 공간 전체를 보여주는 줌아웃" },
+  { label: "왼쪽", prompt: "같은 공간을 왼쪽에서 바라본 구도" },
+  { label: "오른쪽", prompt: "같은 공간을 오른쪽에서 바라본 구도" },
 ];
 
 const MUTUAL_EXCLUSION: Record<string, string> = {
@@ -45,11 +58,35 @@ interface WorkflowCardProps {
   id: number;
   onDelete: () => void;
   onPreview: (src: string) => void;
-  onSaveBackground: (image: { base64: string; mimeType: string }) => void;
+  onSaveBackground: (image: GeneratedImage) => void;
+  onJobComplete: () => void;
 }
 
+interface BackgroundJobArtifact {
+  id: string;
+  blobUrl: string;
+  mimeType: string;
+}
+
+interface BackgroundJob {
+  id: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "canceled";
+  stage: string;
+  progress: number;
+  error?: string | null;
+  artifacts: BackgroundJobArtifact[];
+}
+
+const JOB_STAGE_LABELS: Record<string, string> = {
+  queued: "생성 대기열 등록",
+  preparing_references: "참고 이미지 준비",
+  generating_image: "AI 배경 생성",
+  saving_artifacts: "결과 저장",
+  completed: "완료",
+};
+
 function makeDataUrl(img: GeneratedImage) {
-  return `data:${img.mimeType};base64,${img.base64}`;
+  return img.url || `data:${img.mimeType};base64,${img.base64 || ""}`;
 }
 
 async function safeFetchJson(res: Response) {
@@ -61,7 +98,90 @@ async function safeFetchJson(res: Response) {
   }
 }
 
-export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground }: WorkflowCardProps) {
+function artifactToGeneratedImage(artifact: BackgroundJobArtifact): GeneratedImage {
+  return {
+    artifactId: artifact.id,
+    url: artifact.blobUrl,
+    mimeType: artifact.mimeType,
+  };
+}
+
+async function runBackgroundJob(args: {
+  inputImage?: ImageData;
+  inputImages?: ImageData[];
+  prompt: string;
+  count: number;
+  aspectRatio: "1:1" | "4:5" | "9:16" | "16:9";
+  imageSize: "1K" | "2K";
+  onProgress: (progress: number, stage: string) => void;
+}) {
+  const inputImages = args.inputImages?.filter(Boolean) || [];
+  if (inputImages.some((image) => !image.base64)) {
+    throw new Error("참고 이미지를 다시 업로드해주세요.");
+  }
+  const mode = inputImages.length > 0 ? "transform" : args.inputImage ? "edit" : "text";
+  const response = await fetch("/api/generate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": crypto.randomUUID(),
+    },
+    body: JSON.stringify({
+      presetIds: [],
+      jobKind: "background",
+      mode,
+      prompt: args.prompt,
+      count: args.count,
+      aspectRatio: args.aspectRatio,
+      imageSize: args.imageSize,
+      ...(args.inputImage?.artifactId
+        ? { sourceArtifactId: args.inputImage.artifactId }
+        : args.inputImage?.base64
+          ? { inputImage: { base64: args.inputImage.base64, mimeType: args.inputImage.mimeType } }
+          : {}),
+      ...(inputImages.length > 0
+        ? { inputImages: inputImages.map((image) => ({ base64: image.base64, mimeType: image.mimeType })) }
+        : {}),
+    }),
+  });
+  const started = await safeFetchJson(response) as { job?: BackgroundJob; error?: string };
+  if (!response.ok || !started.job) throw new Error(started.error || "배경 작업을 시작하지 못했습니다.");
+
+  let job = started.job;
+  for (let attempt = 0; attempt < 240; attempt += 1) {
+    args.onProgress(job.progress, JOB_STAGE_LABELS[job.stage] || "배경을 만들고 있습니다.");
+    if (job.status === "succeeded") {
+      const artifacts = job.artifacts.filter((artifact) => artifact.mimeType.startsWith("image/"));
+      if (artifacts.length === 0) throw new Error("완료된 작업에 이미지가 없습니다.");
+      return artifacts.map(artifactToGeneratedImage);
+    }
+    if (job.status === "failed" || job.status === "canceled") {
+      throw new Error(job.error || "배경 생성에 실패했습니다.");
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 2_500));
+    const statusResponse = await fetch(`/api/jobs/${job.id}`, { cache: "no-store" });
+    const statusData = await safeFetchJson(statusResponse) as { job?: BackgroundJob; error?: string };
+    if (!statusResponse.ok || !statusData.job) throw new Error(statusData.error || "작업 상태를 확인하지 못했습니다.");
+    job = statusData.job;
+  }
+  throw new Error("생성이 오래 걸리고 있습니다. 작업은 서버에서 계속 진행되며 완료 알림으로 알려드립니다.");
+}
+
+export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground, onJobComplete }: WorkflowCardProps) {
+  const [aspectRatio, setAspectRatio] = useState<"1:1" | "4:5" | "9:16" | "16:9">("1:1");
+  const [imageSize, setImageSize] = useState<"1K" | "2K">("1K");
+  const [quickSource, setQuickSource] = useState<ImageData | null>(null);
+  const [quickStyle, setQuickStyle] = useState<ImageData | null>(null);
+  const [quickPrompt, setQuickPrompt] = useState("");
+  const [quickAngle, setQuickAngle] = useState(ANGLE_OPTIONS[0].prompt);
+  const [quickCount, setQuickCount] = useState(1);
+  const [quickStep, setQuickStep] = useState<StepState>({
+    inputImage: null,
+    results: [],
+    selectedIndex: null,
+    generating: false,
+    error: null,
+  });
   // Step 1 state
   const [step1, setStep1] = useState<StepState>({
     inputImage: null,
@@ -96,6 +216,63 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
   const [angleCount, setAngleCount] = useState(1);
   const [activeAngles, setActiveAngles] = useState<Set<string>>(new Set());
 
+  const handleQuickGenerate = async () => {
+    const description = quickPrompt.trim();
+    if (!description && !quickSource && !quickStyle) return;
+
+    setQuickStep((state) => ({
+      ...state,
+      generating: true,
+      error: null,
+      results: [],
+      progress: 0,
+      stage: "작업 등록 중",
+    }));
+
+    const referenceGuide = quickSource && quickStyle
+      ? "첨부 1번은 공간과 구도의 원본 사진이고, 첨부 2번은 색감·선·채색만 참고할 목표 그림체다. 원본의 구조를 목표 그림체로 변환한다."
+      : quickSource
+        ? "첨부 이미지는 공간과 구도의 원본이다. 핵심 구조를 유지해 웹툰 배경으로 변환한다."
+        : quickStyle
+          ? "첨부 이미지는 목표 그림체 참고다. 장면 내용은 요청문을 따르고 색감·선·채색 방식만 참고한다."
+          : "첨부 이미지 없이 요청문만으로 새 배경을 구성한다.";
+    const prompt = [
+      "웹툰 캐릭터 합성용 배경 이미지를 제작한다.",
+      `장면 요청: ${description || "첨부 원본의 공간 구성을 유지한 웹툰 배경"}`,
+      `카메라: ${quickAngle}`,
+      referenceGuide,
+      "배경의 시각적 밀도를 매우 낮게 유지하고, 큰 형태와 넓은 여백을 중심으로 단순하게 구성한다.",
+      "작은 소품, 반복 무늬, 복잡한 질감, 불필요한 장식과 시각적 잡음을 최소화한다.",
+      "인물, 글자, 숫자, 표지판 문구, 로고, 워터마크, UI, 말풍선을 넣지 않는다.",
+    ].join("\n");
+
+    try {
+      const images = await runBackgroundJob({
+        inputImages: [quickSource, quickStyle].filter((image): image is ImageData => Boolean(image)),
+        prompt,
+        count: quickCount,
+        aspectRatio,
+        imageSize,
+        onProgress: (progress, stage) => setQuickStep((state) => ({ ...state, progress, stage })),
+      });
+      setQuickStep((state) => ({
+        ...state,
+        generating: false,
+        results: images,
+        progress: 100,
+        stage: "완료",
+        error: images.length < quickCount ? `${quickCount - images.length}개 결과는 생성되지 않았습니다.` : null,
+      }));
+      onJobComplete();
+    } catch (error) {
+      setQuickStep((state) => ({
+        ...state,
+        generating: false,
+        error: error instanceof Error ? error.message : "오류 발생",
+      }));
+    }
+  };
+
   // --- State invalidation helpers ---
   const resetStep3 = useCallback(() => {
     setStep3({ inputImage: null, results: [], selectedIndex: null, generating: false, error: null });
@@ -126,30 +303,33 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
   // --- Step 1: Generate cleanup ---
   const handleCleanup = async () => {
     if (!step1.inputImage) return;
-    setStep1((s) => ({ ...s, generating: true, error: null, results: [], selectedIndex: null }));
+    setStep1((s) => ({ ...s, generating: true, error: null, results: [], selectedIndex: null, progress: 0, stage: "작업 등록 중" }));
     resetStep2();
 
     try {
       const prompt = buildCleanupPrompt(cleanupPrompt);
-      const res = await fetch("/api/background-generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          inputImage: { base64: step1.inputImage.base64, mimeType: step1.inputImage.mimeType },
-          prompt,
-          count: cleanupCount,
-        }),
+      const images = await runBackgroundJob({
+        inputImage: step1.inputImage,
+        prompt,
+        count: cleanupCount,
+        aspectRatio,
+        imageSize,
+        onProgress: (progress, stage) => setStep1((state) => ({ ...state, progress, stage })),
       });
-
-      const data = await safeFetchJson(res);
-      if (!res.ok) throw new Error(data.error || "생성 실패");
-
-      setStep1((s) => ({ ...s, generating: false, results: data.images }));
+      setStep1((s) => ({
+        ...s,
+        generating: false,
+        results: images,
+        progress: 100,
+        stage: "완료",
+        error: images.length < cleanupCount ? `${cleanupCount - images.length}개 결과는 생성되지 않았습니다.` : null,
+      }));
 
       // Auto-select first result
-      if (data.images.length > 0) {
-        selectCleanedImage(0, data.images);
+      if (images.length > 0) {
+        selectCleanedImage(0, images);
       }
+      onJobComplete();
     } catch (err) {
       setStep1((s) => ({
         ...s,
@@ -168,7 +348,7 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
     const preview = makeDataUrl(img);
     setStep2((s) => ({
       ...s,
-      inputImage: { base64: img.base64, mimeType: img.mimeType, preview },
+      inputImage: { base64: img.base64, artifactId: img.artifactId, mimeType: img.mimeType, preview },
       results: [],
       selectedIndex: null,
       error: null,
@@ -191,29 +371,32 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
   // --- Step 2: Generate stylize ---
   const handleStylize = async () => {
     if (!step2.inputImage) return;
-    setStep2((s) => ({ ...s, generating: true, error: null, results: [], selectedIndex: null }));
+    setStep2((s) => ({ ...s, generating: true, error: null, results: [], selectedIndex: null, progress: 0, stage: "작업 등록 중" }));
     resetStep3();
 
     try {
       const prompt = buildStylizePrompt(stylizePrompt);
-      const res = await fetch("/api/background-generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          inputImage: { base64: step2.inputImage.base64, mimeType: step2.inputImage.mimeType },
-          prompt,
-          count: stylizeCount,
-        }),
+      const images = await runBackgroundJob({
+        inputImage: step2.inputImage,
+        prompt,
+        count: stylizeCount,
+        aspectRatio,
+        imageSize,
+        onProgress: (progress, stage) => setStep2((state) => ({ ...state, progress, stage })),
       });
+      setStep2((s) => ({
+        ...s,
+        generating: false,
+        results: images,
+        progress: 100,
+        stage: "완료",
+        error: images.length < stylizeCount ? `${stylizeCount - images.length}개 결과는 생성되지 않았습니다.` : null,
+      }));
 
-      const data = await safeFetchJson(res);
-      if (!res.ok) throw new Error(data.error || "생성 실패");
-
-      setStep2((s) => ({ ...s, generating: false, results: data.images }));
-
-      if (data.images.length > 0) {
-        selectStylizedImage(0, data.images);
+      if (images.length > 0) {
+        selectStylizedImage(0, images);
       }
+      onJobComplete();
     } catch (err) {
       setStep2((s) => ({
         ...s,
@@ -232,7 +415,7 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
     const preview = makeDataUrl(img);
     setStep3((s) => ({
       ...s,
-      inputImage: { base64: img.base64, mimeType: img.mimeType, preview },
+      inputImage: { base64: img.base64, artifactId: img.artifactId, mimeType: img.mimeType, preview },
       results: [],
       selectedIndex: null,
       error: null,
@@ -274,24 +457,27 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
       return;
     }
 
-    setStep3((s) => ({ ...s, generating: true, error: null, results: [] }));
+    setStep3((s) => ({ ...s, generating: true, error: null, results: [], progress: 0, stage: "작업 등록 중" }));
 
     try {
       const prompt = buildAnglesPrompt(angles, anglePrompt);
-      const res = await fetch("/api/background-generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          inputImage: { base64: step3.inputImage.base64, mimeType: step3.inputImage.mimeType },
-          prompt,
-          count: angleCount,
-        }),
+      const images = await runBackgroundJob({
+        inputImage: step3.inputImage,
+        prompt,
+        count: angleCount,
+        aspectRatio,
+        imageSize,
+        onProgress: (progress, stage) => setStep3((state) => ({ ...state, progress, stage })),
       });
-
-      const data = await safeFetchJson(res);
-      if (!res.ok) throw new Error(data.error || "생성 실패");
-
-      setStep3((s) => ({ ...s, generating: false, results: data.images }));
+      setStep3((s) => ({
+        ...s,
+        generating: false,
+        results: images,
+        progress: 100,
+        stage: "완료",
+        error: images.length < angleCount ? `${angleCount - images.length}개 결과는 생성되지 않았습니다.` : null,
+      }));
+      onJobComplete();
     } catch (err) {
       setStep3((s) => ({
         ...s,
@@ -310,8 +496,10 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
     if (step.generating) {
       return (
         <div className={styles.gallery}>
-          <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "center" }}>
+          <div className={styles.generationProgress}>
             <div className={`${styles.loader} ${styles.galleryLoader}`} />
+            <strong>{step.stage || "배경을 만들고 있습니다."}</strong>
+            <span>{Math.max(0, Math.min(99, step.progress || 0))}%</span>
           </div>
         </div>
       );
@@ -412,12 +600,84 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
     <div className={styles.card}>
       <div className={styles.cardHeader}>
         <h2 className={styles.cardTitle}>배경 #{id}</h2>
+        <div className={styles.outputOptions}>
+          <label>
+            화면 비율
+            <select value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value as typeof aspectRatio)} aria-label="배경 화면 비율">
+              <option value="1:1">1:1</option>
+              <option value="4:5">4:5</option>
+              <option value="9:16">9:16</option>
+              <option value="16:9">16:9</option>
+            </select>
+          </label>
+          <div className={styles.qualityToggle} aria-label="배경 출력 품질">
+            <button aria-pressed={imageSize === "1K"} className={imageSize === "1K" ? styles.optionActive : ""} onClick={() => setImageSize("1K")}>빠른 1K</button>
+            <button aria-pressed={imageSize === "2K"} className={imageSize === "2K" ? styles.optionActive : ""} onClick={() => setImageSize("2K")}>고품질 2K</button>
+          </div>
+        </div>
         <button className={styles.deleteBtn} onClick={onDelete} title="이 작업 삭제">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
+          <LuTrash2 size={18} />
         </button>
       </div>
+
+      <section className={styles.quickCreate} aria-labelledby={`quick-background-${id}`}>
+        <div className={styles.quickHeading}>
+          <h3 id={`quick-background-${id}`}>빠른 배경 만들기</h3>
+          <span>텍스트 · 원본 · 목표 그림체</span>
+        </div>
+        <div className={styles.quickGrid}>
+          <div className={styles.quickInputs}>
+            <ImageDropZone
+              onImageSelect={(image) => { setQuickSource(image); setQuickStep((state) => ({ ...state, results: [], error: null })); }}
+              currentImage={quickSource?.preview}
+              label="원본 사진"
+              disabled={quickStep.generating}
+              placeholderText={"원본 사진 (선택)\n클릭, 드래그, 붙여넣기"}
+            />
+            <ImageDropZone
+              onImageSelect={(image) => { setQuickStyle(image); setQuickStep((state) => ({ ...state, results: [], error: null })); }}
+              currentImage={quickStyle?.preview}
+              label="목표 그림체"
+              disabled={quickStep.generating}
+              placeholderText={"목표 그림체 (선택)\n클릭, 드래그, 붙여넣기"}
+            />
+          </div>
+          <div className={styles.quickControls}>
+            <label className={styles.quickField}>
+              <span>배경 설명</span>
+              <textarea
+                className={styles.promptInput}
+                rows={5}
+                maxLength={2_000}
+                placeholder="예: 노을 지는 해변, 넓은 모래사장과 야자수 실루엣"
+                value={quickPrompt}
+                disabled={quickStep.generating}
+                onChange={(event) => setQuickPrompt(event.target.value)}
+              />
+            </label>
+            <label className={styles.quickField}>
+              <span>카메라 앵글</span>
+              <select value={quickAngle} disabled={quickStep.generating} onChange={(event) => setQuickAngle(event.target.value)}>
+                {ANGLE_OPTIONS.slice(0, 10).map((option) => (
+                  <option key={option.prompt} value={option.prompt}>{option.label} · {option.prompt}</option>
+                ))}
+              </select>
+            </label>
+            <div className={styles.controlRow}>
+              {renderCounter(quickCount, setQuickCount)}
+              <button
+                className={`${styles.actionBtn} ${styles.quickAction}`}
+                onClick={() => void handleQuickGenerate()}
+                disabled={quickStep.generating || (!quickPrompt.trim() && !quickSource && !quickStyle)}
+              >
+                {quickStep.generating ? <div className={styles.loader} /> : <LuSparkles />}
+                {quickStep.generating ? "배경 생성 중" : quickStep.results.length > 0 ? "다시 생성" : "배경 생성"}
+              </button>
+            </div>
+          </div>
+        </div>
+        {renderGallery(quickStep, undefined, "background")}
+      </section>
 
       <div className={styles.stepsGrid}>
         {/* Step 1: 배경 정리 */}
@@ -523,6 +783,7 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
                   key={opt.prompt}
                   className={`${styles.angleOptionBtn} ${activeAngles.has(opt.prompt) ? styles.angleOptionActive : ""}`}
                   onClick={() => toggleAngle(opt.prompt)}
+                  aria-pressed={activeAngles.has(opt.prompt)}
                 >
                   {opt.label}
                 </button>

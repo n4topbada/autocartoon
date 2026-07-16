@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth, AuthError } from "@/lib/auth";
-import { uploadBase64ImageWithThumbnail } from "@/lib/blob";
+import { deleteBlob, uploadBase64ImageWithThumbnail } from "@/lib/blob";
 
 export async function GET(req: NextRequest) {
   try {
@@ -37,29 +37,52 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  let uploaded: { blobUrl: string; thumbnailUrl: string } | null = null;
+  let ownsUploadedBlob = false;
   try {
     const session = await requireAuth();
-    const { name, imageData, mimeType } = (await req.json()) as {
+    const { name, imageData, mimeType, artifactId } = (await req.json()) as {
       name: string;
-      imageData: string;
+      imageData?: string;
       mimeType?: string;
+      artifactId?: string;
     };
 
-    if (!name?.trim() || !imageData) {
+    if (!name?.trim() || name.trim().length > 100 || (!imageData && !artifactId)) {
       return NextResponse.json(
-        { error: "name과 imageData는 필수입니다." },
+        { error: "배경 이름과 이미지가 필요합니다." },
         { status: 400 }
       );
     }
 
-    const mime = mimeType || "image/png";
-    const { blobUrl, thumbnailUrl } = await uploadBase64ImageWithThumbnail(imageData, mime, "backgrounds");
+    const artifact = artifactId
+      ? await prisma.generationArtifact.findFirst({
+          where: {
+            id: artifactId,
+            mimeType: { startsWith: "image/" },
+            job: { userId: session.userId },
+          },
+          select: { blobUrl: true, thumbnailUrl: true, mimeType: true },
+        })
+      : null;
+    if (artifactId && !artifact) {
+      return NextResponse.json({ error: "저장할 생성 이미지를 찾을 수 없습니다." }, { status: 404 });
+    }
+
+    const mime = artifact?.mimeType || mimeType || "image/png";
+    if (!artifact && !["image/png", "image/jpeg", "image/webp"].includes(mime)) {
+      return NextResponse.json({ error: "지원하지 않는 이미지 형식입니다." }, { status: 400 });
+    }
+    uploaded = artifact
+      ? { blobUrl: artifact.blobUrl, thumbnailUrl: artifact.thumbnailUrl ?? artifact.blobUrl }
+      : await uploadBase64ImageWithThumbnail(imageData!, mime, "backgrounds");
+    ownsUploadedBlob = !artifact;
 
     const bg = await prisma.savedBackground.create({
       data: {
         name: name.trim(),
-        blobUrl,
-        thumbnailUrl,
+        blobUrl: uploaded.blobUrl,
+        thumbnailUrl: uploaded.thumbnailUrl,
         mimeType: mime,
         userId: session.userId,
       },
@@ -74,6 +97,9 @@ export async function POST(req: NextRequest) {
       createdAt: bg.createdAt.toISOString(),
     });
   } catch (error) {
+    if (uploaded && ownsUploadedBlob) {
+      await Promise.allSettled([deleteBlob(uploaded.blobUrl), deleteBlob(uploaded.thumbnailUrl)]);
+    }
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }

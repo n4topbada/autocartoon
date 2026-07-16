@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateContentForBackground } from "@/lib/gemini";
 import { requireAuth, AuthError } from "@/lib/auth";
 import { checkAndDeductCredit, refundDeductedCredit } from "@/lib/credit-service";
+import { getPublicPlatformAIError } from "@/lib/platform-ai";
 
 // Allow enough time for image generation on Vercel.
 export const maxDuration = 120;
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
       await refundDeductedCredit(session.userId, deducted.source);
       deducted = null;
       return NextResponse.json(
-        { error: errors[0] || "이미지 생성에 실패했습니다. 다시 시도해주세요." },
+        { error: getPublicPlatformAIError(errors[0], "이미지 생성에 실패했습니다. 다시 시도해주세요.") },
         { status: 500 }
       );
     }
@@ -95,7 +96,9 @@ export async function POST(req: NextRequest) {
     }
 
     console.error("Background generation error:", error);
-    const message = error instanceof Error ? error.message : "알 수 없는 오류";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: getPublicPlatformAIError(error, "배경 이미지 생성에 실패했습니다. 다시 시도해주세요.") },
+      { status: 500 }
+    );
   }
 }

@@ -2,7 +2,17 @@
  * 말풍선 Canvas 2D 드로잉 함수 (5종)
  */
 
-export type BubbleType = "classic" | "thought" | "spiky" | "angry" | "needle";
+export type BubbleType =
+  | "classic"
+  | "thought"
+  | "spiky"
+  | "angry"
+  | "needle"
+  | "text"
+  | "rectangle"
+  | "ellipse"
+  | "line"
+  | "star";
 
 export interface SpeechBubble {
   id: string;
@@ -19,22 +29,36 @@ export interface SpeechBubble {
   tailTipX: number;
   tailTipY: number;
   tailWidth: number;
+  text?: string;
+  textColor?: string;
+  fontSize?: number;
+  fontWeight?: "normal" | "bold";
+  textAlign?: "left" | "center" | "right";
 }
 
 export function createBubble(type: BubbleType, x: number, y: number): SpeechBubble {
   const hasTail = type === "classic" || type === "thought";
+  const isText = type === "text";
+  const isShape = ["rectangle", "ellipse", "line", "star"].includes(type);
+  const isLine = type === "line";
   return {
     id: `bubble_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     type, x, y,
-    width: 200, height: 140,
-    fillColor: "#ffffff",
-    strokeColor: "#000000",
-    strokeWidth: type === "needle" ? 2 : 2.5,
+    width: isText ? 260 : isShape ? 180 : 200,
+    height: isText ? 90 : isLine ? 40 : isShape ? 120 : 140,
+    fillColor: isText || isLine ? "transparent" : "#ffffff",
+    strokeColor: isText ? "transparent" : "#000000",
+    strokeWidth: type === "needle" ? 2 : isText ? 0 : isShape ? 3 : 2.5,
     opacity: 1,
     tailEnabled: hasTail,
     tailTipX: x,
     tailTipY: y + 120,
     tailWidth: 24,
+    text: isText ? "텍스트" : "",
+    textColor: "#111111",
+    fontSize: 24,
+    fontWeight: "normal",
+    textAlign: "center",
   };
 }
 
@@ -47,8 +71,128 @@ export function drawBubble(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
     case "spiky":   drawSpiky(ctx, b); break;
     case "angry":   drawAngry(ctx, b); break;
     case "needle":  drawNeedle(ctx, b); break;
+    case "text": break;
+    case "rectangle": drawRectangle(ctx, b); break;
+    case "ellipse": drawEllipse(ctx, b); break;
+    case "line": drawLine(ctx, b); break;
+    case "star": drawStar(ctx, b); break;
   }
+  if (b.text?.trim()) drawBubbleText(ctx, b);
   ctx.restore();
+}
+
+function drawRectangle(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
+  ctx.beginPath();
+  ctx.rect(
+    bubble.x - bubble.width / 2,
+    bubble.y - bubble.height / 2,
+    bubble.width,
+    bubble.height
+  );
+  doFill(ctx, bubble);
+  doStroke(ctx, bubble);
+}
+
+function drawEllipse(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
+  ctx.beginPath();
+  ctx.ellipse(
+    bubble.x,
+    bubble.y,
+    bubble.width / 2,
+    bubble.height / 2,
+    0,
+    0,
+    Math.PI * 2
+  );
+  doFill(ctx, bubble);
+  doStroke(ctx, bubble);
+}
+
+function drawLine(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
+  ctx.beginPath();
+  ctx.moveTo(bubble.x - bubble.width / 2, bubble.y);
+  ctx.lineTo(bubble.x + bubble.width / 2, bubble.y);
+  doStroke(ctx, bubble);
+}
+
+function drawStar(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
+  const outerX = bubble.width / 2;
+  const outerY = bubble.height / 2;
+  ctx.beginPath();
+  for (let point = 0; point < 10; point += 1) {
+    const angle = -Math.PI / 2 + point * Math.PI / 5;
+    const radius = point % 2 === 0 ? 1 : 0.45;
+    const x = bubble.x + Math.cos(angle) * outerX * radius;
+    const y = bubble.y + Math.sin(angle) * outerY * radius;
+    if (point === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  doFill(ctx, bubble);
+  doStroke(ctx, bubble);
+}
+
+function splitLongToken(ctx: CanvasRenderingContext2D, token: string, maxWidth: number) {
+  const pieces: string[] = [];
+  let current = "";
+  for (const character of token) {
+    if (current && ctx.measureText(current + character).width > maxWidth) {
+      pieces.push(current);
+      current = character;
+    } else {
+      current += character;
+    }
+  }
+  if (current) pieces.push(current);
+  return pieces;
+}
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  const lines: string[] = [];
+  for (const paragraph of text.split("\n")) {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    if (words.length === 0) {
+      lines.push("");
+      continue;
+    }
+    let line = "";
+    for (const word of words) {
+      const pieces = ctx.measureText(word).width > maxWidth
+        ? splitLongToken(ctx, word, maxWidth)
+        : [word];
+      for (const piece of pieces) {
+        const candidate = line ? `${line} ${piece}` : piece;
+        if (line && ctx.measureText(candidate).width > maxWidth) {
+          lines.push(line);
+          line = piece;
+        } else {
+          line = candidate;
+        }
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+function drawBubbleText(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
+  const fontSize = Math.max(8, bubble.fontSize ?? 24);
+  const padding = Math.max(10, fontSize * 0.65);
+  const maxWidth = Math.max(20, bubble.width - padding * 2);
+  const lineHeight = fontSize * 1.28;
+  ctx.font = `${bubble.fontWeight === "bold" ? 700 : 400} ${fontSize}px sans-serif`;
+  ctx.fillStyle = bubble.textColor ?? "#111111";
+  ctx.textAlign = bubble.textAlign ?? "center";
+  ctx.textBaseline = "middle";
+  const lines = wrapText(ctx, bubble.text ?? "", maxWidth);
+  const visibleLines = lines.slice(0, Math.max(1, Math.floor((bubble.height - padding) / lineHeight)));
+  const startY = bubble.y - ((visibleLines.length - 1) * lineHeight) / 2;
+  const textX = bubble.textAlign === "left"
+    ? bubble.x - bubble.width / 2 + padding
+    : bubble.textAlign === "right"
+      ? bubble.x + bubble.width / 2 - padding
+      : bubble.x;
+  visibleLines.forEach((line, index) => ctx.fillText(line, textX, startY + index * lineHeight, maxWidth));
 }
 
 export function drawBubbleSelection(ctx: CanvasRenderingContext2D, b: SpeechBubble) {

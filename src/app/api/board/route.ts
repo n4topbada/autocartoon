@@ -8,6 +8,7 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, Number(searchParams.get("page") || "1"));
     const limit = Math.min(Math.max(1, Number(searchParams.get("limit") || "20")), 100);
     const skip = (page - 1) * limit;
+    const sort = searchParams.get("sort") === "popular" ? "popular" : "latest";
 
     // 현재 사용자 (좋아요 여부 체크용, 비로그인 허용) — 정적 import 사용
     let currentUserId: string | null = null;
@@ -20,7 +21,14 @@ export async function GET(req: NextRequest) {
       prisma.boardPost.findMany({
         skip,
         take: limit,
-        orderBy: [{ pinned: "desc" }, { createdAt: "desc" }],
+        orderBy: sort === "popular"
+          ? [
+              { pinned: "desc" },
+              { likes: { _count: "desc" } },
+              { comments: { _count: "desc" } },
+              { createdAt: "desc" },
+            ]
+          : [{ pinned: "desc" }, { createdAt: "desc" }],
         include: {
           user: { select: { name: true, email: true } },
           _count: { select: { comments: true, likes: true } },
@@ -68,6 +76,7 @@ export async function GET(req: NextRequest) {
       limit,
       total,
       totalPages: Math.ceil(total / limit),
+      sort,
     });
   } catch (error) {
     if (error instanceof AuthError) {
