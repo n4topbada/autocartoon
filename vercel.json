@@ -1,0 +1,9 @@
+{
+  "redirects": [
+    {
+      "source": "/:path*",
+      "destination": "https://wonybananabot-272254743773.asia-northeast3.run.app/:path*",
+      "permanent": true
+    }
+  ]
+}

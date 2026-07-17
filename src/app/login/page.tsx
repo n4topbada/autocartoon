@@ -22,7 +22,7 @@ export default function LoginPage() {
     if (!status) return;
     const messages: Record<string, string> = {
       not_configured: "카카오 로그인이 아직 설정되지 않았습니다.",
-      invalid_state: "카카오 로그인 요청이 만료되었습니다. 다시 시도해주세요.",
+      invalid_state: "인증을 시작한 브라우저와 완료한 브라우저가 달라졌거나 요청이 만료되었습니다. 같은 브라우저에서 다시 시도해주세요.",
       access_denied: "카카오 로그인이 취소되었습니다.",
       missing_code: "카카오 인증 정보를 받지 못했습니다.",
       failed: "카카오 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.",

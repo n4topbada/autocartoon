@@ -20,6 +20,37 @@ import { isDisposableKakaoPlaceholderAccount } from "@/lib/kakao-account-linking
 
 export const dynamic = "force-dynamic";
 
+type KakaoCallbackRejection =
+  | "invalid_state"
+  | "provider_error"
+  | "missing_code";
+
+function kakaoClientKind(userAgent: string | null) {
+  const value = userAgent ?? "";
+  if (/KAKAOTALK/i.test(value)) return "kakaotalk";
+  if (/Android/i.test(value)) return "android_browser";
+  if (/iPhone|iPad/i.test(value)) return "ios_browser";
+  if (/Windows|Macintosh|Linux/i.test(value)) return "desktop_browser";
+  return "unknown";
+}
+
+function logKakaoCallbackRejection(
+  req: NextRequest,
+  reason: KakaoCallbackRejection,
+  expectedState: string | null,
+  returnedState: string | null,
+) {
+  const providerError = req.nextUrl.searchParams.get("error");
+  console.warn("Kakao login callback rejected", {
+    reason,
+    providerError: providerError?.replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 80) || null,
+    hasExpectedState: Boolean(expectedState),
+    hasReturnedState: Boolean(returnedState),
+    host: req.nextUrl.host,
+    client: kakaoClientKind(req.headers.get("user-agent")),
+  });
+}
+
 function redirectAndClearState(req: NextRequest, path: string) {
   const response = NextResponse.redirect(getAppUrl(path, req.nextUrl.origin));
   response.headers.set("Cache-Control", "no-store");
@@ -129,14 +160,19 @@ export async function GET(req: NextRequest) {
   const intent = req.cookies.get(KAKAO_OAUTH_INTENT_COOKIE)?.value === "link" ? "link" : "login";
   const returnedState = req.nextUrl.searchParams.get("state");
   if (!validateKakaoOAuthState(returnedState, expectedState)) {
+    logKakaoCallbackRejection(req, "invalid_state", expectedState, returnedState);
     return redirectAndClearState(req, "/login?kakao=invalid_state");
   }
   if (req.nextUrl.searchParams.get("error")) {
+    logKakaoCallbackRejection(req, "provider_error", expectedState, returnedState);
     return redirectAndClearState(req, "/login?kakao=access_denied");
   }
 
   const code = req.nextUrl.searchParams.get("code");
-  if (!code) return redirectAndClearState(req, "/login?kakao=missing_code");
+  if (!code) {
+    logKakaoCallbackRejection(req, "missing_code", expectedState, returnedState);
+    return redirectAndClearState(req, "/login?kakao=missing_code");
+  }
 
   try {
     const kakao = await getKakaoUser(code, req.nextUrl.origin);
@@ -241,7 +277,11 @@ export async function GET(req: NextRequest) {
 
     return redirectAndClearState(req, "/");
   } catch (error) {
-    console.error("Kakao login callback error:", error);
+    console.error("Kakao login callback error:", {
+      host: req.nextUrl.host,
+      client: kakaoClientKind(req.headers.get("user-agent")),
+      error,
+    });
     return redirectAndClearState(req, "/login?kakao=failed");
   }
 }
