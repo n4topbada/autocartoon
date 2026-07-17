@@ -31,5 +31,10 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+# GAPIC 클라이언트는 설정·proto JSON을 런타임에 경로로 읽으므로 Next standalone
+# 추적만으로는 파일이 누락될 수 있다. 패키지를 온전히 복사하고 빌드 중 로드를 검증한다.
+COPY --from=builder /app/node_modules/@google-cloud/tasks ./node_modules/@google-cloud/tasks
+RUN node --input-type=module -e "import('@google-cloud/tasks').then(({ CloudTasksClient }) => { new CloudTasksClient(); })"
 EXPOSE 8080
 CMD ["node", "server.js"]
+
