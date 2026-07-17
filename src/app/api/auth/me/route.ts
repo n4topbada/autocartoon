@@ -22,6 +22,7 @@ export async function GET() {
       role: true,
       credits: true,
       kakaoId: true,
+      googleId: true,
     },
   });
   if (!user) {
@@ -36,6 +37,7 @@ export async function GET() {
     role: user.role,
     credits: user.credits,
     kakaoLinked: Boolean(user.kakaoId),
+    googleLinked: Boolean(user.googleId),
     mustChangePassword: session.usedTemporaryPassword === true,
   });
 }

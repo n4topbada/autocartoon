@@ -225,6 +225,11 @@
   color: #181600;
 }
 
+.mutedInline {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
 .form {
   display: flex;
   flex-direction: column;

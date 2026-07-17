@@ -3,7 +3,8 @@ param(
   [string]$Region = "asia-northeast3",
   [string]$Service = "wonybananabot",
   [int]$MinInstances = 0,
-  [int]$MaxInstances = 4
+  [int]$MaxInstances = 4,
+  [string]$NotificationEmail = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,6 +13,7 @@ $dashboardPath = Join-Path $monitoringRoot "prototype-dashboard.json"
 $alertRoot = Join-Path $monitoringRoot "alerts"
 $dashboardDisplayName = "WonyBananaBot Prototype Operations"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$notificationChannelNames = @()
 
 function Invoke-Gcloud {
   param([string[]]$Arguments)
@@ -41,6 +43,39 @@ Invoke-Gcloud @(
   "--max=$MaxInstances",
   "--quiet"
 )
+
+if ($NotificationEmail.Trim()) {
+  $normalizedEmail = $NotificationEmail.Trim().ToLowerInvariant()
+  if ($normalizedEmail -notmatch '^[^@\s]+@[^@\s]+\.[^@\s]+$') {
+    throw "NotificationEmail must be a valid email address."
+  }
+
+  $channelJson = & gcloud beta monitoring channels list --project=$ProjectId --format=json
+  if ($LASTEXITCODE -ne 0) { throw "Could not list Monitoring notification channels." }
+  $channels = @()
+  foreach ($item in ($channelJson | ConvertFrom-Json)) {
+    $channels += $item
+  }
+  $emailMatches = @(
+    $channels | Where-Object {
+      $_.type -eq "email" -and
+      $_.labels -and
+      $_.labels.email_address -eq $normalizedEmail
+    }
+  )
+  $channel = if ($emailMatches.Count -gt 0) { $emailMatches[0] } else { $null }
+
+  if (!$channel) {
+    Write-Host "Creating Monitoring email notification channel for $normalizedEmail"
+    $createdJson = & gcloud beta monitoring channels create --project=$ProjectId --display-name="WonyBananaBot operations email" --description="Prototype operations and generation failure alerts" --type=email --channel-labels="email_address=$normalizedEmail" --format=json --quiet
+    if ($LASTEXITCODE -ne 0) { throw "Could not create Monitoring email notification channel." }
+    $channel = $createdJson | ConvertFrom-Json
+    Write-Host "Google Cloud sent a verification message to $normalizedEmail. Alerts activate after verification."
+  } else {
+    Write-Host "Reusing Monitoring email notification channel for $normalizedEmail"
+  }
+  $notificationChannelNames = @($channel.name)
+}
 
 $dashboardJson = & gcloud monitoring dashboards list --project=$ProjectId --format=json
 if ($LASTEXITCODE -ne 0) { throw "Could not list Monitoring dashboards." }
@@ -91,8 +126,15 @@ foreach ($policyPath in Get-ChildItem -LiteralPath $alertRoot -Filter "*.json" |
 
   if ($existing) {
     $config | Add-Member -NotePropertyName name -NotePropertyValue $existing.name -Force
+    $existingChannelNames = @()
     if ($existing.notificationChannels) {
-      $config | Add-Member -NotePropertyName notificationChannels -NotePropertyValue @($existing.notificationChannels) -Force
+      $existingChannelNames = @($existing.notificationChannels)
+    }
+    if ($notificationChannelNames.Count -gt 0) {
+      $channelsForPolicy = @($existingChannelNames + $notificationChannelNames | Select-Object -Unique)
+      $config | Add-Member -NotePropertyName notificationChannels -NotePropertyValue $channelsForPolicy -Force
+    } elseif ($existingChannelNames.Count -gt 0) {
+      $config | Add-Member -NotePropertyName notificationChannels -NotePropertyValue $existingChannelNames -Force
     }
     $tempPath = Write-TemporaryJson $config
     try {
@@ -107,6 +149,9 @@ foreach ($policyPath in Get-ChildItem -LiteralPath $alertRoot -Filter "*.json" |
       Remove-Item -LiteralPath $tempPath -Force
     }
   } else {
+    if ($notificationChannelNames.Count -gt 0) {
+      $config | Add-Member -NotePropertyName notificationChannels -NotePropertyValue $notificationChannelNames -Force
+    }
     Write-Host "Creating alert policy: $($config.displayName)"
     Invoke-Gcloud @(
       "monitoring", "policies", "create",

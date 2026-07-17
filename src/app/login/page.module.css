@@ -127,10 +127,17 @@
   cursor: not-allowed;
 }
 
-.kakaoBtn {
+.socialActions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.kakaoBtn,
+.googleBtn {
   width: 100%;
   min-height: 44px;
-  margin-top: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -146,6 +153,16 @@
 
 .kakaoBtn:hover {
   background: #f1d900;
+}
+
+.googleBtn {
+  border: 1px solid #4b5563;
+  background: #f8fafc;
+  color: #1f2937;
+}
+
+.googleBtn:hover {
+  background: #e5e7eb;
 }
 
 .error {

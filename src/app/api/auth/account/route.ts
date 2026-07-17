@@ -80,6 +80,7 @@ export async function DELETE(req: NextRequest) {
         data: {
           email: deletedEmail,
           kakaoId: null,
+          googleId: null,
           passwordHash: disabledPasswordHash,
           name: "탈퇴한 사용자",
           role: "user",

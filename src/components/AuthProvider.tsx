@@ -17,6 +17,7 @@ export interface AuthUser {
   role: string;
   credits: number;
   kakaoLinked: boolean;
+  googleLinked: boolean;
   mustChangePassword: boolean;
 }
 

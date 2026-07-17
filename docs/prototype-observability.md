@@ -37,7 +37,11 @@ The following alert policies are enabled. They create incidents in Cloud Monitor
 | Cloud Tasks Failures | any non-OK task attempt in 5 minutes | Detect task delivery or worker failures. |
 | Generation Errors | a structured image, video, poll, request, or enqueue error | Detect provider and job-runner failures even when the task endpoint returns a handled response. |
 
-To receive alerts outside the console, create and verify a Cloud Monitoring notification channel, then attach it to these policies. Email-channel verification requires access to the recipient mailbox, so it is intentionally not automated by this repository.
+To receive alerts outside the console, create and verify a Cloud Monitoring notification channel, then attach it to these policies. The repository script can create and attach an email channel in one pass:
+
+    .\scripts\configure-gcp-observability.ps1 -NotificationEmail "n4topbada@gmail.com"
+
+Google Cloud sends a verification email when the channel is first created. The policies are attached immediately, but email delivery begins only after the mailbox owner clicks that verification link. Re-running the command is idempotent and preserves any pre-existing channels.
 
 ## Structured Generation Logs
 

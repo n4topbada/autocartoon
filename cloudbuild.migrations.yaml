@@ -1,0 +1,15 @@
+substitutions:
+  _IMAGE: asia-northeast3-docker.pkg.dev/wonybananabot/cloud-run-source-deploy/wony-prisma-migrate:manual
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --target
+      - migrator
+      - --tag
+      - ${_IMAGE}
+      - .
+
+images:
+  - ${_IMAGE}

@@ -8,6 +8,17 @@ export type LogSeverity =
 
 export type LogField = string | number | boolean | null | undefined;
 export type LogFields = Record<string, LogField>;
+type CompactLogField = Exclude<LogField, undefined>;
+type CompactLogFields<T extends LogFields> = {
+  [Key in keyof T]-?: Exclude<T[Key], undefined>;
+};
+export type StructuredLogEntry<T extends LogFields = LogFields> = {
+  severity: LogSeverity;
+  message: string;
+  event: string;
+  component: string;
+  revision: string;
+} & CompactLogFields<T> & Record<string, CompactLogField>;
 
 const MAX_LOG_VALUE_LENGTH = 2_000;
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
@@ -54,13 +65,13 @@ export function cloudTaskLogFields(request: Request): LogFields {
   };
 }
 
-export function buildLogEntry(
+export function buildLogEntry<T extends LogFields = LogFields>(
   severity: LogSeverity,
   event: string,
   message: string,
-  fields: LogFields = {},
+  fields: T = {} as T,
   request?: Request
-) {
+): StructuredLogEntry<T> {
   return {
     ...compactFields(fields),
     ...compactFields(requestTraceFields(request)),
@@ -69,7 +80,7 @@ export function buildLogEntry(
     event,
     component: "wonybananabot",
     revision: process.env.K_REVISION || "local",
-  };
+  } as StructuredLogEntry<T>;
 }
 
 export function logEvent(

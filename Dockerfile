@@ -18,6 +18,14 @@ ENV BUILD_TARGET=cloudrun
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npx prisma generate && npm run build
 
+# One-off Cloud Run migration jobs use this stage. It contains the Prisma CLI
+# but is not part of the web-service runtime image.
+FROM deps AS migrator
+WORKDIR /app
+COPY . .
+RUN npx prisma generate
+CMD ["npx", "prisma", "migrate", "deploy"]
+
 # Next standalone 추적에서 제외되는 Cloud Tasks와 전이 의존성만 별도로 설치한다.
 FROM node:24-slim AS cloud-tasks-runtime
 WORKDIR /runtime

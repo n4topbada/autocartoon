@@ -282,6 +282,16 @@ export default function AccountSettings() {
                 )}
               </dd>
             </div>
+            <div>
+              <dt>Google 로그인</dt>
+              <dd>
+                {user.googleLinked ? (
+                  <span className={styles.connectionBadge}>연결됨</span>
+                ) : (
+                  <span className={styles.mutedInline}>미연결</span>
+                )}
+              </dd>
+            </div>
           </dl>
         </section>
 

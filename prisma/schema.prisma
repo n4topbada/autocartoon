@@ -121,6 +121,7 @@ model User {
   id                         String    @id @default(cuid())
   email                      String    @unique
   kakaoId                    String?   @unique
+  googleId                   String?   @unique
   passwordHash               String
   name                       String?
   plazaNickname              String?   @unique
@@ -160,6 +161,15 @@ model User {
   savedProjectBriefs SavedProjectBrief[]
   sessions           UserSession[]
   reports            Report[]
+}
+
+// Privacy-preserving, lifetime cap for newly created OAuth accounts from the
+// same network. The application stores an HMAC of the IP address, never the IP.
+model RegistrationIp {
+  ipHash       String   @id
+  accountCount Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model UserSession {

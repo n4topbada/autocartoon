@@ -6,6 +6,7 @@
 - GitHub: `https://github.com/n4topbada/autocartoon`
 - Prototype operations: [docs/prototype-observability.md](./docs/prototype-observability.md)
 - Cloud SQL scaling runbook: [docs/cloud-sql-scaling-runbook.md](./docs/cloud-sql-scaling-runbook.md)
+- Auth and security baseline: [docs/auth-and-security-baseline.md](./docs/auth-and-security-baseline.md)
 - 레퍼런스 기능 비교: [docs/toonagent-reverse-engineering.md](./docs/toonagent-reverse-engineering.md)
 - 고급 캔버스 상세 비교: [docs/advanced-canvas-parity.md](./docs/advanced-canvas-parity.md)
 - 운영 인수인계: [docs/project-handoff.md](./docs/project-handoff.md)
@@ -25,7 +26,7 @@
 - 현재 컷 PNG, 전체 컷 ZIP, 자동 저장
 - Veo 3.1 Fast와 캐릭터별 Google TTS, ffmpeg.wasm 기반 세로 MP4
 - 공개 닉네임, 최신/인기 게시판, 이미지·링크, 댓글, 좋아요, 신고
-- 이메일·카카오 로그인, 임시 비밀번호, 비밀번호 변경, 기기 세션 최대 2대
+- 기존 이메일 로그인, 카카오·Google 신규 가입, 임시 비밀번호, 비밀번호 변경, 기기 세션 최대 2대
 - 관리자 사용자·크레딧·신고·지식과 구조화 캐릭터 디렉터
 
 ## 크레딧
@@ -112,6 +113,8 @@ TASKS_AUTH_TOKEN=
 
 KAKAO_REST_API_KEY=
 KAKAO_CLIENT_SECRET=
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
 KAKAOPAY_SECRET_KEY=
 KAKAOPAY_CID=TC0ONETIME
 ```
@@ -131,6 +134,17 @@ https://wonybananabot-272254743773.asia-northeast3.run.app/api/auth/kakao/callba
 
 카카오가 이메일을 제공하지 않으면 내부 전용 계정이 생깁니다. 기존 이메일 계정으로 로그인한 뒤 설정의 **카카오 연결**을 사용합니다. 실사용 데이터가 있는 두 계정은 자동 병합하지 않습니다.
 
+## Google 로그인과 신규 가입
+
+새 계정은 카카오 또는 Google OAuth로만 생성합니다. 기존 이메일·비밀번호 계정은 그대로 로그인 및 비밀번호 재설정을 사용할 수 있습니다. 새 OAuth 계정은 동일한 외부 IP에서 평생 최대 2개까지 만들 수 있으며, DB에는 IP 원문이 아니라 서버 비밀값으로 만든 HMAC만 저장합니다.
+
+Google Cloud Console에서 OAuth 2.0 **Web application** 클라이언트를 만들고 다음 리디렉션 URI를 등록합니다.
+
+    http://localhost:3000/api/auth/google/callback
+    https://wonybananabot-272254743773.asia-northeast3.run.app/api/auth/google/callback
+
+그 뒤 Client ID와 Client Secret을 Secret Manager로 저장해 Cloud Run의 GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET 환경 변수로 연결합니다. 자체 도메인을 붙이면 그 콜백도 추가하고 APP_ORIGIN을 바꿉니다.
+
 ## 데이터베이스와 배포
 
 ```powershell
@@ -139,6 +153,10 @@ $env:BUILD_TARGET='cloudrun'
 npm run build
 gcloud run deploy wonybananabot --source . --project=wonybananabot --region=asia-northeast3 --update-env-vars=APP_ORIGIN=https://wonybananabot-272254743773.asia-northeast3.run.app,PRISMA_CONNECTION_LIMIT=5,PRISMA_POOL_TIMEOUT=30 --quiet
 ```
+
+운영 마이그레이션은 로컬 DB URL이 아니라 Cloud SQL 소켓이 붙은 Cloud Run Job에서 실행합니다.
+
+    .\scripts\run-cloud-sql-migrations.ps1
 
 운영 리소스와 배포 후 점검은 [docs/project-handoff.md](./docs/project-handoff.md)를 따릅니다.
 

@@ -17,6 +17,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { createUserSession } from "@/lib/user-sessions";
 import { isDisposableKakaoPlaceholderAccount } from "@/lib/kakao-account-linking";
+import { SignupLimitError, reserveNewAccountSlot } from "@/lib/signup-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -234,6 +235,7 @@ export async function GET(req: NextRequest) {
     if (!user) {
       const passwordHash = await bcrypt.hash(randomBytes(32).toString("base64url"), 12);
       user = await prisma.$transaction(async (tx) => {
+        await reserveNewAccountSlot(tx, req.headers);
         const created = await tx.user.create({
           data: {
             kakaoId: kakao.id,
@@ -277,6 +279,9 @@ export async function GET(req: NextRequest) {
 
     return redirectAndClearState(req, "/");
   } catch (error) {
+    if (error instanceof SignupLimitError) {
+      return redirectAndClearState(req, "/login?kakao=signup_limit");
+    }
     console.error("Kakao login callback error:", {
       host: req.nextUrl.host,
       client: kakaoClientKind(req.headers.get("user-agent")),
