@@ -1,5 +1,6 @@
 import { getIronSession, type SessionOptions } from "iron-session";
 import { cookies } from "next/headers";
+import type { AuthMethod } from "./account-auth";
 
 const MIN_SESSION_SECRET_LENGTH = 32;
 
@@ -9,6 +10,7 @@ export interface SessionData {
   role: string;
   sessionId?: string;
   usedTemporaryPassword?: boolean;
+  authMethod?: AuthMethod;
 }
 
 function getSessionOptions(): SessionOptions {

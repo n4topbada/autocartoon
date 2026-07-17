@@ -1,7 +1,7 @@
 import { deleteBlobIfUnreferenced } from "./blob-references";
 import { prisma } from "./prisma";
 
-export const CANVAS_VERSION_LIMIT = 60;
+const CANVAS_VERSION_LIMIT = 60;
 
 export async function pruneCanvasVersions(
   cutId: string,

@@ -6,7 +6,7 @@ export type LogSeverity =
   | "ERROR"
   | "CRITICAL";
 
-export type LogField = string | number | boolean | null | undefined;
+type LogField = string | number | boolean | null | undefined;
 export type LogFields = Record<string, LogField>;
 type CompactLogField = Exclude<LogField, undefined>;
 type CompactLogFields<T extends LogFields> = {

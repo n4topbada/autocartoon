@@ -1,4 +1,4 @@
-export const CHARACTER_DESIGNER_EMAIL = "wony@wonyframe.com";
+const CHARACTER_DESIGNER_EMAIL = "wony@wonyframe.com";
 
 export interface CharacterDesignerAccessUser {
   email?: string | null;

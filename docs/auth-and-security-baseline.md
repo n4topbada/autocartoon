@@ -31,6 +31,26 @@ The application code is ready, but production Google sign-in stays unavailable u
 
 The implementation uses an OAuth state cookie for CSRF protection, PKCE S256 for authorization-code binding, and Google ID-token signature/audience verification. Only a Google-verified email address can create or link an account.
 
+## OAuth Account Passwords
+
+OAuth-created users receive an unguessable server-only password hash because the schema requires one, but the user never knows that value. The session now records whether the current login was password, Google, or Kakao. A Google/Kakao-authenticated session can set an initial email-login password or confirm account deletion without being asked for the unknown random value. After a password is set, that session becomes a normal password session and subsequent changes require the new current password.
+
+Existing cookies created before this change have no auth-method marker. They remain fail-closed and require the user to sign out and sign in with Google/Kakao once before using the passwordless setup flow.
+
+## Canonical Origin
+
+`APP_ORIGIN` is the server-owned canonical public origin used for OAuth callbacks, payment redirects, and email links. The 2026-07-18 audit found that its Cloud Run value accidentally contained two Prisma assignments after the URL. The service value was corrected to exactly `https://wonybananabot-272254743773.asia-northeast3.run.app`.
+
+PowerShell deployment commands must pass comma-separated environment updates as one variable or quoted argument. Otherwise shell argument parsing can corrupt a value while still returning a successful deployment.
+
+## Storage And Browser Baseline
+
+- GCS objects remain private and are accessed through ownership-aware media references and short V4 read URLs.
+- Local fallback paths reject absolute paths, backslashes, query fragments, empty or dot segments, and verify that the resolved path remains under `public` or `public/uploads`.
+- Local browser uploads accept only server-shaped user paths for `edited`, `studio-assets`, and `shorts`, with the same MIME, extension, and size boundaries as ticket issuance. A normal user cannot upload to `public/`.
+- Every Next.js route sends `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, a strict-origin referrer policy, and disables camera, microphone, and geolocation.
+- A full Content Security Policy remains staged because image data URLs, Blob workers, ffmpeg WASM, signed media URLs, and OAuth endpoints need a measured allowlist first.
+
 ## Database Recovery: What It Protects
 
 The current Cloud SQL instance wony-postgres is a zonal db-f1-micro PostgreSQL 16 instance. At the time of this check, automatic backups, point-in-time recovery (PITR), and deletion protection are all disabled.

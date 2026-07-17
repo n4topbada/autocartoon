@@ -11,13 +11,13 @@
  * 객체 경로(gcs): 소유물 u/{userId}/{folder}/{file}, 공용 public/{folder}/{file}.
  */
 
-import { mkdir, readFile, unlink, writeFile } from "fs/promises";
+import { mkdir, readFile, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { getAppOrigin } from "./app-url";
 
-export type StorageProvider = "gcs" | "local";
+type StorageProvider = "gcs" | "local";
 
-export function getStorageProvider(): StorageProvider {
+function getStorageProvider(): StorageProvider {
   return process.env.GCS_BUCKET ? "gcs" : "local";
 }
 
@@ -30,6 +30,37 @@ function gcsBucketName(): string {
 const GS_PREFIX_RE = /^gs:\/\/([^/]+)\/(.+)$/;
 const MEDIA_PREFIX = "/api/media/";
 
+export function isSafeStorageObjectPath(value: string): boolean {
+  return (
+    value.length > 0 &&
+    !value.includes("\0") &&
+    !value.includes("\\") &&
+    !value.includes("?") &&
+    !value.includes("#") &&
+    !path.isAbsolute(value) &&
+    value.split("/").every((segment) => segment !== "" && segment !== "." && segment !== "..")
+  );
+}
+
+function resolveWithin(root: string, relativePath: string): string {
+  if (!isSafeStorageObjectPath(relativePath)) throw new Error("잘못된 저장 경로");
+
+  const resolvedRoot = path.resolve(root);
+  const resolvedPath = path.resolve(resolvedRoot, relativePath);
+  if (resolvedPath !== resolvedRoot && !resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)) {
+    throw new Error("저장 경로가 허용 범위를 벗어났습니다.");
+  }
+  return resolvedPath;
+}
+
+function localPublicPath(relativePath: string): string {
+  return resolveWithin(path.join(process.cwd(), "public"), relativePath);
+}
+
+function localUploadPath(objectPath: string): string {
+  return resolveWithin(path.join(process.cwd(), "public", "uploads"), objectPath);
+}
+
 function base64urlEncode(input: string): string {
   return Buffer.from(input, "utf8").toString("base64url");
 }
@@ -38,14 +69,14 @@ export function decodeMediaKey(key: string): string {
 }
 
 /** 게이트웨이 URL(gcs) 또는 gs:// 참조에서 실제 GCS 객체를 복원한다. 아니면 null. */
-export function resolveGcsObject(ref: string): { bucket: string; objectPath: string } | null {
+function resolveGcsObject(ref: string): { bucket: string; objectPath: string } | null {
   const gs = GS_PREFIX_RE.exec(ref);
-  if (gs) return { bucket: gs[1], objectPath: gs[2] };
+  if (gs && isSafeStorageObjectPath(gs[2])) return { bucket: gs[1], objectPath: gs[2] };
   if (ref.startsWith(MEDIA_PREFIX)) {
     const key = ref.slice(MEDIA_PREFIX.length).split(/[/?#]/)[0];
     try {
       const objectPath = decodeMediaKey(key);
-      if (!objectPath || objectPath.includes("..")) return null;
+      if (!isSafeStorageObjectPath(objectPath)) return null;
       return { bucket: gcsBucketName(), objectPath };
     } catch {
       return null;
@@ -128,7 +159,7 @@ export async function putObject(
   }
 
   // 로컬 파일시스템 폴백(개발).
-  const uploadPath = path.join(process.cwd(), "public", "uploads", objectPath);
+  const uploadPath = localUploadPath(objectPath);
   await mkdir(path.dirname(uploadPath), { recursive: true });
   await writeFile(uploadPath, buffer);
   return { ref: `/uploads/${objectPath.replace(/\\/g, "/")}`, objectPath };
@@ -148,9 +179,8 @@ export async function deleteObject(ref: string): Promise<void> {
     return;
   }
   try {
-    if (ref.startsWith("/uploads/")) {
-      await unlink(path.join(process.cwd(), "public", ref));
-    }
+    const objectPath = objectPathFromRef(ref);
+    if (objectPath) await unlink(localUploadPath(objectPath));
   } catch (error) {
     console.error("Local blob delete error:", error);
   }
@@ -158,9 +188,7 @@ export async function deleteObject(ref: string): Promise<void> {
 
 function resolveLocalUrl(url: string): string {
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  const base =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    getAppOrigin();
+  const base = getAppOrigin();
   const encoded = url.split("/").map((seg) => encodeURIComponent(seg)).join("/");
   return `${base.replace(/\/+$/, "")}${encoded}`;
 }
@@ -183,7 +211,7 @@ export async function readObjectAsBase64(
 
   // 로컬 정적 파일 (예: /presets/wony/wony-01.png, /uploads/...)
   if (ref.startsWith("/") && !ref.startsWith("//") && !ref.startsWith(MEDIA_PREFIX)) {
-    const filePath = path.join(process.cwd(), "public", ref);
+    const filePath = localPublicPath(ref.slice(1));
     const buffer = await readFile(filePath);
     const ext = path.extname(ref).toLowerCase();
     const mimeType =
@@ -271,8 +299,7 @@ export async function createUploadTicket(params: {
 
 /** 로컬 폴백 업로드: 서버가 직접 fs에 저장. objectPath는 소유자 스코프가 포함돼 있어야 한다. */
 export async function saveLocalUpload(objectPath: string, buffer: Buffer): Promise<string> {
-  if (objectPath.includes("..")) throw new Error("잘못된 경로");
-  const uploadPath = path.join(process.cwd(), "public", "uploads", objectPath);
+  const uploadPath = localUploadPath(objectPath);
   await mkdir(path.dirname(uploadPath), { recursive: true });
   await writeFile(uploadPath, buffer);
   return `/uploads/${objectPath.replace(/\\/g, "/")}`;
@@ -284,7 +311,7 @@ export function objectPathFromRef(ref: string): string | null {
   if (gcsObj) return gcsObj.objectPath;
   if (ref.startsWith("/uploads/")) {
     const p = ref.slice("/uploads/".length);
-    return p.includes("..") ? null : p;
+    return isSafeStorageObjectPath(p) ? p : null;
   }
   return null;
 }
@@ -315,8 +342,7 @@ export async function statObject(
   const objectPath = objectPathFromRef(ref);
   if (objectPath) {
     try {
-      const { stat } = await import("fs/promises");
-      const info = await stat(path.join(process.cwd(), "public", "uploads", objectPath));
+      const info = await stat(localUploadPath(objectPath));
       return { exists: true, sizeBytes: info.size };
     } catch {
       return { exists: false };

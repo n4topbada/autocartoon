@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth, AuthError } from "@/lib/auth";
 
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -74,7 +74,7 @@ export async function GET(
 }
 
 export async function DELETE(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {

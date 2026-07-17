@@ -27,7 +27,7 @@ export function isGoogleLoginConfigured() {
   return Boolean(config.clientId && config.clientSecret);
 }
 
-export function getGoogleRedirectUri(origin: string) {
+function getGoogleRedirectUri(origin: string) {
   return getAppUrl("/api/auth/google/callback", origin);
 }
 

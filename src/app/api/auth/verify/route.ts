@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
 
   if (!token) {
     return NextResponse.redirect(
-      new URL("/login?error=invalid_token", req.url)
+      new URL("/verify?error=invalid_token", req.url)
     );
   }
 
@@ -18,13 +18,13 @@ export async function GET(req: NextRequest) {
 
   if (!user) {
     return NextResponse.redirect(
-      new URL("/login?error=invalid_token", req.url)
+      new URL("/verify?error=invalid_token", req.url)
     );
   }
 
   if (user.verifyTokenExp && new Date() > user.verifyTokenExp) {
     return NextResponse.redirect(
-      new URL("/login?error=token_expired", req.url)
+      new URL("/verify?error=token_expired", req.url)
     );
   }
 
@@ -48,6 +48,7 @@ export async function GET(req: NextRequest) {
   session.email = user.email;
   session.role = user.role;
   session.sessionId = registeredSession.id;
+  session.authMethod = "password";
   await session.save();
 
   return NextResponse.redirect(new URL("/", req.url));

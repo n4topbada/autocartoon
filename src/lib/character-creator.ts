@@ -1,4 +1,4 @@
-export type CharacterBackground = "white" | "scene";
+type CharacterBackground = "white" | "scene";
 
 export interface CharacterCreatorSettings {
   name: string;

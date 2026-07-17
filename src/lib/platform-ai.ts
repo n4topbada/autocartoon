@@ -43,13 +43,6 @@ async function getGoogleAuthOptions(): Promise<GoogleAuthOptions> {
   return {};
 }
 
-export async function getGoogleCloudAuthConfig() {
-  return {
-    projectId: process.env.GOOGLE_CLOUD_PROJECT,
-    googleAuthOptions: await getGoogleAuthOptions(),
-  };
-}
-
 export async function getGoogleAccessToken(): Promise<string> {
   const options = await getGoogleAuthOptions();
   let authClient = options.authClient;
@@ -108,7 +101,7 @@ export function getPlatformAIClients(): Promise<GoogleGenAI[]> {
   return clientsPromise;
 }
 
-export async function getPlatformAIClient(): Promise<GoogleGenAI> {
+async function getPlatformAIClient(): Promise<GoogleGenAI> {
   const clients = await getPlatformAIClients();
   return clients[0];
 }
@@ -147,11 +140,7 @@ export function getImageModel(): string {
   );
 }
 
-export function getTextModel(): string {
-  return getTextModelCandidates()[0];
-}
-
-export function getTextModelCandidates(): string[] {
+function getTextModelCandidates(): string[] {
   return Array.from(new Set([
     normalizeModelId(
       process.env.VERTEX_TEXT_MODEL || "gemini-3.1-flash-lite"
@@ -222,17 +211,4 @@ export function getVideoModel(): string {
 export function getVideoOutputGcsUri(jobId: string): string | undefined {
   const configured = process.env.VERTEX_VIDEO_OUTPUT_GCS_URI?.replace(/\/+$/, "");
   return configured ? `${configured}/${jobId}` : undefined;
-}
-
-export function getPlatformAIInfo() {
-  return {
-    provider: getPlatformAIProvider(),
-    projectConfigured: Boolean(process.env.GOOGLE_CLOUD_PROJECT),
-    location: process.env.GOOGLE_CLOUD_LOCATION || "global",
-    videoLocation: process.env.GOOGLE_CLOUD_VIDEO_LOCATION || "us-central1",
-    imageModel: getImageModel(),
-    textModel: getTextModel(),
-    videoModel: getVideoModel(),
-    videoOutputConfigured: Boolean(process.env.VERTEX_VIDEO_OUTPUT_GCS_URI),
-  };
 }

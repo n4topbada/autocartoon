@@ -1,5 +1,5 @@
-export const MIN_PASSWORD_LENGTH = 10;
-export const MAX_PASSWORD_BYTES = 72;
+const MIN_PASSWORD_LENGTH = 10;
+const MAX_PASSWORD_BYTES = 72;
 
 export function validatePassword(password: unknown): string | null {
   if (typeof password !== "string") {

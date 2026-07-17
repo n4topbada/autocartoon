@@ -1,4 +1,4 @@
-export type LegalSection = {
+type LegalSection = {
   id: string;
   title: string;
   paragraphs?: string[];

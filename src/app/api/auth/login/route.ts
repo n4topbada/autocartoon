@@ -105,6 +105,7 @@ export async function POST(req: NextRequest) {
     session.role = user.role;
     session.sessionId = registeredSession.id;
     session.usedTemporaryPassword = usedTemporaryPassword;
+    session.authMethod = "password";
     await session.save();
 
     return NextResponse.json({

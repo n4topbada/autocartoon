@@ -1,7 +1,7 @@
 import { GoogleGenAI, type Content, type Part } from "@google/genai";
 import { getImageModel, getPlatformAIClients } from "./platform-ai";
 
-export type Modality = "IMAGE" | "TEXT";
+type Modality = "IMAGE" | "TEXT";
 
 export interface GeminiRequest {
   prompt: string;

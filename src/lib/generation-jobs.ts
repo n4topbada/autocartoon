@@ -3,15 +3,12 @@ import { prisma } from "./prisma";
 import { refundJobCredit } from "./credit-service";
 import { getGenerationCreditCost } from "./credit-products";
 
-export type JobKind = "image" | "background" | "character" | "gesture" | "video";
-export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
-
-export interface StoredImageReference {
+interface StoredImageReference {
   url: string;
   mimeType: string;
 }
 
-export interface StoredLabeledImageReference extends StoredImageReference {
+interface StoredLabeledImageReference extends StoredImageReference {
   label: string;
 }
 
@@ -83,14 +80,14 @@ export function jobToResponse(job: JobWithArtifacts) {
   };
 }
 
-export const ACTIVE_JOB_STATUSES: string[] = ["queued", "running"];
+const ACTIVE_JOB_STATUSES: string[] = ["queued", "running"];
 
 // 프로세스가 강제 종료(타임아웃/OOM/배포)되면 작업이 queued/running에 영구히 멈출 수 있다.
 // 폴링 라우트에서 이 시간을 넘긴 작업을 실패 처리하고 크레딧을 환불한다.
 const IMAGE_JOB_MAX_AGE_MS = 10 * 60 * 1000;
 const VIDEO_JOB_MAX_AGE_MS = 45 * 60 * 1000; // 워크플로 자체 타임아웃(30분)보다 넉넉한 백스톱
 
-export function jobMaxAgeMs(kind: string) {
+function jobMaxAgeMs(kind: string) {
   return kind === "video" ? VIDEO_JOB_MAX_AGE_MS : IMAGE_JOB_MAX_AGE_MS;
 }
 

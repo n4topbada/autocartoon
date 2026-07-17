@@ -4,7 +4,7 @@ const SESSION_DAYS = 30;
 const MAX_DEVICE_SESSIONS = 2;
 const TOUCH_INTERVAL_MS = 5 * 60 * 1_000;
 
-export function describeDevice(userAgent: string) {
+function describeDevice(userAgent: string) {
   const ua = userAgent || "알 수 없는 기기";
   const os = /Windows/i.test(ua)
     ? "Windows"

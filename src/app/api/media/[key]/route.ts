@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { decodeMediaKey, mediaRefForObjectPath, signReadUrl } from "@/lib/storage";
+import {
+  decodeMediaKey,
+  isSafeStorageObjectPath,
+  mediaRefForObjectPath,
+  signReadUrl,
+} from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +63,7 @@ export async function GET(
       return NextResponse.json({ error: "잘못된 미디어 키" }, { status: 400 });
     }
     // 경로 탈출 방지
-    if (!objectPath || objectPath.includes("..") || objectPath.startsWith("/")) {
+    if (!isSafeStorageObjectPath(objectPath)) {
       return NextResponse.json({ error: "잘못된 경로" }, { status: 400 });
     }
 

@@ -17,7 +17,7 @@ export type BubbleType =
   | "cloud"
   | "star";
 
-export type BubbleStrokeStyle = "solid" | "dashed" | "dotted" | "rough";
+type BubbleStrokeStyle = "solid" | "dashed" | "dotted" | "rough";
 
 export interface TextStyleRun {
   start: number;
@@ -520,7 +520,7 @@ export function drawBubbleSelection(ctx: CanvasRenderingContext2D, b: SpeechBubb
   ctx.restore();
 }
 
-export function getHandlePositions(b: SpeechBubble) {
+function getHandlePositions(b: SpeechBubble) {
   const l = b.x - b.width / 2, r = b.x + b.width / 2;
   const t = b.y - b.height / 2, bt = b.y + b.height / 2;
   return ([

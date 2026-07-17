@@ -1,4 +1,4 @@
-export const ANNOUNCEMENT_CATEGORIES = ["notice", "update", "maintenance"] as const;
+const ANNOUNCEMENT_CATEGORIES = ["notice", "update", "maintenance"] as const;
 
 export type AnnouncementCategory = (typeof ANNOUNCEMENT_CATEGORIES)[number];
 
@@ -15,7 +15,7 @@ export function parseAnnouncementLimit(value: string | null, fallback = 30) {
   return Math.max(1, Math.min(50, Math.floor(parsed)));
 }
 
-export interface AnnouncementInput {
+interface AnnouncementInput {
   title: string;
   content: string;
   category: AnnouncementCategory;

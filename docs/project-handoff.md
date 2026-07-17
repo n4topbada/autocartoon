@@ -7,7 +7,7 @@
 GitHub: `https://github.com/n4topbada/autocartoon`
 운영: `https://wonybananabot-272254743773.asia-northeast3.run.app`
 
-이 문서는 다음 개발자가 현재 운영 구조, 실제 구현, 레퍼런스 차이, 남은 외부 결정을 빠르게 파악하기 위한 기준 문서다. 기능별 조사 근거와 AS-IS -> TO-BE 매트릭스는 [toonagent-reverse-engineering.md](./toonagent-reverse-engineering.md)에 있다.
+이 문서는 다음 개발자가 현재 운영 구조, 실제 구현, 레퍼런스 차이, 남은 외부 결정을 빠르게 파악하기 위한 기준 문서다. 기능별 조사 근거와 AS-IS -> TO-BE 매트릭스는 [toonagent-reverse-engineering.md](./toonagent-reverse-engineering.md), 저장소 품질 기준은 [code-audit-2026-07-18.md](./code-audit-2026-07-18.md)에 있다.
 
 ## 1. 비밀과 접근 정보
 
@@ -23,7 +23,7 @@ GitHub: `https://github.com/n4topbada/autocartoon`
 | 항목 | 현재 값 |
 | --- | --- |
 | GCP project | `wonybananabot` |
-| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-18 검증 리비전 `wonybananabot-00024-rzf` |
+| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-18 검증 리비전 `wonybananabot-00026-zt8` |
 | Cloud SQL | `wony-postgres`, PostgreSQL 16 |
 | Cloud Tasks | `wony-jobs`, `asia-northeast3`; 동시 10, 초당 5, 최대 5회 재시도 |
 | GCS | `wonybananabot-media`, private. 브라우저 직접 업로드 CORS는 `scripts/gcs-cors.json` 기준 |
@@ -39,6 +39,7 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 
 - 이메일 인증·복구, 로그인·로그아웃, 12자 영문/숫자 임시 비밀번호, 강제 변경
 - 카카오·Google OAuth와 카카오의 명시적 기존 계정 연결
+- OAuth로 본인 확인한 세션의 초기 이메일 로그인 비밀번호 설정
 - HttpOnly 세션, DB 기기 세션 최대 2대, 목록·철회·계정 삭제
 - 사용자별 캐릭터·생성물·배경·프로젝트·보관함·게시글·크레딧 소유권
 
@@ -69,7 +70,7 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 - 모든 유료 AI 버튼 비용 표시, idempotent 차감 원장, 실패 환불
 - 카카오페이 ready/approve/cancel/fail 코드는 있으나 운영 결제는 의도적으로 비활성 상태
 - 가맹점 심사·운영 CID·약관·환불·정산 정책 전에는 활성화하지 않는다.
-- `/terms`, `/privacy`, `/refund` 운영 전 초안과 로그인·설정·크레딧 공통 링크
+- 비로그인도 접근하는 `/terms`, `/privacy`, `/refund` 운영 전 초안과 로그인·설정·크레딧 공통 링크
 
 ## 4. 이번 작업에서 닫은 공백
 
@@ -90,8 +91,13 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 - 레퍼런스 전체 제작 흐름 2026-07-18 재감사와 운영 공지·읽음·통합 알림 구현
 - 국내 서비스용 약관·개인정보·환불 페이지와 로그인·설정·크레딧 공통 링크
 - SOLAPI 알림톡 어댑터의 HMAC-SHA256 인증 수정과 사업자 도입 절차 문서화
+- 공개 정책 페이지가 세션 때문에 로그인으로 이동하던 미들웨어 오류 수정
+- OAuth 신규 계정에 알 수 없는 임의 비밀번호를 요구하던 설정·탈퇴 흐름 수정
+- 로컬 파일 경로 탈출과 임의 `public/`·MIME 업로드 차단
+- Cloud Run의 손상된 `APP_ORIGIN` 값을 운영 URL 하나로 교정
+- 정적 데드코드·중복 의존성·오래된 HTML/Markdown 정리와 Knip 경고 0건
 
-운영 반영 상태: 마이그레이션 실행 `wony-prisma-migrate-99klj` 성공, 리비전 `wonybananabot-00024-rzf`에 트래픽 100% 연결, 해당 리비전 오류 로그 0건이다. `/terms`, `/privacy`, `/refund`와 로그인 공통 링크를 운영 브라우저에서 확인했다. 이번 정책·알림톡 준비 변경에는 DB 마이그레이션이 없다.
+운영 반영 상태: 기존 마이그레이션 실행 `wony-prisma-migrate-99klj`는 성공 상태다. 코드 감사 결과를 담은 리비전 `wonybananabot-00026-zt8`에 트래픽 100%를 연결했다. `APP_ORIGIN`과 Prisma 풀 환경 변수를 재검증했고, 비로그인 정책 페이지 3종 `200`, 보호 API `401`, 카카오 callback URL, 계정 설정, 전역 보안 헤더와 해당 리비전 오류 로그 0건을 확인했다. 이번 변경에는 DB 마이그레이션이 없다.
 
 ## 5. 레퍼런스 대비 기능상 남은 항목
 
@@ -100,7 +106,7 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 | 휴대폰 본인확인 | 외부 결정 | 공급자·비용·개인정보 정책 필요 |
 | 약관·개인정보·환불 페이지 | 초안 완료 | 사업자 정보·위탁/국외이전·환불 산식과 법률 검토 후 확정 |
 | 카카오 알림톡 | 부분 | SOLAPI HMAC 어댑터 준비, 비즈채널·템플릿·사용자 번호 기능 필요 |
-| Instagram/다채널 게시 | 외부 결정 | Meta 앱 검수·토큰 운영 필요 |
+| Instagram/다채널 게시 | 보류 | Meta 앱 검수·토큰 갱신 운영 필요. [설정 문서](./instagram-setup.md) 참조 |
 | 카카오페이 운영 | 보류 정상 | 상품·정책·가맹점 심사 뒤 활성화 |
 | Plurank CRM/CX/마케팅 전체 | 범위 결정 | 개인 창작 기능과 별도 제품군 |
 
@@ -123,9 +129,13 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 npm test
 npm run lint
 npx tsc --noEmit
+npx tsc --noEmit --noUnusedLocals --noUnusedParameters --incremental false
+npx --yes knip --reporter compact
 npx prisma validate
-$env:BUILD_TARGET='cloudrun'; npm run build
-gcloud run deploy wonybananabot --source . --project=wonybananabot --region=asia-northeast3 --update-env-vars=APP_ORIGIN=https://wonybananabot-272254743773.asia-northeast3.run.app,PRISMA_CONNECTION_LIMIT=5,PRISMA_POOL_TIMEOUT=30 --quiet
+$env:BUILD_TARGET='cloudrun'
+$runtimeEnv='APP_ORIGIN=https://wonybananabot-272254743773.asia-northeast3.run.app,PRISMA_CONNECTION_LIMIT=5,PRISMA_POOL_TIMEOUT=30'
+npm run build
+gcloud run deploy wonybananabot --source . --project=wonybananabot --region=asia-northeast3 --update-env-vars $runtimeEnv --quiet
 gcloud tasks queues update wony-jobs --project=wonybananabot --location=asia-northeast3 --max-concurrent-dispatches=10 --max-dispatches-per-second=5 --max-attempts=5 --min-backoff=10s --max-backoff=300s --max-doublings=5
 ```
 

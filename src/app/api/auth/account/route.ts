@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
+import { canManageAccountWithoutPassword } from "@/lib/account-auth";
 import { AuthError, requireAuth } from "@/lib/auth";
 import { isKakaoPlaceholderEmail } from "@/lib/kakao-auth";
 import { prisma } from "@/lib/prisma";
@@ -28,12 +29,16 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
     }
 
-    // 이메일 동의 없이 만든 카카오 전용 계정은 사용자가 아는 비밀번호가 없으므로
-    // (임의 해시) 세션 인증 + 이메일 확인만으로 탈퇴를 허용한다.
+    // OAuth로 본인 확인된 세션이나 비밀번호 없는 카카오 계정은 사용자가 아는
+    // 비밀번호가 없을 수 있으므로 세션 인증 + 이메일 확인으로 탈퇴를 허용한다.
     const isPlaceholderKakao =
       Boolean(user.kakaoId) && isKakaoPlaceholderEmail(user.email);
+    const canSkipPassword = canManageAccountWithoutPassword(
+      session.authMethod,
+      isPlaceholderKakao
+    );
 
-    if (!emailConfirmation || (!isPlaceholderKakao && !password)) {
+    if (!emailConfirmation || (!canSkipPassword && !password)) {
       return NextResponse.json(
         { error: "현재 비밀번호와 이메일을 모두 입력해주세요." },
         { status: 400 }
@@ -51,7 +56,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     const now = new Date();
-    if (!isPlaceholderKakao) {
+    if (!canSkipPassword) {
       const primaryMatches = await bcrypt.compare(password, user.passwordHash);
       const temporaryMatches = Boolean(
         !primaryMatches &&

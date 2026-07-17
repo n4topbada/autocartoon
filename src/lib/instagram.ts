@@ -4,7 +4,6 @@
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
 
-const GRAPH_URL = "https://graph.instagram.com";
 const GRAPH_FB_URL = "https://graph.facebook.com/v21.0";
 
 const APP_ID = process.env.INSTAGRAM_APP_ID || "";
@@ -70,21 +69,6 @@ export async function getLongLivedToken(shortToken: string): Promise<{
     fb_exchange_token: shortToken,
   });
   const res = await fetch(`${GRAPH_FB_URL}/oauth/access_token?${params}`);
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  return { accessToken: data.access_token, expiresIn: data.expires_in || 5184000 };
-}
-
-/** Long-lived token 갱신 */
-export async function refreshLongLivedToken(token: string): Promise<{
-  accessToken: string;
-  expiresIn: number;
-}> {
-  const params = new URLSearchParams({
-    grant_type: "ig_refresh_token",
-    access_token: token,
-  });
-  const res = await fetch(`${GRAPH_URL}/refresh_access_token?${params}`);
   const data = await res.json();
   if (data.error) throw new Error(data.error.message);
   return { accessToken: data.access_token, expiresIn: data.expires_in || 5184000 };
@@ -213,37 +197,4 @@ export async function getAccountInsights(
     reach,
     impressions,
   };
-}
-
-/** 미디어 인사이트 */
-export async function getMediaInsights(
-  mediaId: string,
-  accessToken: string
-): Promise<{
-  impressions: number;
-  reach: number;
-  likes: number;
-  comments: number;
-  saves: number;
-  shares: number;
-}> {
-  const res = await fetch(
-    `${GRAPH_FB_URL}/${mediaId}/insights?metric=impressions,reach,likes,comments,saved,shares&access_token=${accessToken}`
-  );
-  const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-
-  const result = { impressions: 0, reach: 0, likes: 0, comments: 0, saves: 0, shares: 0 };
-  if (data.data) {
-    for (const metric of data.data) {
-      const val = metric.values?.[0]?.value || 0;
-      if (metric.name === "impressions") result.impressions = val;
-      if (metric.name === "reach") result.reach = val;
-      if (metric.name === "likes") result.likes = val;
-      if (metric.name === "comments") result.comments = val;
-      if (metric.name === "saved") result.saves = val;
-      if (metric.name === "shares") result.shares = val;
-    }
-  }
-  return result;
 }

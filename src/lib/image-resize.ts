@@ -12,7 +12,7 @@ export interface ResizedImage {
 /**
  * base64 이미지를 maxSize 이내로 리사이즈
  */
-export function resizeImageBase64(
+function resizeImageBase64(
   base64: string,
   mimeType: string,
   maxSize: number = 1024
@@ -59,7 +59,7 @@ export function resizeImageBase64(
 /**
  * data URL에서 base64 + mimeType 추출 후 리사이즈
  */
-export async function resizeFromDataUrl(
+async function resizeFromDataUrl(
   dataUrl: string,
   maxSize: number = 1024
 ): Promise<ResizedImage> {

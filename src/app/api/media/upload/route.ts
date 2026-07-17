@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuth } from "@/lib/auth";
+import { validateLocalUploadRequest } from "@/lib/local-upload-policy";
 import { saveLocalUpload } from "@/lib/storage";
 
 // 로컬 폴백 업로드 프록시(개발). GCS 모드에서는 클라가 스토리지로 직접 올리므로 사용 안 함.
@@ -14,15 +15,14 @@ export async function POST(req: NextRequest) {
     if (!objectPath || !(file instanceof Blob)) {
       return NextResponse.json({ error: "objectPath와 file이 필요합니다." }, { status: 400 });
     }
-    // 소유자 스코프 검증: 자신의 경로 또는 공용만 허용.
-    if (
-      objectPath.includes("..") ||
-      !(objectPath.startsWith(`u/${session.userId}/`) || objectPath.startsWith("public/"))
-    ) {
-      return NextResponse.json({ error: "허용되지 않은 업로드 경로입니다." }, { status: 403 });
-    }
-    if (file.size > 200 * 1024 * 1024) {
-      return NextResponse.json({ error: "파일이 너무 큽니다." }, { status: 413 });
+    const policy = validateLocalUploadRequest({
+      objectPath,
+      userId: session.userId,
+      mimeType: file.type,
+      sizeBytes: file.size,
+    });
+    if (!policy.ok) {
+      return NextResponse.json({ error: policy.error }, { status: policy.status });
     }
     const buffer = Buffer.from(await file.arrayBuffer());
     const ref = await saveLocalUpload(objectPath, buffer);

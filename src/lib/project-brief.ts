@@ -39,7 +39,7 @@ export const PROJECT_BRIEF_TEMPLATE = `# 인스타툰 콘텐츠 기획서
 - 화면 텍스트:
 - 연출:`;
 
-export interface PlannedProjectCut {
+interface PlannedProjectCut {
   title: string;
   prompt: string;
   negativePrompt: string;

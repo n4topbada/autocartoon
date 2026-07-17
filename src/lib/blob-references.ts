@@ -1,7 +1,7 @@
 import { deleteBlob } from "./blob";
 import { prisma } from "./prisma";
 
-export async function isBlobReferenced(url: string) {
+async function isBlobReferenced(url: string) {
   if (!url) return false;
   const [generated, artifacts, presets, backgrounds, assets, cuts, canvasVersions] = await Promise.all([
     prisma.generatedImage.count({ where: { OR: [{ blobUrl: url }, { thumbnailUrl: url }] } }),

@@ -11,9 +11,9 @@ export const CAMERA_ANGLES = [
   { id: "extreme-close", label: "익스트림 클로즈", description: "눈이나 입 같은 부위에 바짝" },
 ] as const;
 
-export type CameraAngleId = typeof CAMERA_ANGLES[number]["id"];
-export type GestureLayout = "single" | "two";
-export type BackgroundMode = "scene" | "none";
+type CameraAngleId = typeof CAMERA_ANGLES[number]["id"];
+type GestureLayout = "single" | "two";
+type BackgroundMode = "scene" | "none";
 
 export interface StudioSceneSettings {
   cameraAngle: CameraAngleId;

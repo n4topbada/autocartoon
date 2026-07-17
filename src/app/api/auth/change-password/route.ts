@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
+import { canManageAccountWithoutPassword } from "@/lib/account-auth";
 import { validatePassword } from "@/lib/password-policy";
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireAuth } from "@/lib/auth";
@@ -25,12 +26,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
     }
 
-    // 이메일 동의 없이 만든 카카오 전용 계정은 아는 비밀번호가 없으므로
-    // 세션 인증만으로 초기 비밀번호를 설정할 수 있게 한다.
+    // OAuth로 본인 확인된 세션이나 비밀번호 없는 카카오 계정은 현재 비밀번호를
+    // 알 수 없으므로 세션 인증만으로 초기 비밀번호를 설정할 수 있게 한다.
     const isPlaceholderKakao =
       Boolean(user.kakaoId) && isKakaoPlaceholderEmail(user.email);
+    const canSkipCurrentPassword = canManageAccountWithoutPassword(
+      session.authMethod,
+      isPlaceholderKakao
+    );
 
-    if ((!isPlaceholderKakao && !currentPassword) || !newPassword) {
+    if ((!canSkipCurrentPassword && !currentPassword) || !newPassword) {
       return NextResponse.json(
         { error: "현재 비밀번호와 새 비밀번호를 입력해주세요." },
         { status: 400 }
@@ -57,7 +62,7 @@ export async function POST(req: NextRequest) {
     }
 
     const now = new Date();
-    if (!isPlaceholderKakao) {
+    if (!canSkipCurrentPassword) {
       const primaryMatches = await bcrypt.compare(currentPassword, user.passwordHash);
       const temporaryMatches = Boolean(
         !primaryMatches &&
@@ -100,6 +105,7 @@ export async function POST(req: NextRequest) {
     }
 
     session.usedTemporaryPassword = false;
+    session.authMethod = "password";
     await session.save();
 
     return NextResponse.json({ message: "비밀번호가 변경되었습니다." });

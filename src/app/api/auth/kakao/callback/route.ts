@@ -275,6 +275,7 @@ export async function GET(req: NextRequest) {
     session.role = user.role;
     session.sessionId = registeredSession.id;
     session.usedTemporaryPassword = false;
+    session.authMethod = "kakao";
     await session.save();
 
     return redirectAndClearState(req, "/");

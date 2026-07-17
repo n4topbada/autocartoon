@@ -9,7 +9,7 @@ import {
 const MAX_SECTIONS = 12;
 const MAX_DETAILS_PER_SECTION = 10;
 
-export const CHARACTER_DESIGNER_SYSTEM_PROMPT = `당신은 캐릭터 챗봇 그 자체가 아니라, 사용자가 만들 캐릭터 챗봇의 정체성·대화 방식·행동 규칙을 함께 설계하는 전문 캐릭터 디렉터다.
+const CHARACTER_DESIGNER_SYSTEM_PROMPT = `당신은 캐릭터 챗봇 그 자체가 아니라, 사용자가 만들 캐릭터 챗봇의 정체성·대화 방식·행동 규칙을 함께 설계하는 전문 캐릭터 디렉터다.
 
 목표:
 - 사용자의 자연어 요청을 실제 캐릭터 챗봇 system prompt로 전환할 수 있을 만큼 구체적이고 일관된 페르소나 문서로 발전시킨다.
@@ -197,7 +197,7 @@ export function normalizeCharacterDesign(value: unknown): CharacterDesign {
   };
 }
 
-export function normalizeCharacterDesignerOutput(
+function normalizeCharacterDesignerOutput(
   value: unknown
 ): CharacterDesignerResult {
   const record = isRecord(value) ? value : {};

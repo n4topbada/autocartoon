@@ -1,6 +1,6 @@
 # WONY AutoCartoon Architecture
 
-최종 갱신: 2026-07-17 KST
+최종 갱신: 2026-07-18 KST
 
 캐릭터 레퍼런스를 바탕으로 장면·제스처·배경·음성·숏폼·Veo 영상을 만들고 프로젝트와 컷 단위로 편집하는 GCP 기반 Next.js 서비스다. 사용자는 AI API 키를 넣지 않는다.
 
@@ -26,19 +26,19 @@ Client
 
 ## Data Model
 
-Prisma 모델 30개:
+Prisma 모델 34개:
 
-- 인증: `User`, `UserSession`
+- 인증: `User`, `UserSession`, `RegistrationIp`
 - 캐릭터: `CharacterGroup`, `CharacterPreset`, `PresetImage`, `PurchasedPreset`
 - 생성: `GenerationRequest`, `GeneratedImage`, `SavedBackground`, `GenerationJob`, `GenerationArtifact`
 - 과금: `CreditLedger`, `CreditPayment`
-- 제작: `CreativeProject`, `SavedProjectBrief`, `ProjectCut`, `ProjectAsset`
+- 제작: `CreativeProject`, `SavedProjectBrief`, `ProjectCut`, `CanvasVersion`, `ProjectAsset`
 - 커뮤니티: `BoardPost`, `BoardComment`, `BoardLike`, `Report`
 - 콘텐츠: `Content`, `ContentSlot`, `PromptPreset`, `ImageTag`, `ImageTagLink`
-- 운영: `ChatKnowledge`, `HelpRequest`
+- 운영: `Announcement`, `AnnouncementRead`, `ChatKnowledge`, `HelpRequest`
 - 외부 연동: `InstagramAccount`, `InstagramPost`
 
-API Route Handler는 92개다. `src/middleware.ts`가 인증을 먼저 검사하고 각 라우트가 다시 객체 소유권이나 관리자 역할을 확인한다. 공개 미디어와 Cloud Tasks 핸들러는 각자의 서명/공유 토큰 검증을 수행한다.
+API Route Handler는 99개다. `src/middleware.ts`가 인증을 먼저 검사하고 각 라우트가 다시 객체 소유권이나 관리자 역할을 확인한다. 로그인·인증 확인·정책 페이지는 공개이며, 공개 미디어와 Cloud Tasks 핸들러는 각자의 소유권/공유 토큰 검증을 수행한다.
 
 ## Durable Generation
 
@@ -70,6 +70,7 @@ Veo는 시작 태스크와 지연 폴 태스크를 분리한다. 로컬에서는
 - 원본은 비공개이며 DB에는 공개 URL 대신 미디어 게이트웨이 참조를 저장한다.
 - 게이트웨이는 DB 참조, 사용자 소유권, 공개 프리셋 여부를 확인한 뒤 짧은 signed URL로 이동시킨다.
 - 브라우저 대용량 업로드는 소유자 경로·MIME·최대 크기를 제한한 signed POST policy를 사용하고 서버에서 존재·크기·소유권을 재검증한다.
+- 로컬 폴백도 같은 사용자 경로·허용 폴더·MIME/확장자·용량 정책을 적용하고 모든 파일 경로가 `public` 루트 안에 있는지 확인한다.
 - 이미지 저장은 512px WebP 썸네일을 함께 만든다.
 
 ## Studio And Canvas
@@ -95,6 +96,7 @@ Veo는 시작 태스크와 지연 폴 태스크를 분리한다. 로컬에서는
 - 카카오 이메일이 없을 때 내부 placeholder 계정을 만든다.
 - 설정의 link intent는 기존 로그인 세션을 요구하고, 사용자 데이터가 없는 placeholder만 비활성화해 기존 이메일 계정으로 연결한다.
 - 콘텐츠·결제 데이터가 있는 계정은 자동 병합하지 않는다.
+- OAuth 로그인 방식을 세션에 기록한다. 소셜 로그인으로 본인 확인한 계정은 알 수 없는 임의 해시를 요구하지 않고 초기 이메일 로그인 비밀번호를 설정할 수 있으며, 설정 직후 일반 비밀번호 세션으로 전환한다.
 
 ## Security And Quality Gates
 
@@ -103,6 +105,7 @@ Veo는 시작 태스크와 지연 폴 태스크를 분리한다. 로컬에서는
 - 입력 MIME·크기·프롬프트 길이 제한
 - ZIP 압축 해제 크기·파일 수 제한
 - 비공개 GCS, signed upload/read, Cloud Tasks 공유 토큰
+- 전역 `nosniff`, frame deny, referrer·브라우저 권한 정책
 - `npm audit --omit=dev`, `npm test`, ESLint, TypeScript, Prisma validate, production build
 
 기능 동등성·남은 외부 결정은 [docs/toonagent-reverse-engineering.md](./docs/toonagent-reverse-engineering.md), 운영 절차는 [docs/project-handoff.md](./docs/project-handoff.md)를 따른다.

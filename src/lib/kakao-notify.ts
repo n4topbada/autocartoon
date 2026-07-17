@@ -14,8 +14,8 @@ import { createHmac, randomBytes } from "node:crypto";
 const API_KEY = process.env.SOLAPI_API_KEY;
 const API_SECRET = process.env.SOLAPI_API_SECRET;
 const PFID = process.env.SOLAPI_PFID; // 카카오 비즈채널 발신프로필 ID
-const SENDER_PHONE = process.env.SOLAPI_SENDER_PHONE || process.env.WONY_PHONE;
-const ADMIN_PHONE = process.env.SOLAPI_ADMIN_PHONE || process.env.WONY_PHONE;
+const SENDER_PHONE = process.env.SOLAPI_SENDER_PHONE;
+const ADMIN_PHONE = process.env.SOLAPI_ADMIN_PHONE;
 
 export interface KakaoNotifyResult {
   success: boolean;

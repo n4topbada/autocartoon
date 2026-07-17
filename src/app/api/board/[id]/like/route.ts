@@ -5,7 +5,7 @@ import { requireAuth, AuthError } from "@/lib/auth";
 
 // POST: 글 좋아요 토글 (원자적·멱등: 동시 더블클릭에도 500이 나지 않음)
 export async function POST(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {

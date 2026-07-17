@@ -4,7 +4,7 @@ import { requireAuth, AuthError } from "@/lib/auth";
 
 // POST: 핀 토글 (관리자만)
 export async function POST(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {

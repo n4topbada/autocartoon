@@ -5,7 +5,7 @@ import { requireAuth, AuthError } from "@/lib/auth";
 
 // POST: 댓글 좋아요 토글 (원자적·멱등)
 export async function POST(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string; commentId: string }> }
 ) {
   try {

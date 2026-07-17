@@ -1,6 +1,6 @@
 import { WELCOME_CREDITS } from "./credit-products";
 
-export type KakaoPlaceholderLedger = {
+type KakaoPlaceholderLedger = {
   action: string;
   source: string;
   units: number;

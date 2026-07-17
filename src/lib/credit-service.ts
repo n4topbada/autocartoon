@@ -106,7 +106,7 @@ async function reserveCreditsWithTransaction(
   };
 }
 
-export async function reserveCredits(
+async function reserveCredits(
   userId: string,
   options: ReserveOptions
 ): Promise<ReserveResult> {
@@ -159,7 +159,7 @@ async function refundCreditsWithTransaction(
   });
 }
 
-export async function refundCredits(
+async function refundCredits(
   userId: string,
   referenceId: string,
   note?: string,

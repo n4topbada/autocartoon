@@ -1262,7 +1262,7 @@ export default function Home() {
               </div>
             )}
           </div>
-          {/* Instagram 탭: Meta App 설정 후 주석 해제 (INSTAGRAM_SETUP.md 참조) */}
+          {/* Instagram 탭은 Meta 검수와 토큰 운영 완료 뒤 노출한다 (docs/instagram-setup.md). */}
         </nav>
         <div className={styles.headerRight}>
           {isAdmin && allUsers.length > 0 && (
