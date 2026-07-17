@@ -3,6 +3,7 @@ import "server-only";
 import { randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { Resend } from "resend";
+import { getAppOrigin } from "./app-url";
 import { prisma } from "./prisma";
 
 const TEMPORARY_PASSWORD_TTL_MS = 30 * 60 * 1000;
@@ -77,8 +78,7 @@ export async function issueTemporaryPassword(
 
   try {
     const resend = new Resend(apiKey);
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL || "https://wonybananabot.vercel.app";
+    const appUrl = getAppOrigin();
     const issueReference = issuedAt.getTime().toString(36).toUpperCase();
     const result = await resend.emails.send({
       from: process.env.PASSWORD_EMAIL_FROM || DEFAULT_FROM,

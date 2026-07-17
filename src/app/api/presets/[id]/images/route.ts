@@ -28,7 +28,7 @@ function validatePresetImages(images: { base64: string; mimeType: string }[] | u
 }
 
 function isBlobUnavailableError(error: unknown) {
-  return error instanceof Error && /Vercel Blob|store has been suspended|Blob/i.test(error.message);
+  return error instanceof Error && /GCS_BUCKET|storage|bucket|Blob|permission/i.test(error.message);
 }
 
 export async function GET(
@@ -120,7 +120,7 @@ export async function POST(
     const maxOrder = preset.images.reduce((m, img) => Math.max(m, img.order), -1);
 
     const uploads = await Promise.all(
-      images.map((img) => uploadBase64ImageWithThumbnail(img.base64, img.mimeType, "presets"))
+      images.map((img) => uploadBase64ImageWithThumbnail(img.base64, img.mimeType, "presets", session.userId))
     );
 
     const created = [];

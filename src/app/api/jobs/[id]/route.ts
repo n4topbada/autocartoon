@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { start } from "workflow/api";
+import { dispatchImageJob, dispatchVideoJob } from "@/lib/job-engine";
 import { AuthError, requireAuth } from "@/lib/auth";
 import { reserveJobCredit } from "@/lib/credit-service";
 import {
@@ -9,8 +9,6 @@ import {
   jobToResponse,
 } from "@/lib/generation-jobs";
 import { prisma } from "@/lib/prisma";
-import { imageGenerationWorkflow } from "@/workflows/image-generation";
-import { videoGenerationWorkflow } from "@/workflows/video-generation";
 import type { Prisma } from "@prisma/client";
 
 export async function GET(
@@ -81,8 +79,8 @@ export async function POST(
 
     try {
       const run = previous.kind === "video"
-        ? await start(videoGenerationWorkflow, [job.id])
-        : await start(imageGenerationWorkflow, [job.id]);
+        ? await dispatchVideoJob(job.id)
+        : await dispatchImageJob(job.id);
       const queued = await prisma.generationJob.update({
         where: { id: job.id },
         data: { runId: run.runId },

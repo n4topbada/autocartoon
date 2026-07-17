@@ -315,7 +315,8 @@ export async function generate(input: GenerateInput) {
       const { blobUrl, thumbnailUrl } = await uploadBase64ImageWithThumbnail(
         img.base64,
         img.mimeType,
-        "generated"
+        "generated",
+        input.userId
       );
       uploadedImages.push({
         blobUrl,

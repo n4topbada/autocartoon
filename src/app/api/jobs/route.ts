@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { start } from "workflow/api";
+import { dispatchVideoJob } from "@/lib/job-engine";
 import { AuthError, requireAuth } from "@/lib/auth";
 import { reserveJobCredit } from "@/lib/credit-service";
 import {
@@ -14,7 +14,6 @@ import {
   getVideoModel,
 } from "@/lib/platform-ai";
 import { prisma } from "@/lib/prisma";
-import { videoGenerationWorkflow } from "@/workflows/video-generation";
 import { Prisma } from "@prisma/client";
 
 const ALLOWED_DURATIONS = new Set([4, 6, 8]);
@@ -186,7 +185,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const run = await start(videoGenerationWorkflow, [job.id]);
+      const run = await dispatchVideoJob(job.id);
       const queued = await prisma.generationJob.update({
         where: { id: job.id },
         data: { runId: run.runId },

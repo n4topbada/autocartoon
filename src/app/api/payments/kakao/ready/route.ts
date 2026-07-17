@@ -1,19 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { getAppOrigin } from "@/lib/app-url";
 import { AuthError, requireAuth } from "@/lib/auth";
 import { getCreditProduct, getProductTotalCredits } from "@/lib/credit-products";
 import { isKakaoPayConfigured, KakaoPayError, readyKakaoPay } from "@/lib/kakaopay";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
-
-function getCallbackOrigin(req: NextRequest) {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (process.env.NODE_ENV === "production" && configured && !configured.includes("localhost")) {
-    return configured.replace(/\/$/, "");
-  }
-  return req.nextUrl.origin;
-}
 
 export async function POST(req: NextRequest) {
   let paymentId: string | undefined;
@@ -46,7 +39,7 @@ export async function POST(req: NextRequest) {
     });
     paymentId = payment.id;
 
-    const origin = getCallbackOrigin(req);
+    const origin = getAppOrigin(req.nextUrl.origin);
     const orderParam = encodeURIComponent(payment.id);
     const ready = await readyKakaoPay({
       partnerOrderId,

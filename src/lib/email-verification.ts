@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 import { Resend } from "resend";
+import { getAppOrigin } from "./app-url";
 
 const VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_FROM = "워니바나나봇 <onboarding@resend.dev>";
@@ -34,9 +35,7 @@ export async function sendVerificationEmail(params: {
 
   try {
     const resend = new Resend(apiKey);
-    const appUrl = (
-      process.env.NEXT_PUBLIC_APP_URL || "https://wonybananabot.vercel.app"
-    ).replace(/\/$/, "");
+    const appUrl = getAppOrigin();
     const verifyUrl = `${appUrl}/api/auth/verify?token=${encodeURIComponent(params.token)}`;
     const result = await resend.emails.send({
       from: process.env.PASSWORD_EMAIL_FROM || DEFAULT_FROM,

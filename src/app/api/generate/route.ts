@@ -13,8 +13,7 @@ import {
   getImageModel,
   getPlatformAIProvider,
 } from "@/lib/platform-ai";
-import { imageGenerationWorkflow } from "@/workflows/image-generation";
-import { start } from "workflow/api";
+import { dispatchImageJob } from "@/lib/job-engine";
 import { Prisma } from "@prisma/client";
 
 const GENERATION_MODES = new Set<GenerationMode>([
@@ -423,7 +422,7 @@ export async function POST(req: NextRequest) {
 
     const inputUploadId = crypto.randomUUID();
     const storeInput = async (image: InputImage, index: number) => ({
-      url: await uploadBase64ToBlob(image.base64, image.mimeType, `job-inputs/${inputUploadId}/${index}`),
+      url: await uploadBase64ToBlob(image.base64, image.mimeType, `job-inputs/${inputUploadId}/${index}`, session.userId),
       mimeType: image.mimeType,
     });
     const sourceArtifact = input.sourceArtifactId
@@ -529,7 +528,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const run = await start(imageGenerationWorkflow, [job.id]);
+      const run = await dispatchImageJob(job.id);
       const queuedJob = await prisma.generationJob.update({
         where: { id: job.id },
         data: { runId: run.runId },

@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.example
+npm-debug.log*
+*.md
+docs
+tests
+public/uploads
+워니프레임-배경생성-바나나봇v2.zip
+.vercel
+.turbo

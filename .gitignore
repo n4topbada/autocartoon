@@ -4,6 +4,7 @@ out/
 .env
 .env.local
 .env.development.local
+.env.local.bak-*
 *.db
 *.db-journal
 prisma/dev.db
@@ -20,6 +21,7 @@ assets/kang-geonma/*.webp
 assets/kang-geonma/*.gif
 /.swc
 .codex-dev.*.log
+src/app/.well-known/workflow/
 
 # Local handoff credentials. Never commit plaintext access secrets.
 docs/*.private.md

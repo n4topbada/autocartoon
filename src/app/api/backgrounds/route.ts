@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     }
     uploaded = artifact
       ? { blobUrl: artifact.blobUrl, thumbnailUrl: artifact.thumbnailUrl ?? artifact.blobUrl }
-      : await uploadBase64ImageWithThumbnail(imageData!, mime, "backgrounds");
+      : await uploadBase64ImageWithThumbnail(imageData!, mime, "backgrounds", session.userId);
     ownsUploadedBlob = !artifact;
 
     const bg = await prisma.savedBackground.create({

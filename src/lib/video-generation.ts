@@ -144,7 +144,7 @@ export async function pollAndPersistVideo(jobId: string, operationName: string) 
     for (const video of videos) {
       const buffer = await readGeneratedVideo(video);
       const mimeType = video.mimeType || "video/mp4";
-      const blobUrl = await uploadBufferToBlob(buffer, mimeType, "generated/videos");
+      const blobUrl = await uploadBufferToBlob(buffer, mimeType, "generated/videos", job.userId);
       uploaded.push({ blobUrl, mimeType, sourceUri: video.uri, sizeBytes: buffer.length });
     }
 

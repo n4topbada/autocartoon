@@ -286,6 +286,10 @@
   gap: 16px;
   padding: 10px 20px;
   max-width: 100%;
+  /* 컨트롤이 여러 줄로 접혀 세로가 짧은 화면을 넘겨도 잘리지 않고 자체 스크롤한다. */
+  flex-shrink: 0;
+  max-height: 42vh;
+  overflow-y: auto;
   background: var(--surface);
   border-radius: var(--radius);
   border: 1px solid var(--border);
@@ -1043,7 +1047,8 @@
 }
 
 @media (max-width: 768px) {
-  .body { flex-direction: column; }
+  /* 모바일: body를 단일 세로 스크롤로 만들어 툴바·저장 버튼이 잘리지 않게 한다. */
+  .body { flex-direction: column; overflow-y: auto; }
   .imageList { width: 100%; max-height: 150px; border-left: none; border-top: 1px solid var(--border); }
   .imageListCollapsed { max-height: 44px; }
   .assetTabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -1053,4 +1058,6 @@
   .layerPanelCollapsed { max-height: 44px; }
   .layerPanelLeft { border-right: 0; }
   .canvasViewport { min-height: 44vh; max-height: 52vh; }
+  /* 모바일에서는 툴바 자체 스크롤을 풀고 페이지 흐름에 자연 높이로 펼친다(단일 스크롤). */
+  .toolbar { max-height: none; overflow-y: visible; }
 }

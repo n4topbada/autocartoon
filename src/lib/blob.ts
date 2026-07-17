@@ -1,78 +1,17 @@
-import { put, del } from "@vercel/blob";
-import { mkdir, readFile, unlink, writeFile } from "fs/promises";
-import path from "path";
 import sharp from "sharp";
-
-const MIME_TO_EXT: Record<string, string> = {
-  "image/png": ".png",
-  "image/jpeg": ".jpg",
-  "image/webp": ".webp",
-  "image/gif": ".gif",
-  "video/mp4": ".mp4",
-  "audio/mpeg": ".mp3",
-};
+import {
+  deleteObject,
+  putObject,
+  readObjectAsBase64,
+  type OwnerScope,
+} from "./storage";
 
 /**
- * base64 이미지를 Vercel Blob에 업로드하고 URL을 반환
+ * 고수준 업로드 API. 저수준 프로바이더(GCS | 로컬 파일시스템)는 storage.ts가 담당한다.
+ * `owner`(userId 또는 "public")는 GCS 모드에서 객체 경로/접근제어에 쓰이고,
+ * 로컬 모드에선 public/uploads 경로 스코프에만 반영된다.
+ * 반환 URL/참조는 gcs=/api/media/{key}, 로컬=/uploads/....
  */
-export async function uploadBase64ToBlob(
-  base64: string,
-  mimeType: string,
-  folder: string = "images"
-): Promise<string> {
-  const ext = MIME_TO_EXT[mimeType] || ".png";
-  const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
-  const buffer = Buffer.from(base64, "base64");
-
-  try {
-    const blob = await put(filename, buffer, {
-      access: "public",
-      contentType: mimeType,
-    });
-
-    return blob.url;
-  } catch (error) {
-    if (process.env.NODE_ENV === "production") {
-      throw error;
-    }
-
-    console.warn("Vercel Blob upload failed. Falling back to local public/uploads.", error);
-    const uploadPath = path.join(process.cwd(), "public", "uploads", filename);
-    await mkdir(path.dirname(uploadPath), { recursive: true });
-    await writeFile(uploadPath, buffer);
-    return `/uploads/${filename.replace(/\\/g, "/")}`;
-  }
-}
-
-export async function uploadBase64ImageWithThumbnail(
-  base64: string,
-  mimeType: string,
-  folder: string = "images"
-): Promise<{ blobUrl: string; thumbnailUrl: string }> {
-  const buffer = Buffer.from(base64, "base64");
-  const thumbnailBuffer = await createThumbnailBuffer(buffer);
-  const blobUrl = await uploadBase64ToBlob(base64, mimeType, folder);
-  try {
-    const thumbnailUrl = await uploadBufferToBlob(
-      thumbnailBuffer,
-      "image/webp",
-      `${folder}/thumbs`
-    );
-    return { blobUrl, thumbnailUrl };
-  } catch (error) {
-    await deleteBlob(blobUrl);
-    throw error;
-  }
-}
-
-export async function uploadThumbnailForBlobUrl(
-  blobUrl: string,
-  folder: string = "images"
-): Promise<string> {
-  const image = await fetchBlobAsBase64(blobUrl);
-  const thumbnailBuffer = await createThumbnailBuffer(Buffer.from(image.base64, "base64"));
-  return uploadBufferToBlob(thumbnailBuffer, "image/webp", `${folder}/thumbs`);
-}
 
 async function createThumbnailBuffer(buffer: Buffer): Promise<Buffer> {
   return sharp(buffer)
@@ -82,95 +21,61 @@ async function createThumbnailBuffer(buffer: Buffer): Promise<Buffer> {
     .toBuffer();
 }
 
+export async function uploadBase64ToBlob(
+  base64: string,
+  mimeType: string,
+  folder = "images",
+  owner?: OwnerScope
+): Promise<string> {
+  const buffer = Buffer.from(base64, "base64");
+  const { ref } = await putObject(buffer, mimeType, folder, { owner, extFallback: ".png" });
+  return ref;
+}
+
 export async function uploadBufferToBlob(
   buffer: Buffer,
   mimeType: string,
-  folder: string
+  folder: string,
+  owner?: OwnerScope
 ): Promise<string> {
-  const ext = MIME_TO_EXT[mimeType] || ".webp";
-  const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+  const { ref } = await putObject(buffer, mimeType, folder, { owner, extFallback: ".webp" });
+  return ref;
+}
 
+export async function uploadBase64ImageWithThumbnail(
+  base64: string,
+  mimeType: string,
+  folder = "images",
+  owner?: OwnerScope
+): Promise<{ blobUrl: string; thumbnailUrl: string }> {
+  const buffer = Buffer.from(base64, "base64");
+  const thumbnailBuffer = await createThumbnailBuffer(buffer);
+  const blobUrl = await uploadBase64ToBlob(base64, mimeType, folder, owner);
   try {
-    const blob = await put(filename, buffer, {
-      access: "public",
-      contentType: mimeType,
-    });
-    return blob.url;
+    const thumbnailUrl = await uploadBufferToBlob(thumbnailBuffer, "image/webp", `${folder}/thumbs`, owner);
+    return { blobUrl, thumbnailUrl };
   } catch (error) {
-    if (process.env.NODE_ENV === "production") {
-      throw error;
-    }
-
-    console.warn("Vercel Blob upload failed. Falling back to local public/uploads.", error);
-    const uploadPath = path.join(process.cwd(), "public", "uploads", filename);
-    await mkdir(path.dirname(uploadPath), { recursive: true });
-    await writeFile(uploadPath, buffer);
-    return `/uploads/${filename.replace(/\\/g, "/")}`;
+    await deleteBlob(blobUrl);
+    throw error;
   }
 }
 
-/**
- * Vercel Blob URL에서 이미지를 fetch하여 base64로 변환
- * (Gemini API 호출 시 사용)
- */
-/**
- * URL을 절대 URL로 변환 (상대 경로 → 전체 URL)
- */
-function resolveUrl(url: string): string {
-  if (url.startsWith("http://") || url.startsWith("https://")) return url;
-  // 상대 경로 (예: /presets/wony/...)인 경우 호스트 추가 + 한글/공백 인코딩
-  const base =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-  const encoded = url
-    .split("/")
-    .map((seg) => encodeURIComponent(seg))
-    .join("/");
-  return `${base}${encoded}`;
+export async function uploadThumbnailForBlobUrl(
+  blobUrl: string,
+  folder = "images",
+  owner?: OwnerScope
+): Promise<string> {
+  const image = await readObjectAsBase64(blobUrl);
+  const thumbnailBuffer = await createThumbnailBuffer(Buffer.from(image.base64, "base64"));
+  return uploadBufferToBlob(thumbnailBuffer, "image/webp", `${folder}/thumbs`, owner);
 }
 
 export async function fetchBlobAsBase64(
   blobUrl: string
 ): Promise<{ base64: string; mimeType: string }> {
-  // 로컬 정적 파일 (예: /presets/wony/wony-01.png) → 파일시스템에서 직접 읽기
-  if (blobUrl.startsWith("/") && !blobUrl.startsWith("//")) {
-    const filePath = path.join(process.cwd(), "public", blobUrl);
-    const buffer = await readFile(filePath);
-    const ext = path.extname(blobUrl).toLowerCase();
-    const mimeType =
-      ext === ".png" ? "image/png" :
-      ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
-      ext === ".webp" ? "image/webp" :
-      ext === ".gif" ? "image/gif" : "image/png";
-    return { base64: buffer.toString("base64"), mimeType };
-  }
-
-  // 외부 URL (Vercel Blob 등) → HTTP fetch
-  const fullUrl = resolveUrl(blobUrl);
-  const res = await fetch(fullUrl);
-  if (!res.ok) throw new Error(`Failed to fetch blob: ${fullUrl}`);
-  const buffer = Buffer.from(await res.arrayBuffer());
-  const mimeType = res.headers.get("content-type") || "image/png";
-  return {
-    base64: buffer.toString("base64"),
-    mimeType,
-  };
+  return readObjectAsBase64(blobUrl);
 }
 
-/**
- * Vercel Blob 삭제
- */
 export async function deleteBlob(blobUrl: string): Promise<void> {
-  if (!blobUrl) return;
-  try {
-    if (blobUrl.startsWith("/uploads/")) {
-      const filePath = path.join(process.cwd(), "public", blobUrl);
-      await unlink(filePath);
-      return;
-    }
-
-    await del(blobUrl);
-  } catch (err) {
-    console.error("Blob delete error:", err);
-  }
+  await deleteObject(blobUrl);
 }

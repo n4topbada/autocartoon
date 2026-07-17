@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { upload } from "@vercel/blob/client";
+import { uploadViaTicket } from "@/lib/client-upload";
 import {
   LuArrowDown,
   LuArrowLeft,
@@ -579,21 +579,24 @@ export default function ShortVideoBuilder() {
       setStatus("완성 영상을 작업 보관함에 저장하고 있습니다.");
       setProgress(93);
       try {
-        const saved = await upload(
-          `shorts/${safeFilePart(title)}-${Date.now()}.mp4`,
-          blob,
-          {
-            access: "public",
-            handleUploadUrl: "/api/shorts/upload",
-            clientPayload: JSON.stringify({
-              projectId: targetProjectId,
-              title: title.trim() || "숏폼 영상",
-              cutCount: cuts.length,
-            }),
-            multipart: blob.size > 5 * 1024 * 1024,
-          }
-        );
-        setOutputUrl(saved.url);
+        const ref = await uploadViaTicket({
+          signEndpoint: "/api/shorts/upload",
+          file: blob,
+          filename: `${safeFilePart(title)}-${Date.now()}.mp4`,
+          contentType: "video/mp4",
+          meta: { projectId: targetProjectId, contentType: "video/mp4" },
+        });
+        await readJson(await fetch("/api/shorts/upload/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ref,
+            projectId: targetProjectId,
+            title: title.trim() || "숏폼 영상",
+            cutCount: cuts.length,
+          }),
+        }));
+        setOutputUrl(ref);
         if (localOutputUrlRef.current) {
           URL.revokeObjectURL(localOutputUrlRef.current);
           localOutputUrlRef.current = null;

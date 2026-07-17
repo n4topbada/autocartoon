@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAppUrl } from "@/lib/app-url";
 import {
   createKakaoOAuthState,
   getKakaoAuthorizeUrl,
@@ -11,7 +12,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   if (!isKakaoLoginConfigured()) {
-    return NextResponse.redirect(new URL("/login?kakao=not_configured", req.url));
+    return NextResponse.redirect(
+      getAppUrl("/login?kakao=not_configured", req.nextUrl.origin)
+    );
   }
 
   const state = createKakaoOAuthState();

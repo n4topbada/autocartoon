@@ -133,7 +133,7 @@ autocartoon/
 | 라우트 | 보호 수준 |
 |--------|-----------|
 | `/login`, `/verify`, `/api/auth/*` | 공개 |
-| `/api/generate`, `/api/background-generate` | `requireAuth()` |
+| `/api/generate` | `requireAuth()` |
 | `/api/admin/*` | `requireAdmin()` |
 | 그 외 모든 라우트 | 로그인 필요 (리다이렉트) |
 
@@ -240,8 +240,8 @@ autocartoon/
 | `/api/auth/verify` | GET | - | 이메일 인증 |
 | `/api/auth/me` | GET | - | 현재 유저 정보 |
 | `/api/auth/logout` | POST | 세션 | 로그아웃 |
-| `/api/generate` | POST | `requireAuth` | 캐릭터 이미지 생성 (크레딧 차감) |
-| `/api/background-generate` | POST | `requireAuth` | 배경 이미지 생성 (크레딧 차감) |
+| `/api/generate` | POST | `requireAuth` | 이미지 생성 (캐릭터·배경 통합, jobKind로 구분, 크레딧 차감) |
+| `/api/background-generate` | POST | — | (폐기됨, HTTP 410) 배경 생성은 `/api/generate`(jobKind=background)로 통합 |
 | `/api/presets` | GET/POST | POST만 인증 | 프리셋 조회(구매한 것만)/생성 |
 | `/api/presets/[id]/thumbnail` | GET | - | 프리셋 썸네일 |
 | `/api/backgrounds` | GET/POST | POST만 인증 | 저장 배경 조회/저장 |
@@ -316,6 +316,7 @@ autocartoon/
 | `SESSION_SECRET` | iron-session 암호화 키 | 서버만 |
 | `RESEND_API_KEY` | 이메일 발송 API 키 | 서버만 |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob 읽기/쓰기 토큰 | 서버만 |
+| `APP_ORIGIN` | Cloud Run 프록시 뒤에서 사용할 공개 사이트 origin | 서버만 |
 | `NEXT_PUBLIC_APP_URL` | 인증 메일 리다이렉트 URL | 클라이언트 |
 
 ---

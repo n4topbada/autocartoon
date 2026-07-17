@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { upload } from "@vercel/blob/client";
+import { uploadViaTicket } from "@/lib/client-upload";
 import {
   LuArrowLeft,
   LuCheck,
@@ -1155,28 +1155,24 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
     setUploading(true);
     setError(null);
     try {
+      // 티켓 발급 → 스토리지 직접 업로드 → confirm(동기적으로 ProjectAsset 생성).
       for (const file of Array.from(files)) {
-        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-        await upload(`studio/${project.id}/${safeName}`, file, {
-          access: "public",
-          handleUploadUrl: "/api/studio/assets/upload",
-          clientPayload: JSON.stringify({ projectId: project.id, name: file.name }),
-          multipart: file.size > 5 * 1024 * 1024,
+        const contentType = file.type || "application/octet-stream";
+        const ref = await uploadViaTicket({
+          signEndpoint: "/api/studio/assets/upload",
+          file,
+          filename: file.name,
+          contentType,
+          meta: { projectId: project.id, contentType },
         });
+        await readJson(await fetch("/api/studio/assets/upload/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ref, projectId: project.id, name: file.name }),
+        }));
       }
-      // ProjectAsset 로우는 Vercel Blob의 onUploadCompleted 웹훅에서 생성되므로
-      // 고정 대기(1.2s)로는 놓칠 수 있다. 새 자산이 나타날 때까지 폴링한다.
-      const expectedCount = files.length;
-      const newAssetCount = (snapshot: StudioProject) =>
-        snapshot.assets.filter((asset) => !existingAssetIds.has(asset.id)).length;
-      let refreshed = await loadProject(project.id);
-      for (let attempt = 0; attempt < 10 && newAssetCount(refreshed) < expectedCount; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        refreshed = await loadProject(project.id);
-      }
-      if (newAssetCount(refreshed) < expectedCount) {
-        setError("업로드 반영이 지연되고 있습니다. 잠시 후 새로고침하면 자산이 표시됩니다.");
-      }
+      // confirm이 동기적으로 자산을 만들므로 한 번의 재조회로 즉시 반영된다.
+      const refreshed = await loadProject(project.id);
       if (mode === "gesture") {
         const addedImageIds = refreshed.assets
           .filter((asset) => asset.kind === "image" && !existingAssetIds.has(asset.id))

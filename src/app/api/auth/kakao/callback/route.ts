@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
+import { getAppUrl } from "@/lib/app-url";
 import { WELCOME_CREDITS } from "@/lib/credit-products";
 import {
   getKakaoUser,
@@ -15,7 +16,7 @@ import { createUserSession } from "@/lib/user-sessions";
 export const dynamic = "force-dynamic";
 
 function redirectAndClearState(req: NextRequest, path: string) {
-  const response = NextResponse.redirect(new URL(path, req.url));
+  const response = NextResponse.redirect(getAppUrl(path, req.nextUrl.origin));
   response.headers.set("Cache-Control", "no-store");
   response.cookies.set(KAKAO_OAUTH_STATE_COOKIE, "", {
     httpOnly: true,

@@ -50,7 +50,8 @@ export async function POST(req: NextRequest) {
     uploaded = await uploadBase64ImageWithThumbnail(
       source.base64,
       image.mimeType || source.mimeType,
-      "presets"
+      "presets",
+      session.userId
     );
 
     const preset = await prisma.$transaction(async (tx) => {

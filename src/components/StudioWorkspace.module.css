@@ -1279,6 +1279,13 @@
   overflow-y: auto;
 }
 
+/* 그리드 행을 명시 배치해, 에러 배너 유무와 무관하게 body가 항상 4번째(유연) 트랙을 차지하도록 한다.
+   (에러가 없으면 3번째 행은 0px로 접힘) → 컷이 많아도 하단이 잘리지 않고 스크롤된다. */
+.videoPlanDialog .dialogHeader { grid-row: 1; }
+.videoPlanToolbar { grid-row: 2; }
+.videoPlanDialog .dialogError { grid-row: 3; }
+.videoPlanBody { grid-row: 4; }
+
 .videoCut {
   min-width: 0;
   overflow: hidden;
@@ -1872,7 +1879,15 @@
     border-top: 1px solid var(--studio-line);
     border-left: 0;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* 2열은 섹션 높이가 제각각이라 큰 빈칸·읽기 흐름 붕괴를 유발한다. 단일 열로 논리 순서 유지. */
+    grid-template-columns: 1fr;
+  }
+
+  /* 좁은 폭에서는 페이지(shell)가 스크롤하므로 패널 자체 스크롤을 끄고 자연 높이로 펼친다(중첩 스크롤 제거). */
+  .projectRail,
+  .inspector {
+    overflow: visible;
+    min-height: auto;
   }
 
   .generateButton {

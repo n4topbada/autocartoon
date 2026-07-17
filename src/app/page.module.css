@@ -1,5 +1,8 @@
 .container {
-  min-height: 100vh;
+  /* 고정 높이 앱 셸: 헤더 높이가 바뀌어도(더보기/줄바꿈) 패널이 남은 공간을 정확히 채워
+     매직넘버(calc(100vh-72px)) 없이 이중 스크롤이 생기지 않는다. 모바일에서는 아래 미디어쿼리로 해제. */
+  height: 100vh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -72,15 +75,63 @@
 
 .tabNav {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
+  row-gap: 6px;
   margin-left: auto;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
+  align-items: center;
+  /* 드롭다운(더보기)이 잘리지 않도록 visible. 좁은 폭에서는 탭이 줄바꿈되어 발견성 유지. */
+  overflow: visible;
 }
 
-.tabNav::-webkit-scrollbar {
-  display: none;
+/* 상단 '더보기' 오버플로 메뉴 */
+.moreWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.moreMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  min-width: 180px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.moreItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+
+.moreItem:hover {
+  background: var(--surface-hover);
+}
+
+.moreItemActive {
+  color: var(--accent);
+  background: var(--surface-hover);
 }
 
 .tab {
@@ -144,6 +195,7 @@
 
 .main {
   flex: 1;
+  min-height: 0;
   display: flex;
   gap: 0;
 }
@@ -155,7 +207,7 @@
   border-right: 1px solid var(--border);
   padding: 24px;
   overflow-y: auto;
-  max-height: calc(100vh - 72px);
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -646,8 +698,10 @@
 
 .presetThumbSingle {
   position: relative;
-  width: 60px;
-  height: 60px;
+  /* 고정 60px 대신 셀 폭에 맞춰 유동(최대 60px). 좁은 사이드바에서 카드가 깨지지 않는다. */
+  width: 100%;
+  max-width: 60px;
+  aspect-ratio: 1;
   border-radius: 8px;
   overflow: hidden;
   background: var(--border);
@@ -961,7 +1015,7 @@
   flex: 1;
   padding: 24px;
   overflow-y: auto;
-  max-height: calc(100vh - 72px);
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1674,6 +1728,8 @@
   .tabNav { gap: 4px; }
   .tab { padding: 5px 10px; font-size: 12px; }
   .sidebar { min-width: 320px; width: 320px; }
+  /* 사이드바가 320px로 줄면 4열 프리셋 카드가 넘치므로 3열로 낮춘다. */
+  .presetGrid { grid-template-columns: repeat(3, 1fr); }
   .gallery { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
   .galleryCard { width: 100%; }
   .galleryImg { width: 100%; height: auto; aspect-ratio: 1; }
@@ -1682,6 +1738,8 @@
 
 /* 모바일 */
 @media (max-width: 768px) {
+  /* 모바일은 고정 셸을 풀고 페이지(window) 스크롤로 되돌린다(패널 세로 적층). */
+  .container { height: auto; overflow: visible; }
   .header { flex-wrap: wrap; padding: 8px 12px; }
   .logo { font-size: 14px; }
   .tabNav { order: 3; width: 100%; justify-content: flex-start; }

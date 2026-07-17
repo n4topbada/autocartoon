@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { upload } from "@vercel/blob/client";
+import { uploadViaTicket } from "@/lib/client-upload";
 import styles from "./CanvasEditor.module.css";
 import {
   LuArrowLeft,
@@ -1895,7 +1895,6 @@ export default function CanvasEditor({
       const blob = await new Promise<Blob>((resolve) =>
         exportCanvas.toBlob((b) => resolve(b!), "image/png")
       );
-      const clientPayload = JSON.stringify({ projectId, cutId });
       const serializedCanvas: SerializedCanvasState | undefined = projectId && cutId
         ? {
             version: 1,
@@ -1904,15 +1903,13 @@ export default function CanvasEditor({
             height: canvasH,
             layers: await Promise.all(layers.map(async (layer, index) => {
               const pixelUrl = layer.canvas
-                ? (await upload(
-                    `edited/layers/${cutId}-${index}-${Date.now()}.png`,
-                    await canvasToBlob(layer.canvas),
-                    {
-                      access: "public",
-                      handleUploadUrl: "/api/images/upload",
-                      clientPayload,
-                    }
-                  )).url
+                ? await uploadViaTicket({
+                    signEndpoint: "/api/images/upload",
+                    file: await canvasToBlob(layer.canvas),
+                    filename: `${cutId}-${index}-${Date.now()}.png`,
+                    contentType: "image/png",
+                    meta: { projectId, cutId, contentType: "image/png" },
+                  })
                 : null;
               return {
                 id: layer.id,
@@ -1934,18 +1931,19 @@ export default function CanvasEditor({
             })),
           }
         : undefined;
-      const uploaded = await upload(`edited/canvas-${Date.now()}.png`, blob, {
-        access: "public",
-        handleUploadUrl: "/api/images/upload",
-        clientPayload,
-        multipart: blob.size > 5 * 1024 * 1024,
+      const uploadedRef = await uploadViaTicket({
+        signEndpoint: "/api/images/upload",
+        file: blob,
+        filename: `canvas-${Date.now()}.png`,
+        contentType: "image/png",
+        meta: { projectId, cutId, contentType: "image/png" },
       });
 
       const res = await fetch("/api/images/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          blobUrl: uploaded.url,
+          blobUrl: uploadedRef,
           mimeType: "image/png",
           ...(projectId ? { projectId } : {}),
           ...(cutId ? { cutId } : {}),

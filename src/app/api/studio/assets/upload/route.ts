@@ -1,90 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
-import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { AuthError, requireAuth } from "@/lib/auth";
-import { uploadThumbnailForBlobUrl } from "@/lib/blob";
 import { prisma } from "@/lib/prisma";
+import { createUploadTicket } from "@/lib/storage";
 
-interface UploadTokenPayload {
-  userId: string;
-  projectId: string;
-  name: string;
-}
-
-const ALLOWED_CONTENT_TYPES = [
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-  "video/mp4",
-];
+// 스튜디오 자산 업로드 티켓 발급. 저장 후 confirm에서 썸네일 생성 + 자산 등록.
+const ALLOWED_CONTENT_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif", "video/mp4"];
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as HandleUploadBody;
-    const response = await handleUpload({
-      body,
-      request: req,
-      onBeforeGenerateToken: async (_pathname, clientPayload) => {
-        const session = await requireAuth();
-        const payload = JSON.parse(clientPayload || "{}") as Partial<UploadTokenPayload>;
-        if (!payload.projectId) throw new Error("projectId가 필요합니다.");
-        const project = await prisma.creativeProject.findFirst({
-          where: { id: payload.projectId, userId: session.userId },
-          select: { id: true },
-        });
-        if (!project) throw new Error("프로젝트를 찾을 수 없습니다.");
-        return {
-          allowedContentTypes: ALLOWED_CONTENT_TYPES,
-          maximumSizeInBytes: 100 * 1024 * 1024,
-          addRandomSuffix: true,
-          tokenPayload: JSON.stringify({
-            userId: session.userId,
-            projectId: project.id,
-            name: String(payload.name || "업로드 자산").slice(0, 160),
-          } satisfies UploadTokenPayload),
-        };
-      },
-      onUploadCompleted: async ({ blob, tokenPayload }) => {
-        const payload = JSON.parse(tokenPayload || "{}") as UploadTokenPayload;
-        const mimeType = blob.contentType || "application/octet-stream";
-        let thumbnailUrl: string | undefined;
-        if (mimeType.startsWith("image/")) {
-          try {
-            thumbnailUrl = await uploadThumbnailForBlobUrl(blob.url, "studio-assets");
-          } catch (error) {
-            console.warn("Studio asset thumbnail failed:", error);
-          }
-        }
-        let sizeBytes: number | undefined;
-        try {
-          const head = await fetch(blob.url, { method: "HEAD" });
-          const len = Number(head.headers.get("content-length") || "0");
-          if (len > 0) sizeBytes = len;
-        } catch {
-          /* 크기 측정 실패는 무시(저장용량 표시는 근사치) */
-        }
-        await prisma.projectAsset.create({
-          data: {
-            projectId: payload.projectId,
-            kind: mimeType.startsWith("video/") ? "video" : "image",
-            name: payload.name,
-            blobUrl: blob.url,
-            thumbnailUrl,
-            mimeType,
-            sizeBytes,
-          },
-        });
-      },
+    const session = await requireAuth();
+    const body = (await req.json().catch(() => ({}))) as {
+      projectId?: unknown;
+      contentType?: unknown;
+    };
+    const projectId = typeof body.projectId === "string" ? body.projectId : "";
+    const contentType = typeof body.contentType === "string" ? body.contentType : "";
+    if (!projectId) return NextResponse.json({ error: "projectId가 필요합니다." }, { status: 400 });
+    if (!ALLOWED_CONTENT_TYPES.includes(contentType)) {
+      return NextResponse.json({ error: "지원하지 않는 파일 형식입니다." }, { status: 400 });
+    }
+    const project = await prisma.creativeProject.findFirst({
+      where: { id: projectId, userId: session.userId },
+      select: { id: true },
     });
-    return NextResponse.json(response);
+    if (!project) return NextResponse.json({ error: "프로젝트를 찾을 수 없습니다." }, { status: 404 });
+
+    const ticket = await createUploadTicket({
+      owner: session.userId,
+      folder: "studio-assets",
+      mimeType: contentType,
+      maxBytes: 100 * 1024 * 1024,
+    });
+    return NextResponse.json(ticket);
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Studio upload error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "자산 업로드를 시작하지 못했습니다." },
-      { status: 400 }
-    );
+    console.error("Studio upload sign error:", error);
+    return NextResponse.json({ error: "자산 업로드를 시작하지 못했습니다." }, { status: 400 });
   }
 }

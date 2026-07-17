@@ -36,29 +36,10 @@ function parseServiceAccountCredentials(): Record<string, unknown> | undefined {
 }
 
 async function getGoogleAuthOptions(): Promise<GoogleAuthOptions> {
+  // 서비스계정 JSON(비상/특수 환경)만 명시 처리하고, 그 외에는 ADC를 사용한다.
+  // Cloud Run/로컬 모두 붙은 서비스계정 또는 gcloud ADC로 인증된다(키 파일 불필요).
   const credentials = parseServiceAccountCredentials();
   if (credentials) return { credentials };
-
-  const projectNumber = process.env.GCP_PROJECT_NUMBER;
-  const serviceAccountEmail = process.env.GCP_SERVICE_ACCOUNT_EMAIL;
-  const poolId = process.env.GCP_WORKLOAD_IDENTITY_POOL_ID;
-  const providerId = process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID;
-  if (projectNumber && serviceAccountEmail && poolId && providerId) {
-    // These modules inspect runtime process state, so load them only inside a request.
-    const { ExternalAccountClient } = await import("google-auth-library");
-    const { getVercelOidcToken } = await import("@vercel/oidc");
-    const authClient = ExternalAccountClient.fromJSON({
-      type: "external_account",
-      audience: `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`,
-      subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
-      token_url: "https://sts.googleapis.com/v1/token",
-      service_account_impersonation_url: `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
-      subject_token_supplier: { getSubjectToken: () => getVercelOidcToken() },
-    });
-    if (!authClient) throw new Error("Could not create a Google auth client from Vercel OIDC");
-    return { authClient, projectId: process.env.GOOGLE_CLOUD_PROJECT };
-  }
-
   return {};
 }
 

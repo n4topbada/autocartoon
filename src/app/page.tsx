@@ -29,6 +29,7 @@ import {
   LuFilm,
   LuPersonStanding,
   LuUsers,
+  LuChevronDown,
 } from "react-icons/lu";
 import { resizeFromFile, fetchImageFromUrl } from "@/lib/image-resize";
 import PromptInput from "@/components/PromptInput";
@@ -254,6 +255,8 @@ interface UserOption {
 export default function Home() {
   const { user, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("character");
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const [charGroups, setCharGroups] = useState<CharacterGroupData[]>([]);
   const [ungroupedPresets, setUngroupedPresets] = useState<Preset[]>([]);
   const [presetsLoading, setPresetsLoading] = useState(true);
@@ -342,6 +345,25 @@ export default function Home() {
   const [allUsers, setAllUsers] = useState<UserOption[]>([]);
   const [viewingUserId, setViewingUserId] = useState<string | null>(null);
   const isAdmin = user?.role === "admin";
+
+  // 상단 '더보기' 드롭다운: 바깥 클릭·Esc로 닫는다.
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+    const onPointer = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMoreMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [moreMenuOpen]);
 
   // 즐겨찾기 필터 + 삭제 확인
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
@@ -1137,10 +1159,6 @@ export default function Home() {
             <LuImage size={14} />
             배경 생성
           </button>
-          <Link className={styles.tab} href="/studio?mode=gesture">
-            <LuPersonStanding size={14} />
-            제스처 생성
-          </Link>
           <button
             className={`${styles.tab} ${showCharacterLibrary ? styles.tabActive : ""}`}
             onClick={() => setShowCharacterLibrary(true)}
@@ -1156,31 +1174,79 @@ export default function Home() {
             <LuFilm size={14} />
             숏폼 제작
           </Link>
-          <Link className={styles.tab} href="/archive">
-            <LuImage size={14} />
-            작업 보관함
-          </Link>
-          <button
-            className={`${styles.tab} ${activeTab === "board" ? styles.tabActive : ""}`}
-            onClick={() => setActiveTab("board")}
-          >
-            <LuLayoutList size={14} />
-            게시판
-          </button>
-          <button
-            className={`${styles.tab} ${activeTab === "contents" ? styles.tabActive : ""}`}
-            onClick={() => setActiveTab("contents")}
-          >
-            <LuLayoutList size={14} />
-            My Contents
-          </button>
-          <button
-            className={`${styles.tab} ${activeTab === "settings" ? styles.tabActive : ""}`}
-            onClick={() => setActiveTab("settings")}
-          >
-            <LuSettings size={14} />
-            설정
-          </button>
+          {/* 보조 메뉴는 '더보기'로 접어 상단바 과밀을 막는다(기능은 그대로 유지). */}
+          <div className={styles.moreWrap} ref={moreMenuRef}>
+            <button
+              type="button"
+              className={`${styles.tab} ${
+                ["board", "contents", "settings"].includes(activeTab) ? styles.tabActive : ""
+              }`}
+              onClick={() => setMoreMenuOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={moreMenuOpen}
+            >
+              <LuChevronDown size={14} />
+              더보기
+            </button>
+            {moreMenuOpen && (
+              <div className={styles.moreMenu} role="menu">
+                <Link
+                  className={styles.moreItem}
+                  href="/studio?mode=gesture"
+                  role="menuitem"
+                  onClick={() => setMoreMenuOpen(false)}
+                >
+                  <LuPersonStanding size={15} />
+                  제스처 생성
+                </Link>
+                <Link
+                  className={styles.moreItem}
+                  href="/archive"
+                  role="menuitem"
+                  onClick={() => setMoreMenuOpen(false)}
+                >
+                  <LuImage size={15} />
+                  작업 보관함
+                </Link>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={`${styles.moreItem} ${activeTab === "board" ? styles.moreItemActive : ""}`}
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    setActiveTab("board");
+                  }}
+                >
+                  <LuLayoutList size={15} />
+                  게시판
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={`${styles.moreItem} ${activeTab === "contents" ? styles.moreItemActive : ""}`}
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    setActiveTab("contents");
+                  }}
+                >
+                  <LuLayoutList size={15} />
+                  My Contents
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={`${styles.moreItem} ${activeTab === "settings" ? styles.moreItemActive : ""}`}
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    setActiveTab("settings");
+                  }}
+                >
+                  <LuSettings size={15} />
+                  설정
+                </button>
+              </div>
+            )}
+          </div>
           {/* Instagram 탭: Meta App 설정 후 주석 해제 (INSTAGRAM_SETUP.md 참조) */}
         </nav>
         <div className={styles.headerRight}>

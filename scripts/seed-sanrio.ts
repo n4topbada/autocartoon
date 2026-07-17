@@ -3,7 +3,7 @@
  * 실행: npx tsx scripts/seed-sanrio.ts
  */
 import { PrismaClient } from "@prisma/client";
-import { put } from "@vercel/blob";
+import { uploadBufferToBlob } from "../src/lib/blob";
 
 const prisma = new PrismaClient();
 
@@ -66,7 +66,7 @@ const CHARACTERS = [
   },
 ];
 
-async function downloadAndUpload(url: string, name: string, idx: number): Promise<string> {
+async function downloadAndUpload(url: string): Promise<string> {
   console.log(`  Downloading: ${url}`);
   const res = await fetch(url, {
     headers: {
@@ -78,13 +78,10 @@ async function downloadAndUpload(url: string, name: string, idx: number): Promis
   const buffer = Buffer.from(await res.arrayBuffer());
   const contentType = res.headers.get("content-type") || "image/png";
 
-  const filename = `presets/sanrio-${name.toLowerCase().replace(/\s+/g, "-")}-${idx}-${Date.now()}.png`;
-  const blob = await put(filename, buffer, {
-    access: "public",
-    contentType,
-  });
-  console.log(`  Uploaded: ${blob.url}`);
-  return blob.url;
+  // 공개 프리셋 자료이므로 owner="public" 스코프로 저장한다.
+  const ref = await uploadBufferToBlob(buffer, contentType, "presets", "public");
+  console.log(`  Uploaded: ${ref}`);
+  return ref;
 }
 
 async function main() {
@@ -133,7 +130,7 @@ async function main() {
     const blobUrls: string[] = [];
     for (let j = 0; j < char.images.length; j++) {
       try {
-        const url = await downloadAndUpload(char.images[j], char.name, j);
+        const url = await downloadAndUpload(char.images[j]);
         blobUrls.push(url);
       } catch (err) {
         console.error(`  Failed: ${(err as Error).message}`);

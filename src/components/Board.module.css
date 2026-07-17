@@ -255,7 +255,9 @@
 
 .articleMeta {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
+  row-gap: 8px;
   font-size: 12px;
   color: var(--text-dim);
   margin-bottom: 20px;
@@ -400,6 +402,10 @@
   color: var(--accent);
   font-size: 13px;
   text-decoration: none;
+  /* 공백 없는 긴 URL이 박스를 넘지 않고 줄바꿈되게 한다. */
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .linkUrl:hover {
@@ -566,6 +572,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   padding: 6px 10px;
   background: var(--bg);
   border-radius: 4px;
@@ -574,7 +581,16 @@
   margin-bottom: 4px;
 }
 
+/* 긴 URL이 삭제 버튼을 밀어내지 않도록 링크 텍스트를 말줄임 처리한다. */
+.linkItem span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .linkItem button {
+  flex-shrink: 0;
   background: none;
   border: none;
   color: var(--danger);

@@ -1,4 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { getAppUrl } from "@/lib/app-url";
 
 const KAKAO_AUTHORIZE_URL = "https://kauth.kakao.com/oauth/authorize";
 const KAKAO_TOKEN_URL = "https://kauth.kakao.com/oauth/token";
@@ -37,7 +38,7 @@ export function isKakaoLoginConfigured() {
 }
 
 export function getKakaoRedirectUri(origin: string) {
-  return `${origin.replace(/\/$/, "")}/api/auth/kakao/callback`;
+  return getAppUrl("/api/auth/kakao/callback", origin);
 }
 
 export function createKakaoOAuthState() {

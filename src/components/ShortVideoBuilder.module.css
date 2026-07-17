@@ -7,7 +7,12 @@
   --short-muted: #9a9a93;
   --short-teal: #50bca9;
   --short-red: #df6259;
-  min-height: 100dvh;
+  /* 고정 높이 flex 셸: 에러 배너가 떠도 워크스페이스가 남은 높이를 정확히 채워
+     페이지 스크롤 + 내부 열 스크롤이 겹치는 이중 스크롤을 없앤다(모바일에서 아래 미디어쿼리로 해제). */
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background: var(--short-bg);
   color: var(--short-text);
 }
@@ -129,9 +134,12 @@
 }
 
 .workspace {
-  min-height: calc(100dvh - 58px);
+  /* 매직넘버(100dvh-58px) 대신 남은 공간을 채운다. 단일 행을 컨테이너 높이로 묶어 각 열이 자체 스크롤. */
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 260px minmax(500px, 1fr) 340px;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .sourcePanel,
@@ -772,7 +780,8 @@
 
 @media (max-width: 1180px) {
   .workspace {
-    grid-template-columns: 220px minmax(430px, 1fr) 300px;
+    /* 가운데 열을 0까지 줄 수 있게 해 901~950px 사이 가로 스크롤(데드밴드)을 없앤다. */
+    grid-template-columns: 220px minmax(0, 1fr) 300px;
   }
 
   .generateArea {
@@ -781,8 +790,17 @@
 }
 
 @media (max-width: 900px) {
+  /* 좁은 폭: 고정 셸 해제 → 결과 패널이 아래로 접히며 페이지(window) 스크롤로 전환. */
+  .shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
   .workspace {
     grid-template-columns: 210px minmax(0, 1fr);
+    grid-template-rows: auto;
+    min-height: 0;
   }
 
   .outputPanel {

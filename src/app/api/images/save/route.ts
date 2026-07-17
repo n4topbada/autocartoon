@@ -5,6 +5,7 @@ import {
   uploadThumbnailForBlobUrl,
 } from "@/lib/blob";
 import { prisma } from "@/lib/prisma";
+import { refOwnedBy, statObject } from "@/lib/storage";
 import type { Prisma } from "@prisma/client";
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -17,15 +18,6 @@ const ASPECT_SIZES: Record<string, { width: number; height: number }> = {
   "9:16": { width: 1080, height: 1920 },
   "16:9": { width: 1920, height: 1080 },
 };
-
-function isVercelBlobUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" && /\.blob\.vercel-storage\.com$/i.test(url.hostname);
-  } catch {
-    return false;
-  }
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -90,28 +82,31 @@ export async function POST(req: NextRequest) {
       : "image/png";
 
     if (providedBlobUrl) {
-      if (!isVercelBlobUrl(providedBlobUrl)) {
-        return NextResponse.json({ error: "허용되지 않은 Blob URL입니다." }, { status: 400 });
+      // 업로드 티켓으로 방금 올린 본인 소유 객체만 허용(경로 스코프 u/{userId}/ 검증).
+      if (!refOwnedBy(providedBlobUrl, session.userId)) {
+        return NextResponse.json({ error: "허용되지 않은 파일입니다." }, { status: 400 });
       }
-      const metadata = await fetch(providedBlobUrl, { method: "HEAD" });
-      const contentType = metadata.headers.get("content-type")?.split(";")[0] || "";
-      const contentLength = Number(metadata.headers.get("content-length") || "0");
-      if (!metadata.ok || !ALLOWED_MIME_TYPES.has(contentType)) {
-        return NextResponse.json({ error: "올바른 이미지 Blob이 아닙니다." }, { status: 400 });
+      const stat = await statObject(providedBlobUrl);
+      if (!stat.exists) {
+        return NextResponse.json({ error: "업로드된 이미지를 찾을 수 없습니다." }, { status: 404 });
       }
-      if (contentLength > MAX_IMAGE_BYTES) {
+      const contentType = (stat.contentType || "").split(";")[0] || mimeType;
+      if (!ALLOWED_MIME_TYPES.has(contentType)) {
+        return NextResponse.json({ error: "올바른 이미지가 아닙니다." }, { status: 400 });
+      }
+      if (stat.sizeBytes && stat.sizeBytes > MAX_IMAGE_BYTES) {
         return NextResponse.json({ error: "이미지는 20MB 이하여야 합니다." }, { status: 413 });
       }
       blobUrl = providedBlobUrl;
       mimeType = contentType;
-      sizeBytes = contentLength > 0 ? contentLength : null;
-      thumbnailUrl = await uploadThumbnailForBlobUrl(blobUrl, "edited");
+      sizeBytes = stat.sizeBytes ?? null;
+      thumbnailUrl = await uploadThumbnailForBlobUrl(blobUrl, "edited", session.userId);
     } else {
       if (base64!.length > Math.ceil((MAX_IMAGE_BYTES * 4) / 3) + 4) {
         return NextResponse.json({ error: "이미지는 20MB 이하여야 합니다." }, { status: 413 });
       }
       sizeBytes = Buffer.byteLength(base64!, "base64");
-      const uploaded = await uploadBase64ImageWithThumbnail(base64!, mimeType, "edited");
+      const uploaded = await uploadBase64ImageWithThumbnail(base64!, mimeType, "edited", session.userId);
       blobUrl = uploaded.blobUrl;
       thumbnailUrl = uploaded.thumbnailUrl;
     }

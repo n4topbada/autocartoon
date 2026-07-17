@@ -31,7 +31,7 @@ function validatePresetImages(images: { base64: string; mimeType: string }[] | u
 }
 
 function isBlobUnavailableError(error: unknown) {
-  return error instanceof Error && /Vercel Blob|store has been suspended|Blob/i.test(error.message);
+  return error instanceof Error && /GCS_BUCKET|storage|bucket|Blob|permission/i.test(error.message);
 }
 
 export async function GET(req: NextRequest) {
@@ -167,7 +167,7 @@ export async function POST(req: NextRequest) {
 
     // Blob에 업로드
     const uploads = await Promise.all(
-      images.map((img) => uploadBase64ImageWithThumbnail(img.base64, img.mimeType, "presets"))
+      images.map((img) => uploadBase64ImageWithThumbnail(img.base64, img.mimeType, "presets", session.userId))
     );
 
     const alias = `${name.trim()}_${Date.now()}`;

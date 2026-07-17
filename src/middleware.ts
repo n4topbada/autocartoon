@@ -19,7 +19,12 @@ function isPublicRoute(pathname: string) {
   return (
     pathname.startsWith("/login") ||
     pathname.startsWith("/verify") ||
-    pathname.startsWith("/api/auth")
+    pathname.startsWith("/api/auth") ||
+    // 미디어 게이트웨이는 자체적으로 객체별 소유권·공개여부를 검사하므로
+    // 전역 401 게이트를 우회한다(공개 객체는 비로그인도 조회 가능).
+    pathname.startsWith("/api/media/") ||
+    // Cloud Tasks 잡 핸들러는 세션이 없고 공유 토큰으로 자체 인증한다.
+    pathname.startsWith("/api/tasks/")
   );
 }
 
@@ -85,5 +90,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.well-known/workflow/).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
