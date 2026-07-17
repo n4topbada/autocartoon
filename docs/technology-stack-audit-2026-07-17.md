@@ -195,6 +195,8 @@ PostgreSQL 16은 커뮤니티 지원이 2028-11-09까지 이어지고, Cloud SQL
 
 ## 7. Cloud Run과 Cloud Tasks
 
+Cloud SQL 상향과 web/worker 분리의 실측 근거, 비용 및 단계별 전환안은 [GCP 데이터베이스 상향 및 생성 Worker 분리 상세 보고서](./gcp-runtime-scaling-plan-2026-07-17.md)에 정리했다.
+
 현재 Cloud Run 한 서비스가 웹 요청과 Sharp/문서/AI 작업을 함께 처리하면서 다음 자원 설정을 사용한다.
 
 - 1 CPU
