@@ -53,6 +53,8 @@ API Route Handler는 92개다. `src/middleware.ts`가 인증을 먼저 검사하
 
 Veo는 시작 태스크와 지연 폴 태스크를 분리한다. 로컬에서는 같은 상태/원장 코드를 재사용해 inline으로 실행한다.
 
+운영 `wony-jobs` 큐는 동시 10건, 초당 5건으로 제한하며 최대 5회, 10~300초 지수 백오프로 재시도한다. 외부 AI 장애 때 기본값 수준의 대량 재시도로 비용과 Cloud SQL 부하가 폭증하지 않게 유지한다.
+
 ## Credits
 
 - 상품과 작업 비용은 `src/lib/credit-products.ts`가 단일 기준이다.

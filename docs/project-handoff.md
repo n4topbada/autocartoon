@@ -24,7 +24,7 @@ GitHub: `https://github.com/n4topbada/autocartoon`
 | GCP project | `wonybananabot` |
 | Cloud Run | `wonybananabot`, `asia-northeast3` |
 | Cloud SQL | `wony-postgres`, PostgreSQL 16 |
-| Cloud Tasks | `wony-jobs`, `asia-northeast3` |
+| Cloud Tasks | `wony-jobs`, `asia-northeast3`; 동시 10, 초당 5, 최대 5회 재시도 |
 | GCS | `wonybananabot-media`, private |
 | Runtime service account | `wony-run@wonybananabot.iam.gserviceaccount.com` |
 | DB secret | Secret Manager `database-url` 참조 |
@@ -76,6 +76,7 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 - 게시판 좋아요 실패 롤백
 - Google Storage 의존성 보안 경고 제거
 - 문서를 Cloud Run·Cloud SQL·GCS·Cloud Tasks 기준으로 전면 정정
+- Cloud Tasks를 동시 10건·초당 5건·최대 5회 재시도로 제한해 장애 시 비용과 DB 부하 폭증 방지
 
 ## 5. 레퍼런스 대비 남은 항목
 
@@ -110,6 +111,7 @@ npx tsc --noEmit
 npx prisma validate
 $env:BUILD_TARGET='cloudrun'; npm run build
 gcloud run deploy wonybananabot --source . --project=wonybananabot --region=asia-northeast3 --update-env-vars=APP_ORIGIN=https://wonybananabot-272254743773.asia-northeast3.run.app --quiet
+gcloud tasks queues update wony-jobs --project=wonybananabot --location=asia-northeast3 --max-concurrent-dispatches=10 --max-dispatches-per-second=5 --max-attempts=5 --min-backoff=10s --max-backoff=300s --max-doublings=5
 ```
 
 배포 후 확인:
