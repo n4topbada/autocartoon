@@ -1,0 +1,8 @@
+{
+  "name": "wonybananabot-cloud-tasks-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "@google-cloud/tasks": "6.2.3"
+  }
+}

@@ -18,6 +18,12 @@ ENV BUILD_TARGET=cloudrun
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npx prisma generate && npm run build
 
+# Next standalone 추적에서 제외되는 Cloud Tasks와 전이 의존성만 별도로 설치한다.
+FROM node:24-slim AS cloud-tasks-runtime
+WORKDIR /runtime
+COPY docker/cloud-tasks/package.json docker/cloud-tasks/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+
 FROM node:24-slim AS runner
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
@@ -32,9 +38,8 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 # GAPIC 클라이언트는 설정·proto JSON을 런타임에 경로로 읽으므로 Next standalone
-# 추적만으로는 파일이 누락될 수 있다. 패키지를 온전히 복사하고 빌드 중 로드를 검증한다.
-COPY --from=builder /app/node_modules/@google-cloud/tasks ./node_modules/@google-cloud/tasks
+# 추적만으로는 파일이 누락될 수 있다. 최소 런타임 묶음을 병합하고 빌드 중 로드를 검증한다.
+COPY --from=cloud-tasks-runtime /runtime/node_modules ./node_modules
 RUN node --input-type=module -e "import('@google-cloud/tasks').then(({ CloudTasksClient }) => { new CloudTasksClient(); })"
 EXPOSE 8080
 CMD ["node", "server.js"]
-
