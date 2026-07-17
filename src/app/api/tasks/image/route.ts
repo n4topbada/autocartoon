@@ -3,7 +3,7 @@ import { verifyTasksToken } from "@/lib/job-engine";
 import { runImageGenerationJob } from "@/lib/job-runner";
 
 // Cloud Tasks → Cloud Run 이미지 잡 핸들러. 공유 토큰으로 인증한다.
-export const maxDuration = 600;
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   if (!verifyTasksToken(req)) {
