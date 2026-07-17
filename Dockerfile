@@ -40,6 +40,7 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 # GAPIC 클라이언트는 설정·proto JSON을 런타임에 경로로 읽으므로 Next standalone
 # 추적만으로는 파일이 누락될 수 있다. 최소 런타임 묶음을 병합하고 빌드 중 로드를 검증한다.
 COPY --from=cloud-tasks-runtime /runtime/node_modules ./node_modules
-RUN node --input-type=module -e "import('@google-cloud/tasks').then(({ CloudTasksClient }) => { new CloudTasksClient(); })"
+RUN test -f /app/node_modules/@google-cloud/tasks/build/esm/src/v2/cloud_tasks_client_config.json \
+  && node --input-type=module -e "import('@google-cloud/tasks').then(({ CloudTasksClient }) => { new CloudTasksClient(); })"
 EXPOSE 8080
 CMD ["node", "server.js"]
