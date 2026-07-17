@@ -11,9 +11,13 @@ import { runImageGenerationJob, runVideoInline } from "./job-runner";
 
 export type JobEngine = "cloudtasks" | "inline";
 
+function tasksAuthToken(): string | undefined {
+  return process.env.TASKS_AUTH_TOKEN?.trim() || undefined;
+}
+
 export function getJobEngine(): JobEngine {
   return process.env.CLOUD_RUN_BASE_URL &&
-    process.env.TASKS_AUTH_TOKEN &&
+    tasksAuthToken() &&
     process.env.GOOGLE_CLOUD_PROJECT
     ? "cloudtasks"
     : "inline";
@@ -38,7 +42,7 @@ function taskConfig() {
   const location = process.env.CLOUD_TASKS_LOCATION || "asia-northeast3";
   const queue = process.env.CLOUD_TASKS_QUEUE || "wony-jobs";
   const baseUrl = process.env.CLOUD_RUN_BASE_URL?.replace(/\/+$/, "");
-  const token = process.env.TASKS_AUTH_TOKEN;
+  const token = tasksAuthToken();
   if (!project || !baseUrl || !token) {
     throw new Error(
       "Cloud Tasks 설정이 필요합니다 (GOOGLE_CLOUD_PROJECT, CLOUD_RUN_BASE_URL, TASKS_AUTH_TOKEN)."
@@ -105,7 +109,7 @@ export async function scheduleVideoPoll(
 
 /** Cloud Tasks가 붙인 공유 토큰 검증. 태스크 라우트에서 호출. */
 export function verifyTasksToken(req: Request): boolean {
-  const token = process.env.TASKS_AUTH_TOKEN;
+  const token = tasksAuthToken();
   return Boolean(token) && req.headers.get("x-tasks-token") === token;
 }
 
