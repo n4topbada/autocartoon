@@ -14,6 +14,7 @@ import {
   getVideoModel,
 } from "@/lib/platform-ai";
 import { prisma } from "@/lib/prisma";
+import { logError, logEvent } from "@/lib/observability";
 import { Prisma } from "@prisma/client";
 
 const ALLOWED_DURATIONS = new Set([4, 6, 8]);
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
     const session = await requireAuth();
     // 시간 초과로 멈춘 작업을 실패+환불 처리(멱등)한 뒤 목록을 조회한다.
     await reapExpiredJobsForUser(session.userId).catch((error) => {
-      console.error("Job reaper failed:", error);
+      logError("generation.reaper.failed", "Expired job reaper failed", error, {}, req);
     });
     const status = req.nextUrl.searchParams.get("status");
     const kind = req.nextUrl.searchParams.get("kind");
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Job list error:", error);
+    logError("generation.jobs.list_failed", "Generation job list failed", error, {}, req);
     return NextResponse.json({ error: "생성 작업을 불러오지 못했습니다." }, { status: 500 });
   }
 }
@@ -191,6 +192,14 @@ export async function POST(req: NextRequest) {
         data: { runId: run.runId },
         include: { artifacts: true },
       });
+      logEvent("NOTICE", "generation.request.accepted", "Video generation request accepted", {
+        jobId: job.id,
+        jobKind: "video",
+        provider: job.provider,
+        model: job.model,
+        durationSeconds,
+        resolution,
+      }, req);
       return NextResponse.json({ job: jobToResponse(queued) }, { status: 202 });
     } catch (error) {
       await failGenerationJob(job.id, error);
@@ -200,7 +209,9 @@ export async function POST(req: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Video job start error:", error);
+    logError("generation.request.failed", "Video generation request failed", error, {
+      jobKind: "video",
+    }, req);
     return NextResponse.json(
       { error: getPublicPlatformAIError(error, "영상 작업을 시작하지 못했습니다.") },
       { status: 500 }

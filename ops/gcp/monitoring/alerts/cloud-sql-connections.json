@@ -1,0 +1,34 @@
+{
+  "displayName": "Wony Prototype - Cloud SQL Connections",
+  "combiner": "OR",
+  "enabled": true,
+  "conditions": [
+    {
+      "displayName": "Twenty or more connections for five minutes",
+      "conditionThreshold": {
+        "filter": "resource.type=\"cloudsql_database\" AND resource.labels.database_id=\"wonybananabot:wony-postgres\" AND metric.type=\"cloudsql.googleapis.com/database/postgresql/num_backends\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 19,
+        "duration": "300s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "60s",
+            "perSeriesAligner": "ALIGN_MAX",
+            "crossSeriesReducer": "REDUCE_MAX"
+          }
+        ],
+        "trigger": {
+          "count": 1
+        }
+      }
+    }
+  ],
+  "documentation": {
+    "content": "Cloud SQL has sustained connection pressure. This is a diagnostic signal for the prototype, not an automatic resize action.",
+    "mimeType": "text/markdown"
+  },
+  "userLabels": {
+    "environment": "prototype",
+    "managed_by": "repository"
+  }
+}

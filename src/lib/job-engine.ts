@@ -1,5 +1,6 @@
 import type { CloudTasksClient } from "@google-cloud/tasks";
 import { runImageGenerationJob, runVideoInline } from "./job-runner";
+import { logError, logEvent } from "./observability";
 
 /**
  * 비동기 잡 디스패치 (GCP 단일).
@@ -59,30 +60,56 @@ async function enqueue(
   const { project, location, queue, baseUrl, token } = taskConfig();
   const client = await getTasks();
   const parent = client.queuePath(project, location, queue);
-  const [response] = await client.createTask({
-    parent,
-    task: {
-      httpRequest: {
-        httpMethod: "POST",
-        url: `${baseUrl}${path}`,
-        headers: { "Content-Type": "application/json", "X-Tasks-Token": token },
-        body: Buffer.from(JSON.stringify(body)).toString("base64"),
+  const jobId = typeof body.jobId === "string" ? body.jobId : undefined;
+  const attempt = typeof body.attempt === "number" ? body.attempt : undefined;
+
+  try {
+    const [response] = await client.createTask({
+      parent,
+      task: {
+        httpRequest: {
+          httpMethod: "POST",
+          url: `${baseUrl}${path}`,
+          headers: { "Content-Type": "application/json", "X-Tasks-Token": token },
+          body: Buffer.from(JSON.stringify(body)).toString("base64"),
+        },
+        ...(delaySeconds > 0
+          ? { scheduleTime: { seconds: Math.floor(Date.now() / 1000) + delaySeconds } }
+          : {}),
       },
-      ...(delaySeconds > 0
-        ? { scheduleTime: { seconds: Math.floor(Date.now() / 1000) + delaySeconds } }
-        : {}),
-    },
-  });
-  return response.name ?? "";
+    });
+    const taskName = response.name ?? "";
+    if (path !== "/api/tasks/video-poll" || attempt === undefined || attempt % 10 === 0) {
+      logEvent("INFO", "generation.task.enqueued", "Generation task enqueued", {
+        jobId,
+        taskName,
+        taskPath: path,
+        delaySeconds,
+        attempt,
+      });
+    }
+    return taskName;
+  } catch (error) {
+    logError("generation.task.enqueue_failed", "Generation task enqueue failed", error, {
+      jobId,
+      taskPath: path,
+      delaySeconds,
+      attempt,
+    });
+    throw error;
+  }
 }
 
 export async function dispatchImageJob(jobId: string): Promise<{ runId: string }> {
   if (getJobEngine() === "cloudtasks") {
     return { runId: await enqueue("/api/tasks/image", { jobId }) };
   }
+  logEvent("NOTICE", "generation.image.inline_started", "Inline image job started", {
+    jobId,
+  });
   // 로컬: 같은 프로세스에서 백그라운드 실행(요청은 즉시 202로 반환).
   void runImageGenerationJob(jobId).catch((error) =>
-    console.error("Inline image job failed:", error)
+    logError("generation.image.inline_failed", "Inline image job failed", error, { jobId })
   );
   return { runId: "inline" };
 }
@@ -91,8 +118,11 @@ export async function dispatchVideoJob(jobId: string): Promise<{ runId: string }
   if (getJobEngine() === "cloudtasks") {
     return { runId: await enqueue("/api/tasks/video", { jobId }) };
   }
+  logEvent("NOTICE", "generation.video.inline_started", "Inline video job started", {
+    jobId,
+  });
   void runVideoInline(jobId).catch((error) =>
-    console.error("Inline video job failed:", error)
+    logError("generation.video.inline_failed", "Inline video job failed", error, { jobId })
   );
   return { runId: "inline" };
 }

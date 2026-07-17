@@ -14,6 +14,7 @@ import {
   getPlatformAIProvider,
 } from "@/lib/platform-ai";
 import { dispatchImageJob } from "@/lib/job-engine";
+import { logError, logEvent } from "@/lib/observability";
 import { Prisma } from "@prisma/client";
 
 const GENERATION_MODES = new Set<GenerationMode>([
@@ -573,6 +574,14 @@ export async function POST(req: NextRequest) {
         data: { runId: run.runId },
         include: { artifacts: true },
       });
+      logEvent("NOTICE", "generation.request.accepted", "Image generation request accepted", {
+        jobId: job.id,
+        jobKind: input.jobKind,
+        mode: input.mode,
+        count: input.count,
+        provider: job.provider,
+        model: job.model,
+      }, req);
       return NextResponse.json({ job: jobToResponse(queuedJob) }, { status: 202 });
     } catch (error) {
       await failGenerationJob(job.id, error);
@@ -582,7 +591,7 @@ export async function POST(req: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("Generation request error:", error);
+    logError("generation.request.failed", "Image generation request failed", error, {}, req);
     return NextResponse.json({ error: "이미지 생성 요청 처리에 실패했습니다." }, { status: 500 });
   }
 }

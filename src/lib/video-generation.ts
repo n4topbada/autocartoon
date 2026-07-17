@@ -12,6 +12,7 @@ import {
   updateJobProgress,
   type StoredVideoJobInput,
 } from "./generation-jobs";
+import { logError } from "./observability";
 
 async function readGeneratedVideo(video: Video): Promise<Buffer> {
   if (video.videoBytes) return Buffer.from(video.videoBytes, "base64");
@@ -208,7 +209,9 @@ export async function pollAndPersistVideo(jobId: string, operationName: string) 
   } catch (error) {
     // 일시적 오류(폴링/다운로드/업로드/DB)는 실패로 확정하지 않고 다음 폴링에서 재시도한다.
     // 계속 실패하면 상위 루프의 타임아웃(markVideoTimeout)이 실패+환불을 수행한다.
-    console.error("Video poll transient error (will retry):", error);
+    logError("generation.video.poll_failed", "Video poll failed and will retry", error, {
+      jobId,
+    });
     return false;
   }
 }

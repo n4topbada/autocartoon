@@ -4,6 +4,7 @@
 
 - 운영: `https://wonybananabot-272254743773.asia-northeast3.run.app`
 - GitHub: `https://github.com/n4topbada/autocartoon`
+- Prototype operations: [docs/prototype-observability.md](./docs/prototype-observability.md)
 - 레퍼런스 기능 비교: [docs/toonagent-reverse-engineering.md](./docs/toonagent-reverse-engineering.md)
 - 고급 캔버스 상세 비교: [docs/advanced-canvas-parity.md](./docs/advanced-canvas-parity.md)
 - 운영 인수인계: [docs/project-handoff.md](./docs/project-handoff.md)
