@@ -83,6 +83,7 @@ export async function DELETE(req: NextRequest) {
           googleId: null,
           passwordHash: disabledPasswordHash,
           name: "탈퇴한 사용자",
+          plazaNickname: null,
           role: "user",
           tier: "free",
           credits: 0,

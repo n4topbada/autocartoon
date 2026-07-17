@@ -16,13 +16,14 @@ GitHub: `https://github.com/n4topbada/autocartoon`
 - 운영 사용자 비밀번호, API 키, OAuth secret, DB URL은 문서나 Git에 기록하지 않는다.
 - 비밀번호는 평문 복구하지 않으며 이메일 임시 비밀번호 흐름을 사용한다.
 - 관리자 대상 계정은 DB 역할로 판별한다. 이메일 닉네임 추정으로 권한을 올리지 않는다.
+- 제품은 국내 전용 한국어 서비스다. 레퍼런스의 다국어 기능은 의도적으로 범위에서 제외한다.
 
 ## 2. 운영 인프라
 
 | 항목 | 현재 값 |
 | --- | --- |
 | GCP project | `wonybananabot` |
-| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-18 검증 리비전 `wonybananabot-00022-mjn` |
+| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-18 검증 리비전 `wonybananabot-00024-rzf` |
 | Cloud SQL | `wony-postgres`, PostgreSQL 16 |
 | Cloud Tasks | `wony-jobs`, `asia-northeast3`; 동시 10, 초당 5, 최대 5회 재시도 |
 | GCS | `wonybananabot-media`, private. 브라우저 직접 업로드 CORS는 `scripts/gcs-cors.json` 기준 |
@@ -68,6 +69,7 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 - 모든 유료 AI 버튼 비용 표시, idempotent 차감 원장, 실패 환불
 - 카카오페이 ready/approve/cancel/fail 코드는 있으나 운영 결제는 의도적으로 비활성 상태
 - 가맹점 심사·운영 CID·약관·환불·정산 정책 전에는 활성화하지 않는다.
+- `/terms`, `/privacy`, `/refund` 운영 전 초안과 로그인·설정·크레딧 공통 링크
 
 ## 4. 이번 작업에서 닫은 공백
 
@@ -86,22 +88,25 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 - 컷당 캔버스 버전 60개, 복원 전 자동 백업, 변경 픽셀 레이어만 업로드
 - 컷 저장의 생성 아카이브 중복 제거와 Prisma 연결 풀 기본 5개 제한
 - 레퍼런스 전체 제작 흐름 2026-07-18 재감사와 운영 공지·읽음·통합 알림 구현
+- 국내 서비스용 약관·개인정보·환불 페이지와 로그인·설정·크레딧 공통 링크
+- SOLAPI 알림톡 어댑터의 HMAC-SHA256 인증 수정과 사업자 도입 절차 문서화
 
-운영 반영 상태: 마이그레이션 실행 `wony-prisma-migrate-99klj` 성공, 리비전 `wonybananabot-00022-mjn`에 트래픽 100% 연결, 해당 리비전 오류 로그 0건이다. 임시 공지로 홈 노출, 통합 알림, 펼침, 읽음 영속화를 확인한 뒤 공지 행과 일회성 검증 Job을 삭제했다.
+운영 반영 상태: 마이그레이션 실행 `wony-prisma-migrate-99klj` 성공, 리비전 `wonybananabot-00024-rzf`에 트래픽 100% 연결, 해당 리비전 오류 로그 0건이다. `/terms`, `/privacy`, `/refund`와 로그인 공통 링크를 운영 브라우저에서 확인했다. 이번 정책·알림톡 준비 변경에는 DB 마이그레이션이 없다.
 
 ## 5. 레퍼런스 대비 기능상 남은 항목
 
 | 항목 | 상태 | 이유/다음 단계 |
 | --- | --- | --- |
-| ko/en/ja | 미구현 | 언어·번역 정책 결정 필요 |
 | 휴대폰 본인확인 | 외부 결정 | 공급자·비용·개인정보 정책 필요 |
-| 약관·개인정보·환불 페이지 | 외부 결정 | 사업자 정보와 법률 검토 필요 |
-| 카카오 알림톡 | 외부 결정 | 비즈채널·템플릿 심사·수신 동의 필요 |
+| 약관·개인정보·환불 페이지 | 초안 완료 | 사업자 정보·위탁/국외이전·환불 산식과 법률 검토 후 확정 |
+| 카카오 알림톡 | 부분 | SOLAPI HMAC 어댑터 준비, 비즈채널·템플릿·사용자 번호 기능 필요 |
 | Instagram/다채널 게시 | 외부 결정 | Meta 앱 검수·토큰 운영 필요 |
 | 카카오페이 운영 | 보류 정상 | 상품·정책·가맹점 심사 뒤 활성화 |
 | Plurank CRM/CX/마케팅 전체 | 범위 결정 | 개인 창작 기능과 별도 제품군 |
 
 보관함 전체 메타 검색과 대형 영상의 서버 렌더링은 유용한 확장 후보지만, 레퍼런스에만 있는 필수 기능 공백으로 계산하지 않는다. 사용자 API 키와 공급자 선택 역시 플랫폼 Vertex AI·크레딧 방식으로 의도적으로 대체했다.
+
+알림톡의 사업자 작업과 구현 경계는 [kakao-alimtalk-setup.md](./kakao-alimtalk-setup.md)를 따른다. 현재 지원 문의 운영자 알림 골격만 있으며 사용자 생성 완료 알림은 아직 켜지 않는다.
 
 ## 6. 카카오 계정 연결 주의
 

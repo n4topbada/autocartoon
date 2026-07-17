@@ -14,6 +14,7 @@ import {
 } from "react-icons/lu";
 import { RiKakaoTalkFill } from "react-icons/ri";
 import { useAuth } from "@/components/AuthProvider";
+import LegalFooter from "@/components/LegalFooter";
 import { CREDIT_UNIT_PRICE_KRW } from "@/lib/credit-products";
 import styles from "./page.module.css";
 
@@ -303,6 +304,7 @@ export default function CreditsPage() {
           </div>
         </section>
       </div>
+      <LegalFooter />
     </main>
   );
 }

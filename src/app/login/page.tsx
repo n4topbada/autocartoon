@@ -6,6 +6,7 @@ import { LuKeyRound, LuX } from "react-icons/lu";
 import { FcGoogle } from "react-icons/fc";
 import { RiKakaoTalkFill } from "react-icons/ri";
 import { useAuth } from "@/components/AuthProvider";
+import LegalFooter from "@/components/LegalFooter";
 import styles from "./page.module.css";
 
 export default function LoginPage() {
@@ -186,6 +187,8 @@ export default function LoginPage() {
           신규 가입
         </button>
       </div>
+
+      <LegalFooter />
 
       {showSignup && (
         <div className={styles.modalOverlay} onClick={() => setShowSignup(false)}>

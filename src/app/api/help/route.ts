@@ -48,10 +48,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const kakaoResult = await sendKakaoNotification("help_request", {
-      "#{사용자명}": userName,
-      "#{메시지내용}": message.slice(0, 100),
-    });
+    const kakaoResult = await sendKakaoNotification(
+      process.env.SOLAPI_HELP_TEMPLATE_ID || "help_request",
+      {
+        "#{사용자명}": userName,
+        "#{메시지내용}": message.slice(0, 100),
+      },
+    );
     return NextResponse.json({ ok: true, emailSent, kakaoSent: kakaoResult.success });
   } catch (error) {
     if (error instanceof AuthError) {

@@ -1,6 +1,6 @@
 # WONY AutoCartoon
 
-캐릭터 레퍼런스로 웹툰 장면, 제스처, 배경, 음성, 숏폼과 Veo 영상을 만들고 프로젝트 단위로 편집하는 Next.js 제작 서비스입니다. 사용자는 AI API 키를 입력하지 않으며 플랫폼 소유 GCP Vertex AI와 서버 크레딧을 사용합니다.
+캐릭터 레퍼런스로 웹툰 장면, 제스처, 배경, 음성, 숏폼과 Veo 영상을 만들고 프로젝트 단위로 편집하는 국내 전용 Next.js 제작 서비스입니다. 사용자는 AI API 키를 입력하지 않으며 플랫폼 소유 GCP Vertex AI와 서버 크레딧을 사용합니다.
 
 - 운영: `https://wonybananabot-272254743773.asia-northeast3.run.app`
 - GitHub: `https://github.com/n4topbada/autocartoon`
@@ -10,6 +10,7 @@
 - 레퍼런스 기능 비교: [docs/toonagent-reverse-engineering.md](./docs/toonagent-reverse-engineering.md)
 - 고급 캔버스 상세 비교: [docs/advanced-canvas-parity.md](./docs/advanced-canvas-parity.md)
 - 운영 인수인계: [docs/project-handoff.md](./docs/project-handoff.md)
+- 카카오 알림톡 도입 절차: [docs/kakao-alimtalk-setup.md](./docs/kakao-alimtalk-setup.md)
 - GCS 브라우저 직접 업로드 CORS: [scripts/gcs-cors.json](./scripts/gcs-cors.json)
 
 ## 주요 기능
@@ -27,6 +28,7 @@
 - Veo 3.1 Fast와 캐릭터별 Google TTS, ffmpeg.wasm 기반 세로 MP4
 - 공개 닉네임, 최신/인기 게시판, 이미지·링크, 댓글, 좋아요, 신고
 - 기존 이메일 로그인, 카카오·Google 신규 가입, 임시 비밀번호, 비밀번호 변경, 기기 세션 최대 2대
+- 이용약관, 개인정보처리방침, 크레딧·환불정책 초안과 공통 접근 링크
 - 관리자 사용자·크레딧·신고·지식과 구조화 캐릭터 디렉터
 
 ## 크레딧
@@ -50,7 +52,7 @@
 | 크리에이터 | 2,000 | 500 | 25% | 2,500 | 24,000원 |
 | 스튜디오 | 8,000 | 3,000 | 37.5% | 11,000 | 96,000원 |
 
-카카오페이 라우트와 원장은 구현돼 있지만 **운영 결제가 되지 않는 것이 현재 정상**입니다. 가맹점 심사, 운영 CID, 사업자·약관·환불·정산 정책과 실제 원가를 확정하기 전에는 활성화하지 않습니다.
+카카오페이 라우트와 원장은 구현돼 있지만 **운영 결제가 되지 않는 것이 현재 정상**입니다. 가맹점 심사, 운영 CID, 사업자 정보·정책 문안·정산 기준과 실제 원가를 최종 확정하기 전에는 활성화하지 않습니다.
 
 ## 구성
 
@@ -113,6 +115,9 @@ TASKS_AUTH_TOKEN=
 
 KAKAO_REST_API_KEY=
 KAKAO_CLIENT_SECRET=
+SOLAPI_API_KEY=
+SOLAPI_API_SECRET=
+SOLAPI_PFID=
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 KAKAOPAY_SECRET_KEY=
@@ -133,6 +138,20 @@ https://wonybananabot-272254743773.asia-northeast3.run.app/api/auth/kakao/callba
 자체 도메인을 연결하면 새 도메인의 콜백을 Kakao Developers에 추가하고 `APP_ORIGIN`을 변경합니다. 안정화 기간에는 기존 Cloud Run 콜백을 함께 유지합니다.
 
 카카오가 이메일을 제공하지 않으면 내부 전용 계정이 생깁니다. 기존 이메일 계정으로 로그인한 뒤 설정의 **카카오 연결**을 사용합니다. 실사용 데이터가 있는 두 계정은 자동 병합하지 않습니다.
+
+## 카카오 알림톡
+
+카카오 로그인과 알림톡은 별도 서비스입니다. 알림톡은 사업자 비즈니스 채널, 공식 딜러사의 발신프로필, 승인 템플릿과 건당 발송 비용이 필요합니다. 현재 SOLAPI 어댑터의 HMAC 인증과 운영자 지원 문의 알림 골격만 준비돼 있으며, 사용자 생성 완료 알림은 휴대전화번호 수집·인증·철회 기능을 넣기 전까지 활성화하지 않습니다.
+
+사업자가 해야 할 등록 절차, 권장 템플릿과 현재 코드 경계는 [카카오 알림톡 도입 준비](./docs/kakao-alimtalk-setup.md)에 기록했습니다.
+
+## 정책 페이지
+
+- `/terms`: 서비스 이용약관
+- `/privacy`: 개인정보처리방침
+- `/refund`: 크레딧 및 환불정책
+
+현재 문안은 운영 전 초안입니다. 결제 개시 전 대표자, 사업자등록번호, 주소, 개인정보 보호책임자, 실제 처리 위탁·국외 이전 계약과 환불 산식을 최종 확정해야 합니다.
 
 ## Google 로그인과 신규 가입
 

@@ -16,6 +16,7 @@ import {
   LuTrash2,
 } from "react-icons/lu";
 import { useAuth } from "./AuthProvider";
+import LegalFooter from "./LegalFooter";
 import styles from "./AccountSettings.module.css";
 
 const MIN_PASSWORD_LENGTH = 10;
@@ -508,6 +509,7 @@ export default function AccountSettings() {
           )}
         </section>
       </div>
+      <LegalFooter />
     </section>
   );
 }
