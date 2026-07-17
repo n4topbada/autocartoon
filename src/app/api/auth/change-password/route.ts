@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validatePassword } from "@/lib/password-policy";
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireAuth } from "@/lib/auth";
+import { isKakaoPlaceholderEmail } from "@/lib/kakao-auth";
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,14 +19,25 @@ export async function POST(req: NextRequest) {
       typeof body.currentPassword === "string" ? body.currentPassword : "";
     const newPassword = typeof body.newPassword === "string" ? body.newPassword : "";
 
-    if (!currentPassword || !newPassword) {
+    const user = await prisma.user.findUnique({ where: { id: session.userId } });
+    if (!user) {
+      session.destroy();
+      return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+    }
+
+    // 이메일 동의 없이 만든 카카오 전용 계정은 아는 비밀번호가 없으므로
+    // 세션 인증만으로 초기 비밀번호를 설정할 수 있게 한다.
+    const isPlaceholderKakao =
+      Boolean(user.kakaoId) && isKakaoPlaceholderEmail(user.email);
+
+    if ((!isPlaceholderKakao && !currentPassword) || !newPassword) {
       return NextResponse.json(
         { error: "현재 비밀번호와 새 비밀번호를 입력해주세요." },
         { status: 400 }
       );
     }
 
-    if (new TextEncoder().encode(currentPassword).length > 72) {
+    if (currentPassword && new TextEncoder().encode(currentPassword).length > 72) {
       return NextResponse.json(
         { error: "현재 비밀번호가 올바르지 않습니다." },
         { status: 400 }
@@ -37,41 +49,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: passwordError }, { status: 400 });
     }
 
-    if (currentPassword === newPassword) {
+    if (currentPassword && currentPassword === newPassword) {
       return NextResponse.json(
         { error: "새 비밀번호는 현재 비밀번호와 달라야 합니다." },
         { status: 400 }
       );
     }
 
-    const user = await prisma.user.findUnique({ where: { id: session.userId } });
-    if (!user) {
-      session.destroy();
-      return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
-    }
-
     const now = new Date();
-    const primaryMatches = await bcrypt.compare(currentPassword, user.passwordHash);
-    const temporaryMatches = Boolean(
-      !primaryMatches &&
-        user.temporaryPasswordHash &&
-        user.temporaryPasswordExpiresAt &&
-        user.temporaryPasswordExpiresAt > now &&
-        (await bcrypt.compare(currentPassword, user.temporaryPasswordHash))
-    );
-
-    if (!primaryMatches && !temporaryMatches) {
-      return NextResponse.json(
-        { error: "현재 비밀번호가 올바르지 않습니다." },
-        { status: 400 }
+    if (!isPlaceholderKakao) {
+      const primaryMatches = await bcrypt.compare(currentPassword, user.passwordHash);
+      const temporaryMatches = Boolean(
+        !primaryMatches &&
+          user.temporaryPasswordHash &&
+          user.temporaryPasswordExpiresAt &&
+          user.temporaryPasswordExpiresAt > now &&
+          (await bcrypt.compare(currentPassword, user.temporaryPasswordHash))
       );
-    }
 
-    if (await bcrypt.compare(newPassword, user.passwordHash)) {
-      return NextResponse.json(
-        { error: "기존 비밀번호와 다른 비밀번호를 사용해주세요." },
-        { status: 400 }
-      );
+      if (!primaryMatches && !temporaryMatches) {
+        return NextResponse.json(
+          { error: "현재 비밀번호가 올바르지 않습니다." },
+          { status: 400 }
+        );
+      }
+
+      if (await bcrypt.compare(newPassword, user.passwordHash)) {
+        return NextResponse.json(
+          { error: "기존 비밀번호와 다른 비밀번호를 사용해주세요." },
+          { status: 400 }
+        );
+      }
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 12);

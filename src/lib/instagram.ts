@@ -97,17 +97,27 @@ export async function getInstagramAccount(accessToken: string): Promise<{
   profilePicture: string;
 } | null> {
   // 1. Get Facebook Pages
-  const pagesRes = await fetch(`${GRAPH_FB_URL}/me/accounts?access_token=${accessToken}`);
-  const pagesData = await pagesRes.json();
-  if (!pagesData.data?.length) return null;
-
-  // 2. Get Instagram Business Account from first page
-  const pageId = pagesData.data[0].id;
-  const igRes = await fetch(
-    `${GRAPH_FB_URL}/${pageId}?fields=instagram_business_account&access_token=${accessToken}`
-  );
-  const igData = await igRes.json();
-  const igUserId = igData.instagram_business_account?.id;
+  // 1-2. 여러 페이지를 페이지네이션하며 Instagram 비즈니스 계정이 연결된 첫 페이지를 찾는다.
+  // (첫 페이지에만 의존하면 IG 계정이 다른 페이지에 연결된 사용자가 잘못 거부된다)
+  let nextUrl: string | null =
+    `${GRAPH_FB_URL}/me/accounts?fields=instagram_business_account&limit=100&access_token=${accessToken}`;
+  let igUserId: string | undefined;
+  while (nextUrl && !igUserId) {
+    const pagesRes: Response = await fetch(nextUrl);
+    const pagesData: {
+      data?: Array<{ instagram_business_account?: { id?: string } }>;
+      paging?: { next?: string };
+      error?: { message?: string };
+    } = await pagesRes.json();
+    if (pagesData.error) throw new Error(pagesData.error.message);
+    for (const page of pagesData.data || []) {
+      if (page.instagram_business_account?.id) {
+        igUserId = page.instagram_business_account.id;
+        break;
+      }
+    }
+    nextUrl = pagesData.paging?.next ?? null;
+  }
   if (!igUserId) return null;
 
   // 3. Get username and profile picture
@@ -178,12 +188,15 @@ export async function getAccountInsights(
     `${GRAPH_FB_URL}/${igUserId}?fields=followers_count&access_token=${accessToken}`
   );
   const profile = await profileRes.json();
+  // 토큰 만료/취소 시 Graph는 error를 반환한다. 무시하면 0으로 조작된 통계가 표시되므로 명확히 실패시킨다.
+  if (profile.error) throw new Error(profile.error.message);
 
   // Account insights (last 30 days)
   const insightsRes = await fetch(
     `${GRAPH_FB_URL}/${igUserId}/insights?metric=reach,impressions&period=day&since=${Math.floor(Date.now() / 1000) - 30 * 86400}&until=${Math.floor(Date.now() / 1000)}&access_token=${accessToken}`
   );
   const insights = await insightsRes.json();
+  if (insights.error) throw new Error(insights.error.message);
 
   let reach = 0;
   let impressions = 0;
@@ -218,6 +231,7 @@ export async function getMediaInsights(
     `${GRAPH_FB_URL}/${mediaId}/insights?metric=impressions,reach,likes,comments,saved,shares&access_token=${accessToken}`
   );
   const data = await res.json();
+  if (data.error) throw new Error(data.error.message);
 
   const result = { impressions: 0, reach: 0, likes: 0, comments: 0, saves: 0, shares: 0 };
   if (data.data) {

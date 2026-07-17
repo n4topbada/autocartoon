@@ -78,11 +78,31 @@ export async function GET(req: NextRequest) {
       approval.partner_user_id === session.userId &&
       approval.amount?.total === payment.amountKrw;
     if (!validApproval) {
-      await prisma.creditPayment.update({
+      // approve가 성공했으니 자금은 이미 캡처됐을 수 있다(응답 파싱 실패/필드 불일치 포함).
+      // 주문 조회로 재확인해 정상이면 적립하고, 그래도 확정 못하면 'failed'로 종결하지 않고
+      // 관리자 검토 상태로 보존해 캡처된 금액이 유실되지 않게 한다.
+      const reconciled = await reconcileKakaoPayCreditPayment(payment.id, session.userId).catch(
+        (reconcileError) => {
+          console.error("KakaoPay post-approve reconciliation error:", reconcileError);
+          return false;
+        }
+      );
+      if (reconciled) return redirect(req, "success");
+      const current = await prisma.creditPayment.findUnique({
         where: { id: payment.id },
-        data: { status: "failed", failureReason: "결제 승인 정보 검증 실패" },
+        select: { status: true },
       });
-      return redirect(req, "failed");
+      if (current?.status === "paid") return redirect(req, "success");
+      if (current?.status === "approving") {
+        await prisma.creditPayment.updateMany({
+          where: { id: payment.id, userId: session.userId, status: "approving" },
+          data: {
+            status: "needs_review",
+            failureReason: "결제 승인 정보 검증 실패 (관리자 확인 필요)",
+          },
+        });
+      }
+      return redirect(req, "processing");
     }
 
     const approvedAt = new Date(approval.approved_at);

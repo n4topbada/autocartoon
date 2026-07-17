@@ -55,6 +55,14 @@ export async function POST(req: NextRequest) {
             console.warn("Studio asset thumbnail failed:", error);
           }
         }
+        let sizeBytes: number | undefined;
+        try {
+          const head = await fetch(blob.url, { method: "HEAD" });
+          const len = Number(head.headers.get("content-length") || "0");
+          if (len > 0) sizeBytes = len;
+        } catch {
+          /* 크기 측정 실패는 무시(저장용량 표시는 근사치) */
+        }
         await prisma.projectAsset.create({
           data: {
             projectId: payload.projectId,
@@ -63,6 +71,7 @@ export async function POST(req: NextRequest) {
             blobUrl: blob.url,
             thumbnailUrl,
             mimeType,
+            sizeBytes,
           },
         });
       },

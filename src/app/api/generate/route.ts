@@ -15,7 +15,7 @@ import {
 } from "@/lib/platform-ai";
 import { imageGenerationWorkflow } from "@/workflows/image-generation";
 import { start } from "workflow/api";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 const GENERATION_MODES = new Set<GenerationMode>([
   "text",
@@ -485,19 +485,34 @@ export async function POST(req: NextRequest) {
         : {}),
     };
 
-    const job = await prisma.generationJob.create({
-      data: {
-        userId: session.userId,
-        projectId: input.projectId,
-        cutId: input.cutId,
-        kind: input.jobKind || "image",
-        provider: getPlatformAIProvider(),
-        model: getImageModel(),
-        idempotencyKey,
-        prompt: input.prompt,
-        input: storedInput as unknown as Prisma.InputJsonValue,
-      },
-    });
+    let job;
+    try {
+      job = await prisma.generationJob.create({
+        data: {
+          userId: session.userId,
+          projectId: input.projectId,
+          cutId: input.cutId,
+          kind: input.jobKind || "image",
+          provider: getPlatformAIProvider(),
+          model: getImageModel(),
+          idempotencyKey,
+          prompt: input.prompt,
+          input: storedInput as unknown as Prisma.InputJsonValue,
+        },
+      });
+    } catch (createError) {
+      // 동시 재시도가 같은 idempotency 키로 먼저 생성했다면 기존 작업을 반환한다(멱등 계약).
+      if (createError instanceof Prisma.PrismaClientKnownRequestError && createError.code === "P2002") {
+        const existingJob = await prisma.generationJob.findUnique({
+          where: { userId_idempotencyKey: { userId: session.userId, idempotencyKey } },
+          include: { artifacts: { orderBy: { createdAt: "asc" } } },
+        });
+        if (existingJob) {
+          return NextResponse.json({ job: jobToResponse(existingJob), deduplicated: true }, { status: 202 });
+        }
+      }
+      throw createError;
+    }
 
     const creditResult = await reserveJobCredit(session.userId, job.id);
     if (!creditResult.ok) {

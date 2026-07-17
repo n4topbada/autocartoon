@@ -35,6 +35,9 @@ import {
   LuBookOpen,
 } from "react-icons/lu";
 import { PROJECT_BRIEF_TEMPLATE } from "@/lib/project-brief";
+import { AI_CREDIT_COSTS, getGenerationCreditCost } from "@/lib/credit-products";
+import { useAuth } from "./AuthProvider";
+import CreditCostBadge from "./CreditCostBadge";
 import GenerationNotifications from "./GenerationNotifications";
 import {
   buildStudioGenerationPrompt,
@@ -106,6 +109,7 @@ interface GenerationJob {
   createdAt: string;
   artifacts: JobArtifact[];
   cutId: string | null;
+  creditCost?: number;
 }
 
 interface StudioProject extends Omit<ProjectSummary, "_count"> {
@@ -226,6 +230,7 @@ function announceCompletion(job: GenerationJob) {
 }
 
 export default function StudioWorkspace({ initialMode = "scene" }: { initialMode?: StudioMode }) {
+  const { user: authUser } = useAuth();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<StudioProject | null>(null);
   const [selectedCutId, setSelectedCutId] = useState<string | null>(null);
@@ -269,6 +274,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
     resolution: "720p" as "720p" | "1080p",
     generateAudio: true,
   });
+  const [dragActive, setDragActive] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const knownStatuses = useRef(new Map<string, JobStatus>());
   const draftCutId = useRef<string | null>(null);
@@ -749,7 +755,10 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
   }, [draft, project, selectedCut]);
 
   useEffect(() => {
-    if (!draftDirty || !selectedCut || saveState === "saving") return;
+    // 저장 실패(error) 상태에서는 자동 재시도를 멈춘다. 계속 재시도하면 1초마다
+    // 무한 PATCH가 발생하고 사용자가 현재 컷에 갇힌다. 다음 편집(=idle 전환)이나
+    // 수동 이동 시 다시 저장을 시도한다.
+    if (!draftDirty || !selectedCut || saveState === "saving" || saveState === "error") return;
     const timer = window.setTimeout(() => void saveCut(), 1_000);
     return () => window.clearTimeout(timer);
   }, [draftDirty, saveCut, saveState, selectedCut]);
@@ -827,6 +836,12 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
       : current.length >= 3 ? current : [...current, assetId];
     updateScene("referenceAssetIds", next);
   };
+
+  // 4면 분류(PresetImage.view)는 소유자 또는 관리자만 저장할 수 있다.
+  // 구매/시스템(마켓) 프리셋에 대해서는 PATCH가 404를 반환하므로 UI에서 막는다.
+  const canEditPresetViews = (character: CharacterPreset) =>
+    authUser?.role === "admin" ||
+    (Boolean(character.userId) && character.userId === authUser?.id);
 
   const setCharacterImageView = async (presetId: string, imageId: string, view: string) => {
     try {
@@ -954,11 +969,18 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
     setVideoPlanAnalyzing(true);
     setError(null);
     try {
-      await saveCut();
+      // 먼저 다이얼로그 초안(videoPlanDrafts)을 저장해야 서버가 최신 대사를 분석한다.
+      // (saveCut은 선택된 컷의 워크스페이스 초안만 저장하므로 대사 분석에는 무의미)
+      const persisted = await saveVideoPlan();
+      if (!persisted) return;
       const data = await readJson<{ plan: Array<{ cutId: string; dialogues: VideoDialogue[] }> }>(
         await fetch(`/api/studio/projects/${project.id}/video-plan`, { method: "POST" })
       );
-      setVideoPlanDrafts(Object.fromEntries(data.plan.map((item) => [item.cutId, item.dialogues])));
+      // 반환된 컷만 덮어쓰고, 모델이 빠뜨린 컷의 직접 입력 대사는 보존한다.
+      setVideoPlanDrafts((current) => ({
+        ...current,
+        ...Object.fromEntries(data.plan.map((item) => [item.cutId, item.dialogues])),
+      }));
       await loadProject(project.id);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "영상 대사 분석 실패");
@@ -1001,12 +1023,12 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
     });
   };
 
-  const saveVideoPlan = async () => {
-    if (!project) return;
+  const saveVideoPlan = async (): Promise<boolean> => {
+    if (!project) return false;
     setVideoPlanSaving(true);
     setError(null);
     try {
-      await Promise.all(project.cuts.map(async (cut) => {
+      const results = await Promise.allSettled(project.cuts.map(async (cut) => {
         const dialogues = (videoPlanDrafts[cut.id] || []).filter((dialogue) => dialogue.text.trim());
         return readJson(await fetch(`/api/studio/cuts/${cut.id}`, {
           method: "PATCH",
@@ -1018,7 +1040,16 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
           }),
         }));
       }));
+      const failed = results.filter((result) => result.status === "rejected");
+      if (failed.length > 0) {
+        setError(`대사 저장 중 ${failed.length}개 컷을 저장하지 못했습니다. 다시 시도해주세요.`);
+        return false;
+      }
       await loadProject(project.id);
+      return true;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "대사 저장에 실패했습니다.");
+      return false;
     } finally {
       setVideoPlanSaving(false);
     }
@@ -1063,7 +1094,8 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
     setVideoBatchStarting(true);
     setError(null);
     try {
-      await saveVideoPlan();
+      // 대사 저장이 실패하면(부분 저장 위험) 유료 영상 작업을 시작하지 않는다.
+      if (!(await saveVideoPlan())) return;
       const failures: string[] = [];
       for (const cut of eligibleCuts) {
         if (project.jobs.some((job) => job.kind === "video" && job.cutId === cut.id && ["queued", "running"].includes(job.status))) continue;
@@ -1132,8 +1164,19 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
           multipart: file.size > 5 * 1024 * 1024,
         });
       }
-      await new Promise((resolve) => setTimeout(resolve, 1200));
-      const refreshed = await loadProject(project.id);
+      // ProjectAsset 로우는 Vercel Blob의 onUploadCompleted 웹훅에서 생성되므로
+      // 고정 대기(1.2s)로는 놓칠 수 있다. 새 자산이 나타날 때까지 폴링한다.
+      const expectedCount = files.length;
+      const newAssetCount = (snapshot: StudioProject) =>
+        snapshot.assets.filter((asset) => !existingAssetIds.has(asset.id)).length;
+      let refreshed = await loadProject(project.id);
+      for (let attempt = 0; attempt < 10 && newAssetCount(refreshed) < expectedCount; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        refreshed = await loadProject(project.id);
+      }
+      if (newAssetCount(refreshed) < expectedCount) {
+        setError("업로드 반영이 지연되고 있습니다. 잠시 후 새로고침하면 자산이 표시됩니다.");
+      }
       if (mode === "gesture") {
         const addedImageIds = refreshed.assets
           .filter((asset) => asset.kind === "image" && !existingAssetIds.has(asset.id))
@@ -1374,9 +1417,24 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
             </div>
           </div>
 
-          <section className={styles.assetStrip}>
+          <section
+            className={`${styles.assetStrip} ${dragActive ? styles.assetStripDragging : ""}`}
+            onDragOver={(event) => {
+              if (!project) return;
+              event.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragActive(false);
+              if (project && event.dataTransfer.files?.length) {
+                void uploadAssets(event.dataTransfer.files);
+              }
+            }}
+          >
             <button className={styles.assetStripHeading} onClick={() => setAssetPanelOpen((open) => !open)}>
-              <span>프로젝트 자산 {project ? project.assets.length : 0}</span>
+              <span>프로젝트 자산 {project ? project.assets.length : 0}{dragActive ? " · 여기에 놓기" : ""}</span>
               <LuEllipsis />
             </button>
             {assetPanelOpen && (
@@ -1449,6 +1507,9 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                   {job.status === "failed" && (
                     <button className={styles.retryButton} onClick={() => void retryJob(job.id)} title="다시 시도">
                       <LuRefreshCw />
+                      <CreditCostBadge
+                        credits={job.creditCost ?? getGenerationCreditCost(job.kind, job.kind.includes("video") ? videoOptions : { imageSize })}
+                      />
                     </button>
                   )}
                 </div>
@@ -1530,7 +1591,9 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                       </button>
                     </div>
                   )}
-                  {selectedCharacters.map((character) => (
+                  {selectedCharacters.map((character) => {
+                    const editableViews = canEditPresetViews(character);
+                    return (
                     <div className={styles.characterViews} key={character.id}>
                       <strong>{character.name} · 4면 참조</strong>
                       <div>
@@ -1539,6 +1602,8 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                             <img src={image.thumbnailUrl || image.dataUrl} alt="캐릭터 참조" />
                             <select
                               value={image.view || "reference"}
+                              disabled={!editableViews}
+                              title={editableViews ? undefined : "구매·시스템 캐릭터의 4면 분류는 변경할 수 없습니다."}
                               onChange={(event) => void setCharacterImageView(character.id, image.id, event.target.value)}
                             >
                               {Object.entries(VIEW_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -1557,7 +1622,8 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                         </label>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
@@ -1704,6 +1770,11 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
               >
                 {generating ? <LuLoaderCircle className={styles.spin} /> : mode === "video" ? <LuPlay /> : <LuSparkles />}
                 {generating ? "작업 등록 중" : mode === "video" ? "Veo 영상 만들기" : mode === "gesture" ? "제스처 만들기" : "장면 만들기"}
+                <CreditCostBadge
+                  credits={mode === "video"
+                    ? getGenerationCreditCost("video", videoOptions)
+                    : getGenerationCreditCost(mode === "gesture" ? "gesture" : "image", { imageSize })}
+                />
               </button>
             </>
           ) : (
@@ -1746,12 +1817,17 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
             <div className={styles.videoPlanToolbar}>
               <button onClick={() => void analyzeVideoPlan()} disabled={videoPlanAnalyzing || videoPlanSaving || videoBatchStarting}>
                 {videoPlanAnalyzing ? <LuLoaderCircle className={styles.spin} /> : <LuSparkles />} AI 대사 분석
+                <CreditCostBadge credits={AI_CREDIT_COSTS.videoPlan} />
               </button>
               <button onClick={() => void saveVideoPlan()} disabled={videoPlanAnalyzing || videoPlanSaving || videoBatchStarting}>
                 {videoPlanSaving ? <LuLoaderCircle className={styles.spin} /> : <LuSave />} 저장
               </button>
               <button className={styles.videoBatchButton} onClick={() => void startProjectVideos()} disabled={videoPlanAnalyzing || videoPlanSaving || videoBatchStarting || !project.cuts.some((cut) => cut.prompt.trim())}>
                 {videoBatchStarting ? <LuLoaderCircle className={styles.spin} /> : <LuPlay />} 전체 Veo 시작 · {project.cuts.filter((cut) => cut.prompt.trim()).length}컷
+                <CreditCostBadge
+                  credits={project.cuts.filter((cut) => cut.prompt.trim()).length * getGenerationCreditCost("video", videoOptions)}
+                  approximate
+                />
               </button>
             </div>
 
@@ -1789,6 +1865,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                           <textarea rows={2} value={dialogue.text} maxLength={1_000} onChange={(event) => updateVideoDialogue(cut.id, dialogue.id, { text: event.target.value })} aria-label="대사" />
                           <button onClick={() => void previewPlannedDialogue(dialogue)} disabled={previewingDialogueId === dialogue.id || !dialogue.text.trim()} title="음성 미리듣기">
                             {previewingDialogueId === dialogue.id ? <LuLoaderCircle className={styles.spin} /> : <LuVolume2 />}
+                            <CreditCostBadge credits={AI_CREDIT_COSTS.tts} />
                           </button>
                           <button onClick={() => removeVideoDialogue(cut.id, dialogue.id)} title="대사 삭제"><LuTrash2 /></button>
                         </div>
@@ -1970,6 +2047,12 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                 {briefGenerating
                   ? briefProgress || "콘티를 구성하고 있습니다"
                   : briefAutoGenerate ? "콘티와 컷 이미지 자동 생성" : "프로젝트와 컷 자동 생성"}
+                <CreditCostBadge
+                  credits={AI_CREDIT_COSTS.projectBrief}
+                  label={briefAutoGenerate
+                    ? `${AI_CREDIT_COSTS.projectBrief} + 컷당 ${getGenerationCreditCost("image", { imageSize })}`
+                    : undefined}
+                />
               </button>
             </footer>
           </section>

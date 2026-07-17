@@ -67,17 +67,22 @@ import {
   LuScanText,
   LuScanLine,
   LuRotateCw,
+  LuFlipHorizontal2,
+  LuFlipVertical2,
   LuWandSparkles,
   LuX,
 } from "react-icons/lu";
 import {
   type SpeechBubble,
   type BubbleType,
+  BUBBLE_FONT_FAMILIES,
   createBubble,
   drawBubble,
   drawBubbleSelection,
   hitTestBubble,
 } from "@/lib/bubble-draw";
+import CreditCostBadge from "@/components/CreditCostBadge";
+import { AI_CREDIT_COSTS } from "@/lib/credit-products";
 
 interface GalleryImage {
   id: string;
@@ -465,6 +470,10 @@ export default function CanvasEditor({
   const [redrawOpen, setRedrawOpen] = useState(false);
   const [redrawLoading, setRedrawLoading] = useState(false);
   const [redrawPrompt, setRedrawPrompt] = useState("");
+  const [redrawUseRegion, setRedrawUseRegion] = useState(false);
+  // AI 영역 지정 모드: 크롭 도구로 사각형을 그리되 파괴적 크롭은 적용하지 않고
+  // cropRect만 남겨 재생성 영역으로 재사용한다.
+  const [aiRegionMode, setAiRegionMode] = useState(false);
   const [editorMessage, setEditorMessage] = useState<string | null>(null);
   const [assetTab, setAssetTab] = useState<AssetLibraryTab>("project");
   const [characterView, setCharacterView] = useState("front");
@@ -484,6 +493,14 @@ export default function CanvasEditor({
   const redoStack = useRef<Layer[][]>([]);
   const [, rerenderHistory] = useState(0);
 
+  // 항상 최신 layers를 가리키는 ref. undo/redo가 setLayers 업데이터 안에서
+  // 스택을 밀어넣으면(부작용) StrictMode에서 업데이터가 두 번 실행돼 스택이
+  // 중복 push되므로, 스택 조작은 업데이터 밖에서 순수하게 처리한다.
+  const layersRef = useRef<Layer[]>([]);
+  useEffect(() => {
+    layersRef.current = layers;
+  }, [layers]);
+
   const saveUndo = useCallback(() => {
     undoStack.current.push(cloneLayers(layers));
     if (undoStack.current.length > 30) undoStack.current.shift();
@@ -494,20 +511,16 @@ export default function CanvasEditor({
   const handleUndo = useCallback(() => {
     const previous = undoStack.current.pop();
     if (!previous) return;
-    setLayers((current) => {
-      redoStack.current.push(cloneLayers(current));
-      return cloneLayers(previous);
-    });
+    redoStack.current.push(cloneLayers(layersRef.current));
+    setLayers(cloneLayers(previous));
     rerenderHistory((value) => value + 1);
   }, []);
 
   const handleRedo = useCallback(() => {
     const next = redoStack.current.pop();
     if (!next) return;
-    setLayers((current) => {
-      undoStack.current.push(cloneLayers(current));
-      return cloneLayers(next);
-    });
+    undoStack.current.push(cloneLayers(layersRef.current));
+    setLayers(cloneLayers(next));
     rerenderHistory((value) => value + 1);
   }, []);
 
@@ -519,9 +532,42 @@ export default function CanvasEditor({
     ));
   }, [activeLayerId, saveUndo]);
 
+  // 활성 레이어를 좌우/상하로 뒤집는다. 변형 상태를 어긋나게 두지 않도록 픽셀에 직접 반영한다.
+  const flipActiveLayer = useCallback((direction: "h" | "v") => {
+    if (!activeLayerId) return;
+    saveUndo();
+    setLayers((current) => current.map((layer) => {
+      if (layer.id !== activeLayerId || !layer.canvas || layer.locked) return layer;
+      const flipped = document.createElement("canvas");
+      flipped.width = layer.canvas.width;
+      flipped.height = layer.canvas.height;
+      const ctx = flipped.getContext("2d")!;
+      if (direction === "h") {
+        ctx.translate(flipped.width, 0);
+        ctx.scale(-1, 1);
+      } else {
+        ctx.translate(0, flipped.height);
+        ctx.scale(1, -1);
+      }
+      ctx.drawImage(layer.canvas, 0, 0);
+      // 회전된 레이어를 화면 기준으로 올바르게 미러링하려면 회전 방향도 뒤집어야 한다
+      // (Flip∘R 이 되도록 rotation 부호를 반전).
+      return { ...layer, canvas: flipped, rotation: -(layer.rotation || 0) };
+    }));
+  }, [activeLayerId, saveUndo]);
+
   // Ctrl+Z / Cmd+Z 키보드 핸들러
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // 텍스트 입력 중에는 캔버스 단축키를 가로채지 않는다(네이티브 텍스트 undo 보존 등).
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      ) {
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && e.shiftKey) {
         e.preventDefault();
         handleRedo();
@@ -1024,7 +1070,13 @@ export default function CanvasEditor({
     isDragging.current = false;
     bubbleDragMode.current = "none";
     if (tool === "crop" && cropping && cropRect && cropRect.w > 5 && cropRect.h > 5) {
-      applyCrop();
+      // AI 영역 지정 모드에서는 파괴적 크롭을 적용하지 않고 cropRect를 재생성 영역으로 보존한다.
+      if (aiRegionMode) {
+        setAiRegionMode(false);
+        setRedrawUseRegion(true);
+      } else {
+        applyCrop();
+      }
     }
     setCropping(false);
   };
@@ -1038,30 +1090,54 @@ export default function CanvasEditor({
 
     const srcCtx = activeLayer.canvas.getContext("2d")!;
     const drawRect = layerDrawRect(activeLayer, canvasW, canvasH);
-    const sourceX = Math.max(0, Math.floor((cropRect.x - drawRect.x) * activeLayer.canvas.width / drawRect.width));
-    const sourceY = Math.max(0, Math.floor((cropRect.y - drawRect.y) * activeLayer.canvas.height / drawRect.height));
+    const scaleX = activeLayer.canvas.width / drawRect.width;
+    const scaleY = activeLayer.canvas.height / drawRect.height;
+
+    // 크롭 사각형과 실제 이미지가 겹치는 영역(화면 좌표). 크롭이 이미지 밖으로
+    // 벗어난 부분은 그리지 않고, 겹친 부분만 원래 위치·배율 그대로 옮긴다.
+    const overlapLeft = Math.max(cropRect.x, drawRect.x);
+    const overlapTop = Math.max(cropRect.y, drawRect.y);
+    const overlapRight = Math.min(cropRect.x + cropRect.w, drawRect.x + drawRect.width);
+    const overlapBottom = Math.min(cropRect.y + cropRect.h, drawRect.y + drawRect.height);
+    if (overlapRight <= overlapLeft || overlapBottom <= overlapTop) {
+      setCropRect(null);
+      return;
+    }
+
+    // 소스(레이어 캔버스) 픽셀 좌표로 변환하고 캔버스 경계로 클램프한다.
+    const sourceX = Math.max(0, Math.floor((overlapLeft - drawRect.x) * scaleX));
+    const sourceY = Math.max(0, Math.floor((overlapTop - drawRect.y) * scaleY));
     const sourceW = Math.min(
       activeLayer.canvas.width - sourceX,
-      Math.max(1, Math.round(cropRect.w * activeLayer.canvas.width / drawRect.width))
+      Math.max(1, Math.round((overlapRight - overlapLeft) * scaleX))
     );
     const sourceH = Math.min(
       activeLayer.canvas.height - sourceY,
-      Math.max(1, Math.round(cropRect.h * activeLayer.canvas.height / drawRect.height))
+      Math.max(1, Math.round((overlapBottom - overlapTop) * scaleY))
     );
-    if (sourceW <= 0 || sourceH <= 0) return;
+    if (sourceW <= 0 || sourceH <= 0) {
+      setCropRect(null);
+      return;
+    }
     const imageData = srcCtx.getImageData(sourceX, sourceY, sourceW, sourceH);
 
     const newCanvas = document.createElement("canvas");
     newCanvas.width = canvasW;
     newCanvas.height = canvasH;
     const newCtx = newCanvas.getContext("2d")!;
+    // 크롭 사각형은 새 캔버스 중앙에 배치되며, 겹친 영역은 그 안에서의 상대 위치
+    // (overlap - cropRect)와 동일 배율을 유지해 오프셋/왜곡 없이 놓인다.
     const cx = (canvasW - cropRect.w) / 2;
     const cy = (canvasH - cropRect.h) / 2;
+    const destX = cx + (overlapLeft - cropRect.x);
+    const destY = cy + (overlapTop - cropRect.y);
+    const destW = overlapRight - overlapLeft;
+    const destH = overlapBottom - overlapTop;
     const cropped = document.createElement("canvas");
     cropped.width = sourceW;
     cropped.height = sourceH;
     cropped.getContext("2d")!.putImageData(imageData, 0, 0);
-    newCtx.drawImage(cropped, cx, cy, cropRect.w, cropRect.h);
+    newCtx.drawImage(cropped, destX, destY, destW, destH);
 
     setLayers((prev) =>
       prev.map((l) =>
@@ -1694,6 +1770,12 @@ export default function CanvasEditor({
     try {
       const image = createCompositeCanvas().toDataURL("image/jpeg", 0.86);
       const generationAspect = aspect === "3:4" || aspect === "8:11" ? "4:5" : aspect;
+      // 크롭 영역이 지정돼 있으면 그 정규화 좌표를 프롬프트에 넣어, 해당 영역만
+      // 수정하고 나머지는 원본과 동일하게 유지하도록 유도한다(가이드 영역 재생성).
+      const regionLine =
+        redrawUseRegion && cropRect
+          ? `수정 영역은 이미지를 0~1로 정규화했을 때 좌상단(${(cropRect.x / canvasW).toFixed(2)}, ${(cropRect.y / canvasH).toFixed(2)})부터 우하단(${((cropRect.x + cropRect.w) / canvasW).toFixed(2)}, ${((cropRect.y + cropRect.h) / canvasH).toFixed(2)})까지의 사각형 안쪽뿐이다. 이 영역 밖은 원본과 픽셀 단위로 동일하게 유지한다.`
+          : null;
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: {
@@ -1711,6 +1793,7 @@ export default function CanvasEditor({
           inputImage: { base64: image.split(",")[1], mimeType: "image/jpeg" },
           prompt: [
             "현재 완성 컷을 참고해 같은 캐릭터 정체성, 그림체, 화면 비율을 유지하며 수정한다.",
+            ...(regionLine ? [regionLine] : []),
             `수정 요청: ${redrawPrompt.trim()}`,
             "요청하지 않은 인물, 글자, 로고, 워터마크를 추가하지 않는다.",
           ].join("\n"),
@@ -1801,6 +1884,9 @@ export default function CanvasEditor({
             tailWidth: bubble.tailWidth * scaleX,
             strokeWidth: bubble.strokeWidth * Math.max(scaleX, scaleY),
             fontSize: (bubble.fontSize ?? 24) * Math.min(scaleX, scaleY),
+            // 외곽선·자간도 내보내기 배율에 맞춰 스케일해야 편집 화면과 결과가 일치한다.
+            outlineWidth: bubble.outlineWidth ? bubble.outlineWidth * Math.max(scaleX, scaleY) : undefined,
+            letterSpacing: bubble.letterSpacing ? bubble.letterSpacing * Math.min(scaleX, scaleY) : undefined,
           });
         }
         ctx.restore();
@@ -2089,6 +2175,8 @@ export default function CanvasEditor({
                   }}
                   title="회전 초기화"
                 ><LuRotateCw size={16} /></button>
+                <button className={styles.toolBtn} onClick={() => flipActiveLayer("h")} disabled={activeLayer.locked} title="좌우 뒤집기"><LuFlipHorizontal2 size={16} /></button>
+                <button className={styles.toolBtn} onClick={() => flipActiveLayer("v")} disabled={activeLayer.locked} title="상하 뒤집기"><LuFlipVertical2 size={16} /></button>
               </div>
             )}
             <div className={styles.toolGroup} aria-label="정렬과 분배">
@@ -2116,6 +2204,7 @@ export default function CanvasEditor({
             <div className={styles.toolGroup} style={{ position: "relative" }}>
               <button className={`${styles.toolBtn} ${ocrOpen ? styles.toolActive : ""}`} onClick={() => ocrOpen ? setOcrOpen(false) : void extractCanvasText()} disabled={ocrLoading} title="이미지 글자 추출">
                 {ocrLoading ? <LuLoaderCircle className={styles.spin} size={16} /> : <LuScanText size={16} />} 텍스트 추출
+                <CreditCostBadge credits={AI_CREDIT_COSTS.ocr} />
               </button>
               {ocrOpen && (
                 <div className={`${styles.bubblePopup} ${styles.aiToolPopup}`}>
@@ -2139,8 +2228,29 @@ export default function CanvasEditor({
                 <div className={`${styles.bubblePopup} ${styles.aiToolPopup}`}>
                   <strong>수정 요청</strong>
                   <textarea value={redrawPrompt} onChange={(event) => setRedrawPrompt(event.target.value)} rows={5} maxLength={2_000} placeholder="예: 배경은 유지하고 인물 표정을 놀란 표정으로 변경" />
+                  <div className={styles.aiPresetRow}>
+                    <button
+                      type="button"
+                      className={styles.aiPresetButton}
+                      onClick={() => setRedrawPrompt("모든 말풍선·자막·글자를 제거하고 그 자리를 주변 배경·그림체와 자연스럽게 이어지도록 채운다.")}
+                    >글자·말풍선 지우기</button>
+                    <button
+                      type="button"
+                      className={`${styles.aiPresetButton} ${aiRegionMode ? styles.textStyleActive : ""}`}
+                      onClick={() => { setTool("crop"); setCropRect(null); setAiRegionMode(true); }}
+                    >{aiRegionMode ? "영역을 드래그하세요" : "영역 지정"}</button>
+                  </div>
+                  {cropRect && !aiRegionMode ? (
+                    <label className={styles.aiRegionToggle}>
+                      <input type="checkbox" checked={redrawUseRegion} onChange={(event) => setRedrawUseRegion(event.target.checked)} />
+                      지정한 영역만 수정
+                    </label>
+                  ) : (
+                    <p className={styles.aiRegionHint}>&lsquo;영역 지정&rsquo;을 눌러 드래그하면 그 부분만 수정할 수 있습니다.</p>
+                  )}
                   <button className={styles.aiToolAction} onClick={() => void queueAiRedraw()} disabled={redrawLoading || !redrawPrompt.trim()}>
                     {redrawLoading ? <LuLoaderCircle className={styles.spin} /> : <LuWandSparkles />} 작업 시작
+                    <CreditCostBadge credits={AI_CREDIT_COSTS.image1k} />
                   </button>
                 </div>
               )}
@@ -2274,6 +2384,66 @@ export default function CanvasEditor({
                               {align === "left" ? "좌" : align === "right" ? "우" : "중"}
                             </button>
                           ))}
+                          <button
+                            className={`${styles.textStyleButton} ${selectedBubble.fontItalic ? styles.textStyleActive : ""}`}
+                            onClick={() => updateBubble(selectedBubble.id, { fontItalic: !selectedBubble.fontItalic })}
+                            title="기울임"
+                            style={{ fontStyle: "italic" }}
+                          >I</button>
+                          <button
+                            className={`${styles.textStyleButton} ${selectedBubble.underline ? styles.textStyleActive : ""}`}
+                            onClick={() => updateBubble(selectedBubble.id, { underline: !selectedBubble.underline })}
+                            title="밑줄"
+                            style={{ textDecoration: "underline" }}
+                          >U</button>
+                        </div>
+                        <div className={styles.bubblePopupRow}>
+                          <span className={styles.bubblePopupLabel}>서체</span>
+                          <select
+                            value={selectedBubble.fontFamily ?? "sans-serif"}
+                            onChange={(e) => updateBubble(selectedBubble.id, { fontFamily: e.target.value })}
+                            title="글꼴"
+                          >
+                            {BUBBLE_FONT_FAMILIES.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                          </select>
+                        </div>
+                        <div className={styles.bubblePopupRow}>
+                          <span className={styles.bubblePopupLabel}>외곽선</span>
+                          <input
+                            type="color"
+                            value={selectedBubble.outlineColor ?? "#ffffff"}
+                            onChange={(e) => updateBubble(selectedBubble.id, { outlineColor: e.target.value })}
+                            title="외곽선 색"
+                          />
+                          <input
+                            type="number"
+                            min={0}
+                            max={12}
+                            value={selectedBubble.outlineWidth ?? 0}
+                            onChange={(e) => updateBubble(selectedBubble.id, { outlineWidth: Number(e.target.value) })}
+                            className={styles.fontSizeInput}
+                            title="외곽선 두께"
+                          />
+                          <input
+                            type="number"
+                            min={-2}
+                            max={20}
+                            step={0.5}
+                            value={selectedBubble.letterSpacing ?? 0}
+                            onChange={(e) => updateBubble(selectedBubble.id, { letterSpacing: Number(e.target.value) })}
+                            className={styles.fontSizeInput}
+                            title="자간(px)"
+                          />
+                          <input
+                            type="number"
+                            min={1}
+                            max={2.5}
+                            step={0.05}
+                            value={selectedBubble.lineHeightScale ?? 1.28}
+                            onChange={(e) => updateBubble(selectedBubble.id, { lineHeightScale: Number(e.target.value) })}
+                            className={styles.fontSizeInput}
+                            title="행간(배)"
+                          />
                         </div>
                         <div className={styles.bubblePopupRow}>
                           <span className={styles.bubblePopupLabel}>배경</span>

@@ -32,7 +32,8 @@ export async function GET(
     const images =
       imageIds.length > 0
         ? await prisma.generatedImage.findMany({
-            where: { id: { in: imageIds } },
+            // 소유자 이미지로만 해석해, 남의 이미지 URL이 노출되지 않게 한다(IDOR 방지).
+            where: { id: { in: imageIds }, request: { userId: session.userId } },
             select: { id: true, blobUrl: true, thumbnailUrl: true },
           })
         : [];

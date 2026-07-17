@@ -210,6 +210,24 @@
   color: inherit;
 }
 
+.notice {
+  margin: 14px 24px 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(73, 185, 168, 0.45);
+  border-radius: 6px;
+  color: #7fe0d1;
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.notice button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
 .pagination {
   padding: 8px 24px 24px;
   display: flex;

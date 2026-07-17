@@ -86,28 +86,49 @@ export default function MyContents({ galleryImages }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     });
-    if (res.ok) {
-      const created = await res.json();
-      setContents((prev) => prev.map((c) => c.id === tempId ? { ...newRow, id: created.id } : c));
-    } else {
+    if (!res.ok) {
       setContents((prev) => prev.filter((c) => c.id !== tempId));
+      return;
+    }
+    const created = await res.json();
+    // 생성 대기 중 사용자가 입력한 제목/설명을 pristine 스냅샷으로 덮어쓰지 않고 보존한다.
+    let pendingMeta: { title: string; comment: string } | null = null;
+    setContents((prev) => prev.map((c) => {
+      if (c.id !== tempId) return c;
+      if (c.title !== "새 콘텐츠" || c.comment !== "") {
+        pendingMeta = { title: c.title, comment: c.comment };
+      }
+      return { ...c, id: created.id };
+    }));
+    // 대기 중 입력한 값이 있으면 실제 ID로 서버에 반영한다.
+    if (pendingMeta) {
+      await fetch(`/api/contents/${created.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pendingMeta),
+      }).catch(() => undefined);
     }
   };
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("이 콘텐츠를 삭제하시겠습니까?")) return;
-    await fetch(`/api/contents/${id}`, { method: "DELETE" });
     setContents((prev) => prev.filter((c) => c.id !== id));
+    // 서버 ID가 아직 없는 임시 행은 로컬 제거만으로 충분하다.
+    if (!id.startsWith("temp_")) {
+      await fetch(`/api/contents/${id}`, { method: "DELETE" });
+    }
   };
 
   const handleUpdateMeta = async (id: string, updates: { title?: string; comment?: string }) => {
+    // 낙관적: 먼저 로컬 갱신
+    setContents((prev) => prev.map((c) => c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c));
+    // 임시 행은 서버 ID가 생기면 handleCreate가 반영하므로 여기서 PATCH하지 않는다(404 방지).
+    if (id.startsWith("temp_")) return;
     await fetch(`/api/contents/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
     });
-    // 낙관적: updatedAt 갱신
-    setContents((prev) => prev.map((c) => c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c));
   };
 
   const handleAddSlot = async (contentId: string, imageId: string, order?: number) => {
@@ -132,6 +153,9 @@ export default function MyContents({ galleryImages }: Props) {
       return { ...c, slots: newSlots.map((s, i) => ({ ...s, order: i })) };
     }));
 
+    // 임시 콘텐츠(서버 ID 미생성)에는 슬롯을 저장하지 않는다(404·NaN 날짜 손상 방지).
+    if (contentId.startsWith("temp_")) return;
+
     // 서버 동기화 (백그라운드)
     fetch(`/api/contents/${contentId}/slots`, {
       method: "POST",
@@ -155,10 +179,12 @@ export default function MyContents({ galleryImages }: Props) {
   };
 
   const handleRemoveSlot = async (contentId: string, slotId: string) => {
-    await fetch(`/api/contents/${contentId}/slots/${slotId}`, { method: "DELETE" });
     setContents((prev) => prev.map((c) =>
       c.id === contentId ? { ...c, slots: c.slots.filter((s) => s.id !== slotId) } : c
     ));
+    // 아직 서버에 저장되지 않은 임시 콘텐츠/슬롯은 로컬 제거만 한다.
+    if (contentId.startsWith("temp_") || slotId.startsWith("temp_")) return;
+    await fetch(`/api/contents/${contentId}/slots/${slotId}`, { method: "DELETE" });
   };
 
   const formatDate = (iso: string) => {

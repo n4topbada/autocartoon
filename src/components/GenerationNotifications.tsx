@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LuBell, LuCheck, LuImage, LuLoaderCircle, LuVideo, LuX } from "react-icons/lu";
+import { LuBell, LuCheck, LuImage, LuLoaderCircle, LuRotateCw, LuVideo, LuX } from "react-icons/lu";
+import CreditCostBadge from "./CreditCostBadge";
 import styles from "./GenerationNotifications.module.css";
 
 interface GenerationNotification {
@@ -16,6 +17,7 @@ interface GenerationNotification {
   cutId: string | null;
   project: { title: string } | null;
   cut: { title: string } | null;
+  creditCost: number;
   artifacts: Array<{ thumbnailUrl: string | null; blobUrl: string; kind: string }>;
 }
 
@@ -86,6 +88,24 @@ export default function GenerationNotifications() {
     };
   }, [open]);
 
+  const [retrying, setRetrying] = useState<string | null>(null);
+
+  const retry = async (jobId: string) => {
+    setRetrying(jobId);
+    try {
+      await readJson(await fetch(`/api/jobs/${jobId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "retry" }),
+      }));
+      await loadNotifications(true);
+    } catch {
+      // 재시도 실패는 조용히 무시(다음 폴링에서 상태 갱신)
+    } finally {
+      setRetrying(null);
+    }
+  };
+
   const toggle = async () => {
     const next = !open;
     setOpen(next);
@@ -136,19 +156,34 @@ export default function GenerationNotifications() {
                 ? `/studio?project=${encodeURIComponent(item.projectId)}${item.cutId ? `&cut=${encodeURIComponent(item.cutId)}` : ""}`
                 : "/archive";
               return (
-                <Link key={item.id} href={href} className={styles.item} onClick={() => setOpen(false)}>
-                  <span className={styles.preview}>
-                    {artifact ? <img src={artifact.thumbnailUrl || artifact.blobUrl} alt="" /> : item.kind === "video" ? <LuVideo /> : <LuImage />}
-                  </span>
-                  <span className={styles.content}>
-                    <strong>{item.project?.title || (item.kind === "video" ? "영상 생성" : "이미지 생성")}</strong>
-                    <span>{item.cut?.title || (item.status === "succeeded" ? "생성이 완료되었습니다." : item.error || "생성에 실패했습니다.")}</span>
-                    <small>{relativeTime(item.completedAt)}</small>
-                  </span>
+                <div key={item.id} className={styles.item}>
+                  <Link href={href} className={styles.itemLink} onClick={() => setOpen(false)}>
+                    <span className={styles.preview}>
+                      {artifact ? <img src={artifact.thumbnailUrl || artifact.blobUrl} alt="" /> : item.kind === "video" ? <LuVideo /> : <LuImage />}
+                    </span>
+                    <span className={styles.content}>
+                      <strong>{item.project?.title || (item.kind === "video" ? "영상 생성" : "이미지 생성")}</strong>
+                      <span>{item.cut?.title || (item.status === "succeeded" ? "생성이 완료되었습니다." : item.error || "생성에 실패했습니다.")}</span>
+                      <small>{relativeTime(item.completedAt)}</small>
+                    </span>
+                  </Link>
+                  {item.status === "failed" && (
+                    <button
+                      type="button"
+                      className={styles.retry}
+                      title="다시 시도"
+                      aria-label="생성 다시 시도"
+                      onClick={() => void retry(item.id)}
+                      disabled={retrying === item.id}
+                    >
+                      {retrying === item.id ? <LuLoaderCircle className={styles.spin} /> : <LuRotateCw />}
+                      <CreditCostBadge credits={item.creditCost} />
+                    </button>
+                  )}
                   <span className={item.status === "succeeded" ? styles.success : styles.failure}>
                     {item.status === "succeeded" ? <LuCheck /> : <LuX />}
                   </span>
-                </Link>
+                </div>
               );
             })}
           </div>

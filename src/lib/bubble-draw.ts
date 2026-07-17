@@ -34,7 +34,22 @@ export interface SpeechBubble {
   fontSize?: number;
   fontWeight?: "normal" | "bold";
   textAlign?: "left" | "center" | "right";
+  fontFamily?: string;
+  fontItalic?: boolean;
+  underline?: boolean;
+  outlineColor?: string;
+  outlineWidth?: number;
+  lineHeightScale?: number;
+  letterSpacing?: number;
 }
+
+export const BUBBLE_FONT_FAMILIES = [
+  { id: "sans-serif", label: "고딕" },
+  { id: "serif", label: "명조" },
+  { id: "'Noto Sans KR', sans-serif", label: "노토 산스" },
+  { id: "'Nanum Pen Script', cursive", label: "손글씨" },
+  { id: "monospace", label: "고정폭" },
+] as const;
 
 export function createBubble(type: BubbleType, x: number, y: number): SpeechBubble {
   const hasTail = type === "classic" || type === "thought";
@@ -179,8 +194,14 @@ function drawBubbleText(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
   const fontSize = Math.max(8, bubble.fontSize ?? 24);
   const padding = Math.max(10, fontSize * 0.65);
   const maxWidth = Math.max(20, bubble.width - padding * 2);
-  const lineHeight = fontSize * 1.28;
-  ctx.font = `${bubble.fontWeight === "bold" ? 700 : 400} ${fontSize}px sans-serif`;
+  const lineHeight = fontSize * (bubble.lineHeightScale ?? 1.28);
+  const family = bubble.fontFamily || "sans-serif";
+  const italic = bubble.fontItalic ? "italic " : "";
+  ctx.font = `${italic}${bubble.fontWeight === "bold" ? 700 : 400} ${fontSize}px ${family}`;
+  // 자간(letterSpacing)은 최신 Canvas API. 지원 시에만 적용한다.
+  const spacing = bubble.letterSpacing ?? 0;
+  const ctxWithSpacing = ctx as CanvasRenderingContext2D & { letterSpacing?: string };
+  if ("letterSpacing" in ctx) ctxWithSpacing.letterSpacing = `${spacing}px`;
   ctx.fillStyle = bubble.textColor ?? "#111111";
   ctx.textAlign = bubble.textAlign ?? "center";
   ctx.textBaseline = "middle";
@@ -192,7 +213,30 @@ function drawBubbleText(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
     : bubble.textAlign === "right"
       ? bubble.x + bubble.width / 2 - padding
       : bubble.x;
-  visibleLines.forEach((line, index) => ctx.fillText(line, textX, startY + index * lineHeight, maxWidth));
+  const hasOutline = Boolean(bubble.outlineColor && (bubble.outlineWidth ?? 0) > 0);
+  visibleLines.forEach((line, index) => {
+    const y = startY + index * lineHeight;
+    if (hasOutline) {
+      ctx.strokeStyle = bubble.outlineColor!;
+      ctx.lineWidth = bubble.outlineWidth!;
+      ctx.lineJoin = "round";
+      ctx.strokeText(line, textX, y, maxWidth);
+    }
+    ctx.fillText(line, textX, y, maxWidth);
+    if (bubble.underline && line) {
+      const width = Math.min(maxWidth, ctx.measureText(line).width);
+      const ux = bubble.textAlign === "left" ? textX
+        : bubble.textAlign === "right" ? textX - width
+          : textX - width / 2;
+      ctx.beginPath();
+      ctx.strokeStyle = bubble.textColor ?? "#111111";
+      ctx.lineWidth = Math.max(1, fontSize * 0.06);
+      ctx.moveTo(ux, y + fontSize * 0.55);
+      ctx.lineTo(ux + width, y + fontSize * 0.55);
+      ctx.stroke();
+    }
+  });
+  if ("letterSpacing" in ctx) ctxWithSpacing.letterSpacing = "0px";
 }
 
 export function drawBubbleSelection(ctx: CanvasRenderingContext2D, b: SpeechBubble) {

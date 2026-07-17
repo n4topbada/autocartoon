@@ -664,7 +664,7 @@
   min-height: 34px;
   padding: 4px;
   display: grid;
-  grid-template-columns: 22px minmax(90px, 150px) minmax(80px, 1fr) 38px 28px;
+  grid-template-columns: 22px minmax(90px, 150px) minmax(80px, 1fr) 38px 58px;
   align-items: center;
   gap: 7px;
   border-bottom: 1px solid #2c2c29;
@@ -724,8 +724,13 @@
 }
 
 .retryButton {
-  width: 26px;
+  width: 56px;
   height: 26px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   border: 0;
   border-radius: 4px;
   background: #38241f;
@@ -1088,6 +1093,22 @@
   font-size: 10px;
 }
 
+.costHint {
+  margin: 10px 14px 0;
+  padding: 5px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-align: center;
+}
+
+.assetStripDragging {
+  outline: 2px dashed #4c9186;
+  outline-offset: -4px;
+  background: rgba(76, 145, 134, 0.08);
+}
+
 .generateButton {
   width: calc(100% - 28px);
   min-height: 42px;
@@ -1331,7 +1352,7 @@
 .dialogueRow {
   min-width: 0;
   display: grid;
-  grid-template-columns: 26px 130px minmax(220px, 1fr) 32px 32px;
+  grid-template-columns: 26px 130px minmax(220px, 1fr) 56px 32px;
   align-items: stretch;
   gap: 5px;
 }
@@ -1349,6 +1370,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   border: 1px solid var(--studio-line);
   border-radius: 4px;
   background: #242422;
@@ -1938,7 +1960,7 @@
   }
 
   .jobRow {
-    grid-template-columns: 22px minmax(80px, 1fr) 72px 34px 26px;
+    grid-template-columns: 22px minmax(80px, 1fr) 72px 34px 58px;
   }
 
   .dialogBackdrop {
@@ -1974,7 +1996,7 @@
   }
 
   .dialogueRow {
-    grid-template-columns: 26px minmax(0, 1fr) 32px 32px;
+    grid-template-columns: 26px minmax(0, 1fr) 56px 32px;
   }
 
   .dialogueRow select {

@@ -7,6 +7,17 @@ const KAKAO_USER_URL = "https://kapi.kakao.com/v2/user/me";
 export const KAKAO_OAUTH_STATE_COOKIE = "wony_kakao_oauth_state";
 export const KAKAO_OAUTH_STATE_MAX_AGE = 10 * 60;
 
+const KAKAO_PLACEHOLDER_EMAIL_DOMAIN = "@oauth.wonyframe.local";
+
+export function kakaoPlaceholderEmail(kakaoId: string) {
+  return `kakao-${kakaoId}${KAKAO_PLACEHOLDER_EMAIL_DOMAIN}`;
+}
+
+/** 이메일 동의 없이 만든 카카오 전용 계정(수신 불가 자리표시 이메일)인지 여부. */
+export function isKakaoPlaceholderEmail(email: string) {
+  return email.toLowerCase().endsWith(KAKAO_PLACEHOLDER_EMAIL_DOMAIN);
+}
+
 export type KakaoUser = {
   id: string;
   nickname: string;

@@ -32,24 +32,48 @@ export async function POST(
       );
     }
 
-    const { imageId, order } = await req.json();
+    const { imageId, order } = (await req.json()) as { imageId?: unknown; order?: unknown };
 
-    if (!imageId) {
+    if (typeof imageId !== "string" || !imageId) {
       return NextResponse.json({ error: "imageId는 필수입니다" }, { status: 400 });
     }
 
-    const slot = await prisma.contentSlot.create({
-      data: {
-        contentId: id,
-        imageId,
-        order: order ?? content._count.slots,
-      },
+    // 자신의 이미지만 슬롯에 넣을 수 있다(IDOR 방지). ContentSlot.imageId에는 FK가 없으므로
+    // 여기서 존재·소유권을 확인하지 않으면 임의 이미지 URL이 노출될 수 있다.
+    const image = await prisma.generatedImage.findFirst({
+      where: { id: imageId, request: { userId: session.userId } },
+      select: { id: true },
     });
+    if (!image) {
+      return NextResponse.json({ error: "이미지를 찾을 수 없습니다" }, { status: 404 });
+    }
 
-    // Touch content updatedAt
-    await prisma.content.update({
-      where: { id },
-      data: { updatedAt: new Date() },
+    const requestedOrder =
+      typeof order === "number" && Number.isFinite(order) ? Math.floor(order) : undefined;
+
+    const slot = await prisma.$transaction(async (tx) => {
+      const last = await tx.contentSlot.findFirst({
+        where: { contentId: id },
+        orderBy: { order: "desc" },
+        select: { order: true },
+      });
+      const appendOrder = (last?.order ?? -1) + 1;
+      const insertOrder =
+        requestedOrder === undefined
+          ? appendOrder
+          : Math.max(0, Math.min(appendOrder, requestedOrder));
+      // 중간 삽입이면 뒤 슬롯을 한 칸씩 밀어 순번 중복을 막는다.
+      if (insertOrder < appendOrder) {
+        await tx.contentSlot.updateMany({
+          where: { contentId: id, order: { gte: insertOrder } },
+          data: { order: { increment: 1 } },
+        });
+      }
+      const created = await tx.contentSlot.create({
+        data: { contentId: id, imageId, order: insertOrder },
+      });
+      await tx.content.update({ where: { id }, data: { updatedAt: new Date() } });
+      return created;
     });
 
     return NextResponse.json({
@@ -92,15 +116,19 @@ export async function PUT(
       slots: { id: string; order: number }[];
     };
 
-    if (!Array.isArray(slots)) {
+    if (
+      !Array.isArray(slots) ||
+      slots.some((s) => typeof s?.id !== "string" || typeof s?.order !== "number")
+    ) {
       return NextResponse.json({ error: "slots 배열이 필요합니다" }, { status: 400 });
     }
 
-    // Bulk update order in a transaction
+    // contentId를 함께 제약해 다른 사용자의 슬롯 순번을 덮어쓰지 못하게 한다(IDOR 방지).
+    // updateMany는 존재하지 않는 id에 대해 0행을 반환하므로 P2025(500)도 피한다.
     await prisma.$transaction(
       slots.map((s) =>
-        prisma.contentSlot.update({
-          where: { id: s.id },
+        prisma.contentSlot.updateMany({
+          where: { id: s.id, contentId: id },
           data: { order: s.order },
         })
       )

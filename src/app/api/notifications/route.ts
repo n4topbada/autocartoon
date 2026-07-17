@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuth } from "@/lib/auth";
+import { getGenerationCreditCost } from "@/lib/credit-products";
 import { prisma } from "@/lib/prisma";
 
 const COMPLETED_STATUSES = ["succeeded", "failed"];
@@ -21,6 +22,8 @@ export async function GET() {
           id: true,
           kind: true,
           status: true,
+          input: true,
+          creditUnits: true,
           error: true,
           completedAt: true,
           notifiedAt: true,
@@ -37,7 +40,18 @@ export async function GET() {
       }),
       prisma.generationJob.count({ where: { ...where, notifiedAt: null } }),
     ]);
-    return NextResponse.json({ notifications, unreadCount });
+    return NextResponse.json({
+      notifications: notifications.map(({ input, creditUnits, ...notification }) => ({
+        ...notification,
+        creditCost: creditUnits ?? getGenerationCreditCost(
+          notification.kind,
+          input && typeof input === "object" && !Array.isArray(input)
+            ? input as Record<string, unknown>
+            : {},
+        ),
+      })),
+      unreadCount,
+    });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

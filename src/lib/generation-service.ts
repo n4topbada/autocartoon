@@ -14,6 +14,7 @@ import {
   buildSketchWithBgImagePrompt,
   buildEditWithBgImagePrompt,
 } from "./prompts";
+import { updateJobProgress } from "./generation-jobs";
 
 export type GenerationMode = "text" | "sketch" | "edit" | "transform";
 
@@ -244,10 +245,34 @@ export async function generate(input: GenerateInput) {
     }
   }
 
-  // 다중 캐릭터 참조 안내 프롬프트 추가
-  if (presets.length > 1) {
-    const charRef = `[캐릭터 참조] 첨부된 이미지는 ${characterNames.map((n) => `"${n}"`).join(", ")} 캐릭터의 레퍼런스입니다. 각 이미지 앞에 캐릭터 이름 라벨이 있습니다. 프롬프트에서 언급된 캐릭터를 해당 레퍼런스에 맞게 그려주세요.`;
-    prompt = charRef + "\n\n" + prompt;
+  // 첨부 이미지의 역할을 "위치"가 아니라 "라벨"로 구분하도록 안내한다.
+  // 다중 캐릭터에서는 캐릭터 시트가 배경/편집 대상 뒤에 붙어, 모드 프롬프트의
+  // "첫 번째=시트, 마지막=편집 대상" 위치 설명과 어긋나므로 라벨 기준으로 재정의한다.
+  if (labeledImages.length > 0) {
+    const guideLines: string[] = [];
+    if (presets.length > 1) {
+      guideLines.push(
+        `"=== Character: 이름 / view: ... ===" 라벨이 붙은 이미지는 각 캐릭터(${characterNames
+          .map((n) => `"${n}"`)
+          .join(", ")})의 레퍼런스입니다. 프롬프트에서 언급된 캐릭터를 해당 라벨의 레퍼런스에 맞춰 그려주세요.`
+      );
+    }
+    if (input.referenceAssetUrls?.length) {
+      guideLines.push(
+        `"=== 장면 참고 자산 ... ===" 라벨 이미지는 구도·분위기 참고용이며, 그대로 편집하거나 복제하는 대상이 아닙니다.`
+      );
+    }
+    const unlabeledRoles: string[] = [];
+    if (useBgImage) unlabeledRoles.push("배경 이미지");
+    if (inputImage && (input.mode === "sketch" || input.mode === "edit")) {
+      unlabeledRoles.push(input.mode === "sketch" ? "스케치 원본" : "편집할 기존 일러스트");
+    }
+    if (unlabeledRoles.length > 0) {
+      guideLines.push(`라벨이 없는 첨부 이미지는 ${unlabeledRoles.join(" 및 ")}입니다.`);
+    }
+    if (guideLines.length > 0) {
+      prompt = `[첨부 이미지 안내] ${guideLines.join(" ")}\n\n` + prompt;
+    }
   }
 
   // 5. Gemini 호출
@@ -275,10 +300,15 @@ export async function generate(input: GenerateInput) {
   }
 
   // 6. Blob 업로드를 마친 뒤 관련 DB 레코드는 한 트랜잭션으로 저장한다.
+  // 생성이 끝나고 저장 단계로 진입했음을 진행률에 반영한다(35% → 70%).
+  if (input.jobId) {
+    await updateJobProgress(input.jobId, "storing", 70).catch(() => undefined);
+  }
   const uploadedImages: Array<{
     blobUrl: string;
     thumbnailUrl: string;
     mimeType: string;
+    sizeBytes: number;
   }> = [];
   try {
     for (const img of generatedImages) {
@@ -287,7 +317,12 @@ export async function generate(input: GenerateInput) {
         img.mimeType,
         "generated"
       );
-      uploadedImages.push({ blobUrl, thumbnailUrl, mimeType: img.mimeType });
+      uploadedImages.push({
+        blobUrl,
+        thumbnailUrl,
+        mimeType: img.mimeType,
+        sizeBytes: Buffer.byteLength(img.base64, "base64"),
+      });
     }
   } catch (error) {
     await Promise.all(
@@ -302,12 +337,19 @@ export async function generate(input: GenerateInput) {
   const job = input.jobId
     ? await prisma.generationJob.findFirst({
         where: { id: input.jobId, userId: input.userId },
-        select: { id: true, projectId: true, cutId: true },
+        select: {
+          id: true,
+          projectId: true,
+          cutId: true,
+          creditUnits: true,
+          creditSource: true,
+        },
       })
     : null;
   if (input.jobId && !job) throw new Error("생성 작업을 찾을 수 없습니다.");
 
-  const saved = await prisma.$transaction(async (tx) => {
+  const saveWithCompensation = async () =>
+    prisma.$transaction(async (tx) => {
     const request = await tx.generationRequest.create({
       data: {
         presetId: requestedPresetIds[0] ?? null,
@@ -323,6 +365,7 @@ export async function generate(input: GenerateInput) {
             blobUrl: image.blobUrl,
             thumbnailUrl: image.thumbnailUrl,
             mimeType: image.mimeType,
+            sizeBytes: image.sizeBytes,
           })),
         },
       },
@@ -330,42 +373,9 @@ export async function generate(input: GenerateInput) {
     });
 
     if (job) {
-      await tx.generationArtifact.createMany({
-        data: uploadedImages.map((image) => ({
-          jobId: job.id,
-          kind: "image",
-          blobUrl: image.blobUrl,
-          thumbnailUrl: image.thumbnailUrl,
-          mimeType: image.mimeType,
-        })),
-      });
-
-      if (job.projectId) {
-        await tx.projectAsset.createMany({
-          data: uploadedImages.map((image, index) => ({
-            projectId: job.projectId!,
-            jobId: job.id,
-            kind: "image",
-            name: `AI 이미지 ${index + 1}`,
-            blobUrl: image.blobUrl,
-            thumbnailUrl: image.thumbnailUrl,
-            mimeType: image.mimeType,
-          })),
-        });
-      }
-
-      if (job.cutId) {
-        await tx.projectCut.update({
-          where: { id: job.cutId },
-          data: {
-            imageUrl: uploadedImages[0].blobUrl,
-            thumbnailUrl: uploadedImages[0].thumbnailUrl,
-          },
-        });
-      }
-
-      await tx.generationJob.update({
-        where: { id: job.id },
+      // 종료된 작업을 succeeded로 덮어써 환불+이미지 동시 지급이 되는 것을 막는다.
+      const marked = await tx.generationJob.updateMany({
+        where: { id: job.id, status: { in: ["queued", "running"] } },
         data: {
           status: "succeeded",
           stage: "completed",
@@ -380,10 +390,109 @@ export async function generate(input: GenerateInput) {
           completedAt: new Date(),
         },
       });
+      if (marked.count === 0) {
+        throw new Error("작업이 이미 종료되어 결과를 저장하지 않습니다.");
+      }
+
+      await tx.generationArtifact.createMany({
+        data: uploadedImages.map((image) => ({
+          jobId: job.id,
+          kind: "image",
+          blobUrl: image.blobUrl,
+          thumbnailUrl: image.thumbnailUrl,
+          mimeType: image.mimeType,
+          sizeBytes: image.sizeBytes,
+        })),
+      });
+
+      if (job.projectId) {
+        await tx.projectAsset.createMany({
+          data: uploadedImages.map((image, index) => ({
+            projectId: job.projectId!,
+            jobId: job.id,
+            kind: "image",
+            name: `AI 이미지 ${index + 1}`,
+            blobUrl: image.blobUrl,
+            thumbnailUrl: image.thumbnailUrl,
+            mimeType: image.mimeType,
+            sizeBytes: image.sizeBytes,
+          })),
+        });
+      }
+
+      // 컷이 도중에 삭제됐을 수 있으므로 updateMany로 0행을 허용한다(P2025 방지).
+      if (job.cutId) {
+        await tx.projectCut.updateMany({
+          where: { id: job.cutId },
+          data: {
+            imageUrl: uploadedImages[0].blobUrl,
+            thumbnailUrl: uploadedImages[0].thumbnailUrl,
+          },
+        });
+      }
+
+      // 요청한 장수보다 적게 생성됐으면(다중 count 배경) 미생성분을 부분 환불한다(멱등).
+      const deliveredCount = uploadedImages.length;
+      if (
+        job.creditUnits &&
+        job.creditSource &&
+        requestedCount > deliveredCount &&
+        job.creditUnits % requestedCount === 0
+      ) {
+        const refundUnits =
+          (job.creditUnits / requestedCount) * (requestedCount - deliveredCount);
+        const partialKey = `job:${job.id}:partial-refund`;
+        const already = await tx.creditLedger.findUnique({
+          where: { referenceKey: partialKey },
+        });
+        if (refundUnits > 0 && !already) {
+          if (job.creditSource === "tier") {
+            await tx.user.updateMany({
+              where: { id: input.userId, tierUsedThisMonth: { gte: refundUnits } },
+              data: { tierUsedThisMonth: { decrement: refundUnits } },
+            });
+          } else {
+            await tx.user.update({
+              where: { id: input.userId },
+              data: { credits: { increment: refundUnits } },
+            });
+          }
+          const wallet = await tx.user.findUniqueOrThrow({
+            where: { id: input.userId },
+            select: { credits: true },
+          });
+          await tx.creditLedger.create({
+            data: {
+              userId: input.userId,
+              jobId: job.id,
+              referenceKey: partialKey,
+              action: "refund",
+              source: job.creditSource,
+              units: refundUnits,
+              balanceAfter: wallet.credits,
+              note: `${requestedCount - deliveredCount}장 미생성 부분 환불`,
+            },
+          });
+        }
+      }
     }
 
     return request;
-  });
+    });
+
+  let saved: Awaited<ReturnType<typeof saveWithCompensation>>;
+  try {
+    saved = await saveWithCompensation();
+  } catch (error) {
+    // 저장 트랜잭션 실패 시 이미 업로드한 blob/썸네일을 보상 삭제한다(고아 방지).
+    await Promise.all(
+      uploadedImages.flatMap((image) => [
+        deleteBlob(image.blobUrl),
+        deleteBlob(image.thumbnailUrl),
+      ])
+    );
+    throw error;
+  }
 
   return {
     requestId: saved.id,

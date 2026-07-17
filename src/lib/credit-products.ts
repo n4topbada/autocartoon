@@ -1,25 +1,33 @@
 export const WELCOME_CREDITS = 30;
+export const CREDIT_UNIT_PRICE_KRW = 12;
 
 export const CREDIT_PRODUCTS = [
   {
+    code: "light",
+    name: "라이트",
+    credits: 100,
+    amountKrw: 1_200,
+  },
+  {
     code: "starter",
     name: "스타터",
-    credits: 120,
-    amountKrw: 4_900,
+    credits: 500,
+    amountKrw: 6_000,
+    bonusCredits: 100,
   },
   {
     code: "creator",
     name: "크리에이터",
-    credits: 360,
-    amountKrw: 12_900,
-    bonusCredits: 60,
+    credits: 2_000,
+    amountKrw: 24_000,
+    bonusCredits: 500,
   },
   {
     code: "studio",
     name: "스튜디오",
-    credits: 1_200,
-    amountKrw: 39_000,
-    bonusCredits: 200,
+    credits: 8_000,
+    amountKrw: 96_000,
+    bonusCredits: 3_000,
   },
 ] as const;
 
@@ -27,6 +35,17 @@ export type CreditProduct = (typeof CREDIT_PRODUCTS)[number];
 
 export function getCreditProduct(code: string): CreditProduct | undefined {
   return CREDIT_PRODUCTS.find((product) => product.code === code);
+}
+
+/** 기본 크레딧 + 보너스 크레딧을 합한, 실제로 적립해야 하는 총 크레딧. */
+export function getProductTotalCredits(product: CreditProduct): number {
+  return product.credits + ("bonusCredits" in product ? product.bonusCredits : 0);
+}
+
+/** 구매 크레딧을 기준으로 계산한 보너스 지급률. */
+export function getProductBonusRate(product: CreditProduct): number {
+  const bonusCredits = "bonusCredits" in product ? product.bonusCredits : 0;
+  return (bonusCredits / product.credits) * 100;
 }
 
 export const AI_CREDIT_COSTS = {

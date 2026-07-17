@@ -936,6 +936,36 @@
   opacity: 0.45;
 }
 
+.aiPresetRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.aiPresetButton {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.aiRegionToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.aiRegionHint {
+  margin: 0;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
 .aiToolLoading {
   min-height: 110px;
   display: flex;

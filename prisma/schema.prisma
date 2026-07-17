@@ -75,6 +75,8 @@ model PresetImage {
   preset CharacterPreset @relation(fields: [presetId], references: [id], onDelete: Cascade)
 
   @@index([presetId, view, order])
+  @@index([blobUrl])
+  @@index([thumbnailUrl])
 }
 
 model SavedBackground {
@@ -90,6 +92,8 @@ model SavedBackground {
   generationRequests GenerationRequest[]
 
   @@index([userId, createdAt])
+  @@index([blobUrl])
+  @@index([thumbnailUrl])
 }
 
 model GenerationRequest {
@@ -119,6 +123,7 @@ model User {
   kakaoId                    String?   @unique
   passwordHash               String
   name                       String?
+  plazaNickname              String?   @unique
   role                       String    @default("user")
   tier                       String    @default("free")
   credits                    Int       @default(0)
@@ -154,6 +159,7 @@ model User {
   creativeProjects   CreativeProject[]
   savedProjectBriefs SavedProjectBrief[]
   sessions           UserSession[]
+  reports            Report[]
 }
 
 model UserSession {
@@ -222,12 +228,15 @@ model GenerationArtifact {
   blobUrl      String
   thumbnailUrl String?
   mimeType     String
+  sizeBytes    Int?
   metadata     Json?
   createdAt    DateTime @default(now())
 
   job GenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   @@index([jobId, createdAt])
+  @@index([blobUrl])
+  @@index([thumbnailUrl])
 }
 
 model CreditLedger {
@@ -333,6 +342,9 @@ model ProjectCut {
 
   @@unique([projectId, order])
   @@index([projectId, updatedAt])
+  @@index([imageUrl])
+  @@index([thumbnailUrl])
+  @@index([videoUrl])
 }
 
 model ProjectAsset {
@@ -344,6 +356,7 @@ model ProjectAsset {
   blobUrl      String
   thumbnailUrl String?
   mimeType     String
+  sizeBytes    Int?
   metadata     Json?
   createdAt    DateTime @default(now())
 
@@ -352,6 +365,8 @@ model ProjectAsset {
 
   @@index([projectId, createdAt])
   @@index([jobId])
+  @@index([blobUrl])
+  @@index([thumbnailUrl])
 }
 
 model BoardPost {
@@ -368,6 +383,7 @@ model BoardPost {
   user     User           @relation(fields: [userId], references: [id])
   comments BoardComment[]
   likes    BoardLike[]
+  reports  Report[]
 
   @@index([userId, createdAt])
   @@index([pinned, createdAt])
@@ -380,11 +396,29 @@ model BoardComment {
   content   String
   createdAt DateTime @default(now())
 
-  post  BoardPost   @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user  User        @relation(fields: [userId], references: [id])
-  likes BoardLike[]
+  post    BoardPost   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id])
+  likes   BoardLike[]
+  reports Report[]
 
   @@index([postId, createdAt])
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  reporterId String
+  postId     String?
+  commentId  String?
+  reason     String   @db.Text
+  status     String   @default("open") // open | reviewed | dismissed
+  createdAt  DateTime @default(now())
+
+  reporter User          @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  post     BoardPost?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment  BoardComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([reporterId, createdAt])
 }
 
 model BoardLike {
@@ -429,6 +463,7 @@ model GeneratedImage {
   blobUrl      String // Vercel Blob URL
   thumbnailUrl String?
   mimeType     String   @default("image/png")
+  sizeBytes    Int?
   favorite     Boolean  @default(false)
   createdAt    DateTime @default(now())
 

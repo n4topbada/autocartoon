@@ -23,6 +23,8 @@ import {
   LuX,
 } from "react-icons/lu";
 import { CHARACTER_VOICES } from "@/lib/character-voices";
+import { AI_CREDIT_COSTS } from "@/lib/credit-products";
+import CreditCostBadge from "./CreditCostBadge";
 import GenerationNotifications from "./GenerationNotifications";
 import styles from "./ShortVideoBuilder.module.css";
 
@@ -234,6 +236,18 @@ export default function ShortVideoBuilder() {
   const speakerIds = useMemo(() => Array.from(new Set(
     cuts.flatMap((cut) => cut.dialogues.map((dialogue) => dialogue.speakerPresetId || NARRATOR_ID))
   )), [cuts]);
+
+  const ttsCreditCost = useMemo(() => {
+    const requests = new Set<string>();
+    for (const cut of cuts) {
+      for (const dialogue of cut.dialogues) {
+        const speakerId = dialogue.speakerPresetId || NARRATOR_ID;
+        const voiceId = voiceAssignments[speakerId] || CHARACTER_VOICES[0].voiceId;
+        for (const text of splitForTts(dialogue.text)) requests.add(`${voiceId}:${text}`);
+      }
+    }
+    return requests.size * AI_CREDIT_COSTS.tts;
+  }, [cuts, voiceAssignments]);
 
   useEffect(() => {
     setVoiceAssignments((current) => {
@@ -704,6 +718,7 @@ export default function ShortVideoBuilder() {
               <div>
                 <button onClick={() => void analyzeProject()} disabled={analyzing || projectLoading}>
                   {analyzing ? <LuLoaderCircle className={styles.spin} /> : <LuSparkles />} AI 대사 분석
+                  <CreditCostBadge credits={AI_CREDIT_COSTS.videoPlan} />
                 </button>
                 <button onClick={() => void saveDialogues()} disabled={savingDialogues || cuts.length === 0}>
                   {savingDialogues ? <LuLoaderCircle className={styles.spin} /> : <LuSave />} 대사 저장
@@ -765,7 +780,10 @@ export default function ShortVideoBuilder() {
                       <select value={voiceAssignments[speakerId] || CHARACTER_VOICES[0].voiceId} onChange={(event) => setVoiceAssignments((current) => ({ ...current, [speakerId]: event.target.value }))}>
                         {CHARACTER_VOICES.map((voice) => <option value={voice.voiceId} key={voice.voiceId}>{voice.label} · {voice.description}</option>)}
                       </select>
-                      <button onClick={() => void previewVoice(speakerId)} title="목소리 미리듣기"><LuVolume2 /></button>
+                      <button onClick={() => void previewVoice(speakerId)} title="목소리 미리듣기">
+                        <LuVolume2 />
+                        <CreditCostBadge credits={AI_CREDIT_COSTS.tts} />
+                      </button>
                     </div>
                   </label>
                 );
@@ -805,6 +823,7 @@ export default function ShortVideoBuilder() {
             ) : (
               <button className={styles.generateButton} onClick={() => void createShortVideo()} disabled={cuts.length === 0}>
                 <LuFilm /> 숏폼 MP4 만들기
+                {ttsCreditCost > 0 && <CreditCostBadge credits={ttsCreditCost} />}
               </button>
             )}
           </div>

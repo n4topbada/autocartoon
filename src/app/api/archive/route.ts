@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
       ? Prisma.sql`${artifactSql} UNION ALL ${legacySql}`
       : artifactSql;
 
-    const [items, artifactTotal, legacyTotal] = await Promise.all([
+    const [items, artifactTotal, legacyTotal, artifactSize, legacySize] = await Promise.all([
       prisma.$queryRaw<ArchiveRow[]>(Prisma.sql`
         SELECT * FROM (${combinedSql}) AS archive_items
         ORDER BY "createdAt" DESC
@@ -114,9 +114,20 @@ export async function GET(req: NextRequest) {
       `),
       prisma.generationArtifact.count({ where: artifactWhere }),
       includeLegacy ? prisma.generatedImage.count({ where: legacyWhere }) : Promise.resolve(0),
+      prisma.generationArtifact.aggregate({
+        where: { job: { userId: session.userId } },
+        _sum: { sizeBytes: true },
+      }),
+      prisma.generatedImage.aggregate({
+        // 작업 기반 이미지는 GenerationArtifact로도 집계되므로, 레거시(jobId 없음)만 합산해
+        // 이중 계산을 막는다(list 쿼리의 legacyWhere/legacySql과 동일 기준).
+        where: { request: { userId: session.userId, jobId: null } },
+        _sum: { sizeBytes: true },
+      }),
     ]);
 
     const total = artifactTotal + legacyTotal;
+    const storageBytes = (artifactSize._sum.sizeBytes ?? 0) + (legacySize._sum.sizeBytes ?? 0);
     return NextResponse.json({
       items: items.map((item) => ({
         ...item,
@@ -124,6 +135,7 @@ export async function GET(req: NextRequest) {
         thumbnailUrl: item.thumbnailUrl ?? item.url,
         createdAt: item.createdAt.toISOString(),
       })),
+      storageBytes,
       pagination: {
         page,
         pageSize: PAGE_SIZE,

@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { start } from "workflow/api";
 import { AuthError, requireAuth } from "@/lib/auth";
 import { reserveJobCredit } from "@/lib/credit-service";
-import { failGenerationJob, jobToResponse, type StoredVideoJobInput } from "@/lib/generation-jobs";
+import {
+  failGenerationJob,
+  jobToResponse,
+  reapExpiredJobsForUser,
+  type StoredVideoJobInput,
+} from "@/lib/generation-jobs";
 import {
   getPlatformAIProvider,
   getPublicPlatformAIError,
@@ -10,7 +15,7 @@ import {
 } from "@/lib/platform-ai";
 import { prisma } from "@/lib/prisma";
 import { videoGenerationWorkflow } from "@/workflows/video-generation";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 const ALLOWED_DURATIONS = new Set([4, 6, 8]);
 const ALLOWED_ASPECT_RATIOS = new Set(["16:9", "9:16"]);
@@ -23,6 +28,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export async function GET(req: NextRequest) {
   try {
     const session = await requireAuth();
+    // 시간 초과로 멈춘 작업을 실패+환불 처리(멱등)한 뒤 목록을 조회한다.
+    await reapExpiredJobsForUser(session.userId).catch((error) => {
+      console.error("Job reaper failed:", error);
+    });
     const status = req.nextUrl.searchParams.get("status");
     const kind = req.nextUrl.searchParams.get("kind");
     const requestedLimit = Number(req.nextUrl.searchParams.get("limit") || 30);
@@ -139,19 +148,33 @@ export async function POST(req: NextRequest) {
           }
         : {}),
     };
-    const job = await prisma.generationJob.create({
-      data: {
-        userId: session.userId,
-        projectId,
-        cutId,
-        kind: "video",
-        provider: getPlatformAIProvider(),
-        model: getVideoModel(),
-        idempotencyKey,
-        prompt,
-        input: input as unknown as Prisma.InputJsonValue,
-      },
-    });
+    let job;
+    try {
+      job = await prisma.generationJob.create({
+        data: {
+          userId: session.userId,
+          projectId,
+          cutId,
+          kind: "video",
+          provider: getPlatformAIProvider(),
+          model: getVideoModel(),
+          idempotencyKey,
+          prompt,
+          input: input as unknown as Prisma.InputJsonValue,
+        },
+      });
+    } catch (createError) {
+      if (createError instanceof Prisma.PrismaClientKnownRequestError && createError.code === "P2002") {
+        const existingJob = await prisma.generationJob.findUnique({
+          where: { userId_idempotencyKey: { userId: session.userId, idempotencyKey } },
+          include: { artifacts: { orderBy: { createdAt: "asc" } } },
+        });
+        if (existingJob) {
+          return NextResponse.json({ job: jobToResponse(existingJob), deduplicated: true }, { status: 202 });
+        }
+      }
+      throw createError;
+    }
 
     const credit = await reserveJobCredit(session.userId, job.id);
     if (!credit.ok) {

@@ -14,6 +14,7 @@ import {
 } from "react-icons/lu";
 import { RiKakaoTalkFill } from "react-icons/ri";
 import { useAuth } from "@/components/AuthProvider";
+import { CREDIT_UNIT_PRICE_KRW } from "@/lib/credit-products";
 import styles from "./page.module.css";
 
 type WalletData = {
@@ -63,6 +64,12 @@ function formatDate(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatBonusRate(credits: number, bonusCredits = 0) {
+  return new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 1 }).format(
+    (bonusCredits / credits) * 100,
+  );
 }
 
 function ledgerLabel(action: string, source: string) {
@@ -199,7 +206,7 @@ export default function CreditsPage() {
           <div className={styles.sectionHeading}>
             <div>
               <h2 id="products-title">크레딧 충전</h2>
-              <p>결제 승인이 끝난 뒤 잔액에 즉시 반영됩니다.</p>
+              <p>유상 크레딧 1개는 {CREDIT_UNIT_PRICE_KRW}원이며, 결제 승인 뒤 잔액에 즉시 반영됩니다.</p>
             </div>
             <span className={styles.providerBadge}><RiKakaoTalkFill /> 카카오페이</span>
           </div>
@@ -212,26 +219,38 @@ export default function CreditsPage() {
             <div className={styles.setupNotice}>현재 카카오페이 테스트 결제 모드입니다.</div>
           )}
           <div className={styles.productGrid}>
-            {data?.products.map((product) => (
-              <article className={styles.product} key={product.code}>
-                <div>
-                  <span className={styles.productName}>{product.name}</span>
-                  <div className={styles.productCredits}>{product.credits.toLocaleString()} 크레딧</div>
-                  {product.bonusCredits ? <span className={styles.bonus}>보너스 {product.bonusCredits}</span> : null}
-                </div>
-                <div className={styles.productAction}>
-                  <strong>{product.amountKrw.toLocaleString()}원</strong>
-                  <button
-                    type="button"
-                    onClick={() => void startPayment(product.code)}
-                    disabled={!data.provider.configured || paying !== null}
-                  >
-                    {paying === product.code ? <LuLoaderCircle className={styles.spin} /> : <RiKakaoTalkFill />}
-                    결제
-                  </button>
-                </div>
-              </article>
-            ))}
+            {data?.products.map((product) => {
+              const bonusCredits = product.bonusCredits ?? 0;
+              const totalCredits = product.credits + bonusCredits;
+              return (
+                <article className={styles.product} key={product.code}>
+                  <div>
+                    <div className={styles.productTitleRow}>
+                      <span className={styles.productName}>{product.name}</span>
+                      <span className={styles.bonusRate}>
+                        보너스 {formatBonusRate(product.credits, bonusCredits)}%
+                      </span>
+                    </div>
+                    <div className={styles.productCredits}>{totalCredits.toLocaleString()} 크레딧</div>
+                    <span className={styles.creditBreakdown}>
+                      기본 {product.credits.toLocaleString()}
+                      {bonusCredits > 0 ? ` + 보너스 ${bonusCredits.toLocaleString()}` : ""}
+                    </span>
+                  </div>
+                  <div className={styles.productAction}>
+                    <strong>{product.amountKrw.toLocaleString()}원</strong>
+                    <button
+                      type="button"
+                      onClick={() => void startPayment(product.code)}
+                      disabled={!data.provider.configured || paying !== null}
+                    >
+                      {paying === product.code ? <LuLoaderCircle className={styles.spin} /> : <RiKakaoTalkFill />}
+                      결제
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
           <p className={styles.paymentAssurance}>
             <LuShieldCheck size={16} /> 결제 금액은 카카오페이 승인 결과를 서버에서 다시 확인한 뒤 적립합니다.

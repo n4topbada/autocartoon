@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuth } from "@/lib/auth";
+import { isKakaoPlaceholderEmail } from "@/lib/kakao-auth";
 import { prisma } from "@/lib/prisma";
 
 export async function DELETE(req: NextRequest) {
@@ -21,21 +22,27 @@ export async function DELETE(req: NextRequest) {
         ? body.emailConfirmation.trim().toLowerCase()
         : "";
 
-    if (!password || !emailConfirmation) {
-      return NextResponse.json(
-        { error: "현재 비밀번호와 이메일을 모두 입력해주세요." },
-        { status: 400 }
-      );
-    }
-    if (new TextEncoder().encode(password).length > 72) {
-      return NextResponse.json({ error: "현재 비밀번호가 올바르지 않습니다." }, { status: 400 });
-    }
-
     const user = await prisma.user.findUnique({ where: { id: session.userId } });
     if (!user) {
       session.destroy();
       return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
     }
+
+    // 이메일 동의 없이 만든 카카오 전용 계정은 사용자가 아는 비밀번호가 없으므로
+    // (임의 해시) 세션 인증 + 이메일 확인만으로 탈퇴를 허용한다.
+    const isPlaceholderKakao =
+      Boolean(user.kakaoId) && isKakaoPlaceholderEmail(user.email);
+
+    if (!emailConfirmation || (!isPlaceholderKakao && !password)) {
+      return NextResponse.json(
+        { error: "현재 비밀번호와 이메일을 모두 입력해주세요." },
+        { status: 400 }
+      );
+    }
+    if (password && new TextEncoder().encode(password).length > 72) {
+      return NextResponse.json({ error: "현재 비밀번호가 올바르지 않습니다." }, { status: 400 });
+    }
+
     if (emailConfirmation !== user.email.toLowerCase()) {
       return NextResponse.json(
         { error: "확인용 이메일이 현재 계정과 일치하지 않습니다." },
@@ -44,16 +51,18 @@ export async function DELETE(req: NextRequest) {
     }
 
     const now = new Date();
-    const primaryMatches = await bcrypt.compare(password, user.passwordHash);
-    const temporaryMatches = Boolean(
-      !primaryMatches &&
-        user.temporaryPasswordHash &&
-        user.temporaryPasswordExpiresAt &&
-        user.temporaryPasswordExpiresAt > now &&
-        (await bcrypt.compare(password, user.temporaryPasswordHash))
-    );
-    if (!primaryMatches && !temporaryMatches) {
-      return NextResponse.json({ error: "현재 비밀번호가 올바르지 않습니다." }, { status: 400 });
+    if (!isPlaceholderKakao) {
+      const primaryMatches = await bcrypt.compare(password, user.passwordHash);
+      const temporaryMatches = Boolean(
+        !primaryMatches &&
+          user.temporaryPasswordHash &&
+          user.temporaryPasswordExpiresAt &&
+          user.temporaryPasswordExpiresAt > now &&
+          (await bcrypt.compare(password, user.temporaryPasswordHash))
+      );
+      if (!primaryMatches && !temporaryMatches) {
+        return NextResponse.json({ error: "현재 비밀번호가 올바르지 않습니다." }, { status: 400 });
+      }
     }
 
     const disabledPasswordHash = await bcrypt.hash(randomUUID(), 12);

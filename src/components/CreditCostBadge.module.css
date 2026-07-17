@@ -1,0 +1,20 @@
+.badge {
+  min-width: 26px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1px solid #5d5737;
+  border-radius: 5px;
+  background: #252318;
+  color: #f0d66d;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+  pointer-events: none;
+}

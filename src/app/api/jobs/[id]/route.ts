@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { start } from "workflow/api";
 import { AuthError, requireAuth } from "@/lib/auth";
 import { reserveJobCredit } from "@/lib/credit-service";
-import { failGenerationJob, findJobForUser, jobToResponse } from "@/lib/generation-jobs";
+import {
+  failGenerationJob,
+  findJobForUser,
+  isJobExpired,
+  jobToResponse,
+} from "@/lib/generation-jobs";
 import { prisma } from "@/lib/prisma";
 import { imageGenerationWorkflow } from "@/workflows/image-generation";
 import { videoGenerationWorkflow } from "@/workflows/video-generation";
@@ -15,8 +20,16 @@ export async function GET(
   try {
     const session = await requireAuth();
     const { id } = await params;
-    const job = await findJobForUser(id, session.userId);
+    let job = await findJobForUser(id, session.userId);
     if (!job) return NextResponse.json({ error: "생성 작업을 찾을 수 없습니다." }, { status: 404 });
+    // 폴링 중 시간 초과로 멈춘 작업을 실패+환불 처리하고 최신 상태로 갱신한다.
+    if (isJobExpired(job)) {
+      await failGenerationJob(
+        job.id,
+        "생성이 제한 시간을 초과해 자동 취소되었습니다. 사용한 크레딧은 환불됩니다."
+      );
+      job = (await findJobForUser(id, session.userId)) ?? job;
+    }
     return NextResponse.json({ job: jobToResponse(job) });
   } catch (error) {
     if (error instanceof AuthError) {

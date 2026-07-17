@@ -18,6 +18,8 @@ import {
   searchCharacterVoices,
   type CharacterVoice,
 } from "@/lib/character-voices";
+import CreditCostBadge from "@/components/CreditCostBadge";
+import { AI_CREDIT_COSTS } from "@/lib/credit-products";
 import styles from "./CharacterManagementModal.module.css";
 
 interface PresetImageData {
@@ -57,10 +59,6 @@ async function readJson<T>(response: Response): Promise<T> {
   return data;
 }
 
-function voiceConfigOf(voice: CharacterVoice) {
-  return [{ label: voice.label, voiceId: voice.voiceId }];
-}
-
 export default function CharacterManagementModal({ preset, onClose, onUpdate, onDelete }: Props) {
   const [images, setImages] = useState<PresetImageData[]>(preset.images);
   const [repId, setRepId] = useState<string | null>(preset.representativeImage?.id ?? preset.images[0]?.id ?? null);
@@ -68,7 +66,9 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate, on
   const [isDefault, setIsDefault] = useState(Boolean(preset.isDefault));
   const [voiceQuery, setVoiceQuery] = useState("");
   const [previewText, setPreviewText] = useState("안녕! 오늘은 어떤 이야기를 함께 만들어볼까?");
-  const [selectedVoiceId, setSelectedVoiceId] = useState(preset.voiceConfig?.[0]?.voiceId ?? "");
+  const [selectedVoices, setSelectedVoices] = useState<Array<{ label: string; voiceId: string }>>(
+    preset.voiceConfig ?? []
+  );
   const [pendingView, setPendingView] = useState<string>("front");
   const [uploadingView, setUploadingView] = useState<string | null>(null);
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null);
@@ -78,44 +78,49 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate, on
   const fileRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
-  const normalizedPresetRef = useRef<string | null>(null);
 
   useEffect(() => {
     setImages(preset.images);
     setRepId(preset.representativeImage?.id ?? preset.images[0]?.id ?? null);
     setDescription(preset.description ?? "");
     setIsDefault(Boolean(preset.isDefault));
-    setSelectedVoiceId(preset.voiceConfig?.[0]?.voiceId ?? "");
+    setSelectedVoices(preset.voiceConfig ?? []);
   }, [preset]);
+
+  const MAX_VOICES = 3;
+  const isVoiceSelected = (voiceId: string) => selectedVoices.some((v) => v.voiceId === voiceId);
+  const toggleVoice = (voice: CharacterVoice) => {
+    setSelectedVoices((current) => {
+      if (current.some((v) => v.voiceId === voice.voiceId)) {
+        return current.filter((v) => v.voiceId !== voice.voiceId);
+      }
+      if (current.length >= MAX_VOICES) return current;
+      return [...current, { label: voice.label, voiceId: voice.voiceId }];
+    });
+  };
+  const makeDefaultVoice = (voiceId: string) => {
+    setSelectedVoices((current) => {
+      const target = current.find((v) => v.voiceId === voiceId);
+      if (!target) return current;
+      return [target, ...current.filter((v) => v.voiceId !== voiceId)];
+    });
+  };
+  const removeVoice = (voiceId: string) => {
+    setSelectedVoices((current) => current.filter((v) => v.voiceId !== voiceId));
+  };
 
   useEffect(() => () => {
     audioRef.current?.pause();
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
   }, []);
 
-  useEffect(() => {
-    if (normalizedPresetRef.current === preset.id || preset.images.length === 0) return;
-    normalizedPresetRef.current = preset.id;
-    const used = new Set<string>();
-    const normalized = preset.images.map((image) => {
-      const valid = VIEWS.some((view) => view.id === image.view) && !used.has(image.view!);
-      const view = valid
-        ? image.view!
-        : VIEWS.find((candidate) => !used.has(candidate.id))?.id ?? "reference";
-      used.add(view);
-      return { ...image, view };
-    });
-    const changes = normalized.filter((image, index) => image.view !== preset.images[index]?.view);
-    if (changes.length === 0) return;
-    setImages(normalized);
-    Promise.all(changes.map((image) => fetch(`/api/presets/${preset.id}/images`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ imageId: image.id, view: image.view }),
-    }))).then(() => onUpdate({ ...preset, images: normalized })).catch(() => {
-      setStatus({ kind: "error", text: "기존 이미지의 방향을 정리하지 못했습니다." });
-    });
-  }, [onUpdate, preset]);
+  // 방향이 정해지지 않은(reference) 이미지들. 자동으로 좌/우/후면 등에 억지로
+  // 배정하지 않고 아래 '미분류' 영역에 노출해 사용자가 직접 지정하게 한다.
+  // (예전에는 모달을 열기만 해도 정면 변형들을 좌/우/후면으로 잘못 재라벨했다)
+  const unclassifiedImages = useMemo(
+    () => images.filter((image) => !VIEWS.some((view) => view.id === image.view)),
+    [images]
+  );
 
   const visibleVoices = useMemo(
     () => voiceQuery.trim() ? searchCharacterVoices(voiceQuery).slice(0, 8) : CHARACTER_VOICES.slice(0, 8),
@@ -129,10 +134,11 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate, on
       representativeImage: images.find((image) => image.id === repId) ?? images[0] ?? null,
       description,
       isDefault,
-      voiceConfig: preset.voiceConfig,
+      // 저장하지 않은 음성 선택이 다른 이미지 작업으로 초기화되지 않도록 라이브 상태를 넘긴다.
+      voiceConfig: selectedVoices,
       ...next,
     });
-  }, [description, images, isDefault, onUpdate, preset, repId]);
+  }, [description, images, isDefault, onUpdate, preset, repId, selectedVoices]);
 
   const setRepresentative = async (imageId: string) => {
     const previous = repId;
@@ -259,7 +265,6 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate, on
   };
 
   const saveSettings = async () => {
-    const selectedVoice = CHARACTER_VOICES.find((voice) => voice.voiceId === selectedVoiceId);
     setSavingSettings(true);
     setStatus(null);
     try {
@@ -269,11 +274,10 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate, on
         body: JSON.stringify({
           description,
           isDefault,
-          voiceConfig: selectedVoice ? voiceConfigOf(selectedVoice) : [],
+          voiceConfig: selectedVoices,
         }),
       }));
-      const voiceConfig = selectedVoice ? voiceConfigOf(selectedVoice) : [];
-      updateParent({ description, isDefault, voiceConfig });
+      updateParent({ description, isDefault, voiceConfig: selectedVoices });
       setStatus({ kind: "success", text: "캐릭터 설정을 저장했습니다." });
     } catch (cause) {
       setStatus({ kind: "error", text: cause instanceof Error ? cause.message : "설정을 저장하지 못했습니다." });
@@ -356,6 +360,34 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate, on
               );
             })}
           </div>
+          {unclassifiedImages.length > 0 && (
+            <div className={styles.unclassifiedSection}>
+              <div className={styles.viewLabel}>미분류 · 방향을 지정하세요</div>
+              <div className={styles.viewGrid}>
+                {unclassifiedImages.map((image) => (
+                  <article className={styles.viewSlot} key={image.id}>
+                    <img src={image.thumbnailUrl || image.dataUrl} alt={`${preset.name} 미분류`} />
+                    <div className={styles.imageTools}>
+                      <button
+                        className={image.id === repId ? styles.repActive : ""}
+                        title="대표 이미지"
+                        onClick={() => setRepresentative(image.id)}
+                      ><LuStar /></button>
+                      <select
+                        value="reference"
+                        aria-label="이미지 방향"
+                        onChange={(event) => changeView(image.id, event.target.value)}
+                      >
+                        <option value="reference">미분류</option>
+                        {VIEWS.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}
+                      </select>
+                      <button title="이미지 삭제" onClick={() => deleteImage(image.id)} disabled={images.length <= 1}><LuTrash2 /></button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
           <input
             ref={fileRef}
             type="file"
@@ -394,20 +426,49 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate, on
             aria-label="음성 미리듣기 문장"
             onChange={(event) => setPreviewText(event.target.value)}
           />
+          {selectedVoices.length > 0 && (
+            <div className={styles.selectedVoiceList}>
+              {selectedVoices.map((voice, index) => (
+                <div key={voice.voiceId} className={styles.selectedVoiceRow}>
+                  <span className={styles.selectedVoiceLabel}>
+                    {index === 0 && <span className={styles.defaultBadge}>기본</span>}
+                    {voice.label}
+                  </span>
+                  {index !== 0 && (
+                    <button type="button" onClick={() => makeDefaultVoice(voice.voiceId)} title="영상 기본 음성으로">
+                      기본 지정
+                    </button>
+                  )}
+                  <button type="button" onClick={() => removeVoice(voice.voiceId)} title="음성 제거"><LuX size={14} /></button>
+                </div>
+              ))}
+              <small className={styles.voiceHint}>첫 번째 음성이 영상 기본값으로 사용됩니다. (최대 {MAX_VOICES}개)</small>
+            </div>
+          )}
           <div className={styles.voiceGrid}>
-            {visibleVoices.length > 0 ? visibleVoices.map((voice) => (
-              <div
-                key={voice.voiceId}
-                className={selectedVoiceId === voice.voiceId ? styles.voiceSelected : styles.voiceOption}
-              >
-                <button className={styles.voiceSelect} onClick={() => setSelectedVoiceId(voice.voiceId)}>
-                  <strong>{voice.label}</strong><small>{voice.description}</small>
-                </button>
-                <button className={styles.voicePreview} title="미리듣기" onClick={() => previewVoice(voice)}>
-                  {previewingVoice === voice.voiceId ? <LuLoaderCircle className={styles.spin} /> : <LuCirclePlay />}
-                </button>
-              </div>
-            )) : <p className={styles.noVoice}>검색 결과가 없습니다.</p>}
+            {visibleVoices.length > 0 ? visibleVoices.map((voice) => {
+              const selected = isVoiceSelected(voice.voiceId);
+              return (
+                <div
+                  key={voice.voiceId}
+                  className={selected ? styles.voiceSelected : styles.voiceOption}
+                >
+                  <button
+                    className={styles.voiceSelect}
+                    onClick={() => toggleVoice(voice)}
+                    disabled={!selected && selectedVoices.length >= MAX_VOICES}
+                    title={!selected && selectedVoices.length >= MAX_VOICES ? `음성은 최대 ${MAX_VOICES}개까지 선택할 수 있습니다.` : undefined}
+                  >
+                    {selected && <LuCheck size={13} />}
+                    <strong>{voice.label}</strong><small>{voice.description}</small>
+                  </button>
+                  <button type="button" className={styles.voicePreview} title="미리듣기" onClick={() => previewVoice(voice)}>
+                    {previewingVoice === voice.voiceId ? <LuLoaderCircle className={styles.spin} /> : <LuCirclePlay />}
+                    <CreditCostBadge credits={AI_CREDIT_COSTS.tts} />
+                  </button>
+                </div>
+              );
+            }) : <p className={styles.noVoice}>검색 결과가 없습니다.</p>}
           </div>
         </section>
 

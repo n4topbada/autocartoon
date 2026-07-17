@@ -105,7 +105,7 @@ async function main() {
   }
   console.log(`[OK] ${allUsers.length}명 유저에게 wony 자동 지급`);
 
-  // 캐릭터 프리셋: anian (1 바나나)
+  // 캐릭터 프리셋: anian (무료, price: 0)
   const anianPreset = await prisma.characterPreset.upsert({
     where: { alias: "anian" },
     update: { name: "Anian", price: 0 },

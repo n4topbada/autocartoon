@@ -1,5 +1,5 @@
 import { GenerateVideosOperation, type Video } from "@google/genai";
-import { uploadBufferToBlob, fetchBlobAsBase64 } from "./blob";
+import { uploadBufferToBlob, fetchBlobAsBase64, deleteBlob } from "./blob";
 import {
   getGoogleAccessToken,
   getVideoAIClient,
@@ -35,13 +35,20 @@ async function readGeneratedVideo(video: Video): Promise<Buffer> {
 }
 
 export async function startVideoOperation(jobId: string) {
-  const job = await prisma.generationJob.findUnique({ where: { id: jobId } });
-  if (!job || job.status === "succeeded" || job.status === "canceled") {
-    return { done: true, operationName: job?.operationName ?? null };
-  }
-  if (job.operationName) return { done: false, operationName: job.operationName };
-
   try {
+    // findUnique를 try 안으로 넣어, 일시적 DB 오류로 스텝이 죽어 작업이 영구히
+    // queued에 멈추는 대신 실패+환불 경로를 타도록 한다.
+    const job = await prisma.generationJob.findUnique({ where: { id: jobId } });
+    if (
+      !job ||
+      job.status === "succeeded" ||
+      job.status === "canceled" ||
+      job.status === "failed"
+    ) {
+      return { done: true, operationName: job?.operationName ?? null };
+    }
+    if (job.operationName) return { done: false, operationName: job.operationName };
+
     const input = job.input as unknown as StoredVideoJobInput;
     await updateJobProgress(jobId, "submitting_video", 10);
     const sourceImage = input.sourceImage
@@ -118,71 +125,91 @@ export async function pollAndPersistVideo(jobId: string, operationName: string) 
       return false;
     }
 
+    // 아래 두 가지는 확정적(terminal) 실패이므로 실패+환불 처리한다.
     if (operation.error) {
-      throw new Error(`Veo 생성 실패: ${JSON.stringify(operation.error)}`);
+      await failGenerationJob(jobId, `Veo 생성 실패: ${JSON.stringify(operation.error)}`);
+      return true;
     }
 
     const videos = operation.response?.generatedVideos
       ?.map((item) => item.video)
       .filter((video): video is Video => Boolean(video));
-    if (!videos?.length) throw new Error("Veo가 완성된 영상을 반환하지 않았습니다.");
+    if (!videos?.length) {
+      await failGenerationJob(jobId, "Veo가 완성된 영상을 반환하지 않았습니다.");
+      return true;
+    }
 
     await updateJobProgress(jobId, "saving_video", 92);
-    const uploaded = [] as Array<{ blobUrl: string; mimeType: string; sourceUri?: string }>;
+    const uploaded = [] as Array<{ blobUrl: string; mimeType: string; sourceUri?: string; sizeBytes: number }>;
     for (const video of videos) {
       const buffer = await readGeneratedVideo(video);
       const mimeType = video.mimeType || "video/mp4";
       const blobUrl = await uploadBufferToBlob(buffer, mimeType, "generated/videos");
-      uploaded.push({ blobUrl, mimeType, sourceUri: video.uri });
+      uploaded.push({ blobUrl, mimeType, sourceUri: video.uri, sizeBytes: buffer.length });
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.generationArtifact.createMany({
-        data: uploaded.map((video) => ({
-          jobId,
-          kind: "video",
-          blobUrl: video.blobUrl,
-          mimeType: video.mimeType,
-          metadata: video.sourceUri ? { sourceUri: video.sourceUri } : undefined,
-        })),
-      });
+    try {
+      await prisma.$transaction(async (tx) => {
+        // 종료된 작업을 succeeded로 덮어써 환불+영상 동시 지급이 되는 것을 막는다.
+        const marked = await tx.generationJob.updateMany({
+          where: { id: jobId, status: { in: ["queued", "running"] } },
+          data: {
+            status: "succeeded",
+            stage: "completed",
+            progress: 100,
+            error: null,
+            output: { videoCount: uploaded.length },
+            completedAt: new Date(),
+          },
+        });
+        if (marked.count === 0) {
+          throw new Error("작업이 이미 종료되어 영상을 저장하지 않습니다.");
+        }
 
-      if (job.projectId) {
-        await tx.projectAsset.createMany({
-          data: uploaded.map((video, index) => ({
-            projectId: job.projectId!,
+        await tx.generationArtifact.createMany({
+          data: uploaded.map((video) => ({
             jobId,
             kind: "video",
-            name: `Veo 영상 ${index + 1}`,
             blobUrl: video.blobUrl,
             mimeType: video.mimeType,
+            sizeBytes: video.sizeBytes,
+            metadata: video.sourceUri ? { sourceUri: video.sourceUri } : undefined,
           })),
         });
-      }
 
-      if (job.cutId) {
-        await tx.projectCut.update({
-          where: { id: job.cutId },
-          data: { videoUrl: uploaded[0].blobUrl },
-        });
-      }
+        if (job.projectId) {
+          await tx.projectAsset.createMany({
+            data: uploaded.map((video, index) => ({
+              projectId: job.projectId!,
+              jobId,
+              kind: "video",
+              name: `Veo 영상 ${index + 1}`,
+              blobUrl: video.blobUrl,
+              mimeType: video.mimeType,
+              sizeBytes: video.sizeBytes,
+            })),
+          });
+        }
 
-      await tx.generationJob.update({
-        where: { id: jobId },
-        data: {
-          status: "succeeded",
-          stage: "completed",
-          progress: 100,
-          error: null,
-          output: { videoCount: uploaded.length },
-          completedAt: new Date(),
-        },
+        // 컷이 도중에 삭제됐을 수 있으므로 updateMany로 0행을 허용한다(P2025 방지).
+        if (job.cutId) {
+          await tx.projectCut.updateMany({
+            where: { id: job.cutId },
+            data: { videoUrl: uploaded[0].blobUrl },
+          });
+        }
       });
-    });
+    } catch (persistError) {
+      // 영상은 이미 업로드됐는데 저장에 실패하면 고아 blob이 남으므로 보상 삭제한다.
+      await Promise.all(uploaded.map((video) => deleteBlob(video.blobUrl)));
+      throw persistError;
+    }
     return true;
   } catch (error) {
-    await failGenerationJob(jobId, error);
-    return true;
+    // 일시적 오류(폴링/다운로드/업로드/DB)는 실패로 확정하지 않고 다음 폴링에서 재시도한다.
+    // 계속 실패하면 상위 루프의 타임아웃(markVideoTimeout)이 실패+환불을 수행한다.
+    console.error("Video poll transient error (will retry):", error);
+    return false;
   }
 }
 

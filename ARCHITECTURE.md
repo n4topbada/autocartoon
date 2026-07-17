@@ -1,161 +1,126 @@
-# Autocartoon (WonyBananaBot) - Architecture Document
+# AutoCartoon (WonyBananaBot) — Architecture
 
-## Overview
-AI 캐릭터 일러스트 생성 서비스. Gemini API로 캐릭터 레퍼런스 기반 이미지 생성, 레이어 기반 캔버스 편집, 태그 관리, 게시판 커뮤니티 기능 제공.
+캐릭터 레퍼런스 기반으로 웹툰 장면·제스처·배경·음성·Veo 영상을 만들고 프로젝트(컷) 단위로
+편집하는 Next.js 제작 서비스. 사용자는 AI API 키를 넣지 않으며, 플랫폼 소유 Vertex AI와
+서버 결제 크레딧을 사용한다.
+
+> 이 문서는 2026-07-17 코드 감사 기준으로 갱신했다. 세부 기능·격차·레퍼런스 대비 분석은
+> [`docs/toonagent-reverse-engineering.md`](./docs/toonagent-reverse-engineering.md)를 참고한다.
 
 ## Tech Stack
+
 - **Frontend**: Next.js 15 (App Router), React 19, CSS Modules
-- **Backend**: Next.js API Routes (Serverless)
-- **Database**: PostgreSQL (Neon), Prisma ORM 6.x
-- **Storage**: Vercel Blob
-- **AI**: Google Gemini 3.1 Flash (streaming)
-- **Deploy**: Vercel
+- **Backend**: Next.js Route Handlers (서버리스)
+- **DB**: PostgreSQL + Prisma 6
+- **Storage**: Vercel Blob (원본 + WebP 썸네일 분리)
+- **비동기 작업**: Vercel Workflow (durable job), 클라이언트 폴링 복구
+- **AI**: 플랫폼 소유 Google Vertex AI — Gemini 3.1 Flash Image, Veo 3.1 Fast, Google Cloud TTS(Chirp 3 HD)
+- **인증**: iron-session HttpOnly 쿠키, bcrypt, 기기 세션(최대 2대)
+- **로그인/결제**: Kakao OAuth 2.0, KakaoPay 단건 결제
+- **이메일**: Resend (가입 인증·임시 비밀번호)
+- **클라우드 접근**: Vercel OIDC + GCP Workload Identity Federation (장기 키 미배포)
 
 ---
 
-## Database Schema (15 Models)
+## Database Schema (29 Models)
 
-### Core
-- **User** - 사용자 (email, password, role, tier, credits)
-- **CharacterGroup** - 캐릭터 그룹 (Depth_A: 유니버스)
-- **CharacterPreset** - 캐릭터 프리셋 (이름, 대표이미지, 그룹 소속)
-- **PresetImage** - 프리셋 참조 이미지 (order, blobUrl)
-- **PurchasedPreset** - 구매한 프리셋 (userId+presetId unique)
+### 캐릭터/마켓
+- **CharacterGroup** — 캐릭터 그룹(유니버스)
+- **CharacterPreset** — 프리셋(이름, 대표 이미지, price, isPublic, persona, voiceConfig, isDefault)
+- **PresetImage** — 프리셋 참조 이미지(`view`: front/left/right/back/reference, order)
+- **PurchasedPreset** — 구매 기록(userId+presetId unique)
 
-### Generation
-- **GenerationRequest** - 생성 요청 (presetIds[], mode, prompt)
-- **GeneratedImage** - 생성된 이미지 (blobUrl, favorite)
-- **SavedBackground** - 저장된 배경 이미지
+### 생성/작업
+- **GenerationRequest** / **GeneratedImage** — 레거시 및 갤러리 이미지
+- **SavedBackground** — 저장된 배경
+- **GenerationJob** — durable 작업(status/stage/progress, idempotencyKey, creditSource/Units, runId)
+- **GenerationArtifact** — 작업 산출물(이미지/영상)
 
-### Tags
-- **ImageTag** - 사용자별 태그 정의 (name, color, userId unique)
-- **ImageTagLink** - 이미지↔태그 다대다 (cascade delete)
+### 크레딧/결제
+- **CreditLedger** — 지급·구매·차감·환불 원장(referenceKey unique, `@@unique([jobId, action])`)
+- **CreditPayment** — KakaoPay 주문(TID, 상태, 금액)
 
-### Community
-- **BoardPost** - 게시글 (title, content, imageIds, links)
-- **BoardComment** - 댓글
-- **BoardLike** - 좋아요 (게시글/댓글)
+### 스튜디오(제작 워크스페이스)
+- **CreativeProject** — 프로젝트(비율/캔버스 크기, coverCutId)
+- **ProjectCut** — 컷(order `@@unique([projectId, order])`, prompt, dialogue, dialoguePlan, scene, canvas, imageUrl/videoUrl)
+- **ProjectAsset** — 프로젝트 자산
+- **SavedProjectBrief** — 저장된 기획서
 
-### System
-- **ChatKnowledge** - 챗봇 RAG 지식
-- **HelpRequest** - 사람 호출 요청
-
-### Indexes
-- PresetImage(presetId)
-- GenerationRequest(userId, createdAt)
-- BoardPost(userId, createdAt)
-
----
-
-## API Routes (33 endpoints)
-
-### Auth
-- POST /api/auth/login, register, logout, verify
-- GET /api/auth/me
-
-### Characters
-- GET/POST /api/presets (그룹핑 응답: {groups, ungrouped})
-- POST /api/presets/[id]/images (이미지 추가)
-- DELETE /api/presets/[id]/images (이미지 삭제)
-- PATCH /api/presets/[id]/representative (대표이미지 설정)
-- GET/POST /api/groups (그룹 CRUD)
-- PATCH/DELETE /api/groups/[id]
-
-### Generation
-- POST /api/generate (presetIds[], mode, prompt)
-- GET /api/history (태그 포함 응답)
-- PATCH/DELETE /api/images/[id] (즐겨찾기/삭제)
-- POST /api/images/[id]/tags (태그 토글)
-- POST /api/images/save (캔버스 편집 저장)
-
-### Tags
-- GET/POST /api/tags
-- DELETE /api/tags/[id]
-
-### Marketplace
-- GET /api/marketplace (Depth_A 기준)
-- POST /api/marketplace/purchase (그룹/개별 구매)
-
-### Background
-- GET/POST /api/backgrounds
-- DELETE /api/backgrounds/[id]
-- POST /api/background-generate
-
-### Board
-- GET/POST /api/board
-- GET/DELETE/PATCH /api/board/[id]
-- POST /api/board/[id]/comments
-- POST/DELETE /api/board/[id]/like
-- POST /api/board/[id]/pin
-
-### System
-- POST /api/chat (챗봇)
-- POST /api/help (사람 호출)
-- POST /api/admin/knowledge
+### 커뮤니티/기타
+- **BoardPost / BoardComment / BoardLike** — 게시판
+- **Content / ContentSlot** — 콘텐츠 슬롯(스토리보드)
+- **ImageTag / ImageTagLink** — 개인 태그
+- **PromptPreset** — 저장된 프롬프트
+- **ChatKnowledge / HelpRequest** — 챗봇 RAG, 사람 호출
+- **InstagramAccount / InstagramPost** — 인스타그램 연동
+- **User / UserSession** — 사용자, 기기 세션
 
 ---
 
-## Frontend Components
+## API Routes (약 80개 route.ts)
 
-### page.tsx (~1,500 lines)
-메인 페이지. 사이드바(캐릭터 선택, 배경, 프롬프트) + 갤러리.
+주요 그룹:
 
-### Components (src/components/)
-| Component | Lines | Description |
-|-----------|-------|-------------|
-| CanvasEditor | ~810 | 레이어 기반 이미지 편집 캔버스 |
-| WorkflowCard | ~550 | 배경 생성 워크플로우 |
-| Board | ~450 | 게시판 (글/댓글/좋아요) |
-| ChatBot | ~220 | AI 챗봇 패널 |
-| CharacterManagementModal | ~200 | 캐릭터 이미지 관리 |
-| BackgroundGenerator | ~180 | 배경 생성기 |
-| PromptInput | ~170 | contentEditable 프롬프트 (인라인 태그) |
-| UserAvatar | ~150 | 사용자 아바타 + 메뉴 |
-| ImageDropZone | ~150 | 파일 드래그&드롭 |
-| AuthProvider | ~75 | 인증 Context |
-| ImageModal | ~50 | 이미지 모달 |
+- **auth**: login, register, verify, me, logout, forgot-password, change-password, account,
+  sessions, kakao, kakao/callback
+- **generate / jobs**: `POST /api/generate`(이미지·배경·제스처·캐릭터 durable 작업),
+  `GET/POST /api/jobs`, `GET/POST /api/jobs/[id]`(재시도) — 202 + 폴링 계약, 리퍼 환불
+- **studio**: projects·cuts·assets·briefs CRUD, ocr, video-plan, projects/from-brief
+- **presets / groups / marketplace**: 프리셋·그룹·이미지·대표·썸네일·구매·from-generated
+- **credits / payments**: `GET /api/credits`, kakao ready/approve/cancel/fail
+- **history / archive / images / contents / tags**: 갤러리·보관함·즐겨찾기·슬롯·태그
+- **board**: 글·댓글·좋아요·핀
+- **character-designer / chat / help / tts / shorts**
+- **instagram**: auth·callback·publish·insights·posts·disconnect
+- **admin**: users, knowledge
 
----
-
-## Key Features
-
-### 1. 캐릭터 시스템
-- 2단계 그룹핑: Depth_A(유니버스) → Depth_B(캐릭터)
-- 다중 선택 (최대 4개)
-- 대표이미지 시스템
-- 마켓플레이스 (Depth_A 단위 구매)
-
-### 2. 이미지 생성
-- 단일 캐릭터: referenceImages로 전송
-- 다중 캐릭터: labeledImages로 이름 라벨 포함 전송
-- 모드: text, sketch, edit, transform
-- 배경: 텍스트 설명 or 저장된 배경 이미지
-
-### 3. 캔버스 편집
-- 레이어 기반 (추가/삭제/순서변경/보기토글)
-- 도구: 이동, 크롭, 배경제거(Flood Fill), 투명도
-- 빈 레이어 단색 채우기 (10색)
-- 비율: 1:1 (1080x1080), 4:5 (1080x1350)
-- 1회 Undo (Ctrl+Z/Cmd+Z)
-
-### 4. 태그 시스템
-- Gmail 스타일 색 라벨 (8색)
-- 개인용 (타인 비공유)
-- 중첩 가능 (이미지당 여러 태그)
-- 낙관적 업데이트
-- 필터링/검색
-
-### 5. 반응형
-- Desktop: 사이드바 + 갤러리 2단
-- Tablet (1024px): 사이드바 축소
-- Mobile (768px): 세로 스택, 3열 그리드
+미들웨어(`src/middleware.ts`)가 `/api/*`를 인증 게이트하고, 개별 핸들러가 소유권을 다시 확인한다.
 
 ---
 
-## Performance Optimizations
-- 낙관적 업데이트: 즐겨찾기, 태그 토글
-- useMemo: flatImages 계산 캐싱
-- useCallback: 함수형 setState로 stale closure 방지
-- Gemini 스트리밍: 생성 중 실시간 반환
-- Vercel Blob: CDN 기반 이미지 서빙
-- DB 인덱스: userId+createdAt 복합 인덱스
+## 핵심 서브시스템
+
+### 1. Durable 생성 작업
+`POST /api/generate`는 `GenerationJob`을 `queued`로 만들고 `reserveJobCredit`로 크레딧을 차감한 뒤
+Vercel Workflow를 시작하고 202를 반환한다. 클라이언트는 `GET /api/jobs/[id]`를 폴링한다.
+`queued → running(stage별 progress) → storing → succeeded/failed`로 상태가 저장되고, 실패 시
+`failGenerationJob`이 원장 반대 분개로 환불한다. 폴링 라우트의 리퍼가 시간 초과(이미지 10분/영상 45분)
+작업을 실패+환불 처리한다.
+
+### 2. 크레딧 원장
+서버가 상품과 차감량을 결정한다. 동일 작업은 `referenceKey`/`job:{id}:charge`로 한 번만 차감되고,
+실패는 `:refund`, 다중 count 부분 실패는 `:partial-refund`로 되돌린다. KakaoPay 결제는
+`ready → approve → 서버 검증 → 적립`이며, 캡처 후 검증 실패는 `failed`가 아니라 `needs_review`로 보존한다.
+
+### 3. 스튜디오
+프로젝트/컷/자산 CRUD, 자동 저장, PNG/ZIP 내보내기, 컷 순서(2단계 +1000 시프트로 유니크 충돌 방지),
+객체 캔버스(`CanvasEditor`) 연결, 영상 대사 플랜과 Veo 시작.
+
+### 4. 캔버스 편집기 (`CanvasEditor`, ~2,700줄)
+레이어(추가/삭제/순서/잠금), 이동·스케일·회전, 크롭, 배경 제거(flood fill), 말풍선(5종), 텍스트,
+도형, 패널 레이아웃, OCR, AI 다시 그리기. 30단계 undo + redo(Ctrl+Z/Shift+Z/Ctrl+Y), 텍스트 입력 중
+단축키 무시. 비율 6종: 1:1(1080²), 4:5(1080×1350), 3:4(960×1280), 8:11(800×1100),
+9:16(1080×1920), 16:9(1920×1080). 고해상도는 브라우저 직접 Blob 업로드 후 `/api/images/save`.
+
+---
+
+## 레퍼런스(ToonAgent) 대비 의도적 분기
+
+- 사용자 BYOK 대신 플랫폼 소유 Vertex AI
+- 구독/저장량 과금 대신 내부 크레딧 + KakaoPay 단건 결제
+- localStorage JWT 대신 iron-session HttpOnly 쿠키
+- 음성 복제·서버 영상 렌더러·마케팅/CX 플랫폼 모듈은 공급자·범위 확정 전까지 미구현
+
+---
+
+## 검증
+
+```bash
+npm test        # 프롬프트 제약, 크레딧/보너스, 비용 계산, 작업 응답 정규화
+npx tsc --noEmit
+npx eslint .
+npm run build
+```
+
+*마지막 업데이트: 2026-07-17*
+*© 2026 wonyframe.inc*

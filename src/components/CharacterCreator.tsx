@@ -14,6 +14,8 @@ import {
   buildOriginalCharacterPrompt,
   type CharacterCreatorSettings,
 } from "@/lib/character-creator";
+import { getGenerationCreditCost } from "@/lib/credit-products";
+import CreditCostBadge from "@/components/CreditCostBadge";
 import styles from "./CharacterCreator.module.css";
 
 interface JobArtifact {
@@ -32,6 +34,7 @@ interface CharacterJob {
   output?: { imageIds?: string[] } | null;
   error?: string | null;
   createdAt: string;
+  creditCost?: number;
   artifacts: JobArtifact[];
 }
 
@@ -395,6 +398,7 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
           >
             {starting || trackedJobId ? <LuLoaderCircle className={styles.spin} /> : <LuSparkles />}
             {starting ? "요청 중" : trackedJobId ? "생성 중" : "캐릭터 생성"}
+            <CreditCostBadge credits={getGenerationCreditCost("character", { imageSize })} />
           </button>
         </div>
 
@@ -445,6 +449,7 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
                   <div className={styles.resultActions}>
                     <button type="button" title="같은 설정으로 재생성" onClick={() => startGeneration(job.prompt)} disabled={Boolean(trackedJobId)}>
                       <LuRefreshCw />
+                      <CreditCostBadge credits={getGenerationCreditCost("character", { imageSize })} />
                     </button>
                     <button type="button" title="이미지 다운로드" onClick={() => downloadImage(artifact.blobUrl)}>
                       <LuDownload />
@@ -467,6 +472,7 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
                 <span>{job.error || "생성에 실패했습니다."}</span>
                 <button type="button" onClick={() => retryJob(job.id)} disabled={Boolean(trackedJobId)}>
                   <LuRefreshCw /> 다시 시도
+                  <CreditCostBadge credits={job.creditCost ?? getGenerationCreditCost("character", { imageSize })} />
                 </button>
               </div>
             ))}

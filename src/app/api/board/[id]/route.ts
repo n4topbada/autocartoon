@@ -19,14 +19,14 @@ export async function GET(
     const post = await prisma.boardPost.findUnique({
       where: { id },
       include: {
-        user: { select: { id: true, name: true, email: true } },
+        user: { select: { id: true, plazaNickname: true } },
         _count: { select: { likes: true } },
         ...(currentUserId
           ? { likes: { where: { userId: currentUserId }, select: { id: true } } }
           : {}),
         comments: {
           include: {
-            user: { select: { id: true, name: true, email: true } },
+            user: { select: { id: true, plazaNickname: true } },
             _count: { select: { likes: true } },
             ...(currentUserId
               ? { likes: { where: { userId: currentUserId }, select: { id: true } } }
@@ -45,7 +45,8 @@ export async function GET(
     let images: { id: string; blobUrl: string; thumbnailUrl: string | null; mimeType: string }[] = [];
     if (post.imageIds.length > 0) {
       images = await prisma.generatedImage.findMany({
-        where: { id: { in: post.imageIds } },
+        // 게시글 작성자 소유 이미지로만 해석한다(레거시 게시글의 남의 이미지 노출 차단).
+        where: { id: { in: post.imageIds }, request: { userId: post.userId } },
         select: { id: true, blobUrl: true, thumbnailUrl: true, mimeType: true },
       });
     }

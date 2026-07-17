@@ -14,6 +14,7 @@ import {
   LuPin,
   LuClock3,
   LuTrendingUp,
+  LuFlag,
 } from "react-icons/lu";
 
 interface PostSummary {
@@ -21,7 +22,7 @@ interface PostSummary {
   title: string;
   content: string;
   userName: string;
-  userEmail: string;
+  userId: string;
   commentCount: number;
   likeCount: number;
   liked: boolean;
@@ -50,6 +51,8 @@ export default function Board() {
   const [selectedPost, setSelectedPost] = useState<PostDetail | null>(null);
   const [showWrite, setShowWrite] = useState(false);
   const [sort, setSort] = useState<"latest" | "popular">("latest");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   // 글 작성 상태
   const [title, setTitle] = useState("");
@@ -57,42 +60,123 @@ export default function Board() {
   const [linkInput, setLinkInput] = useState("");
   const [links, setLinks] = useState<string[]>([]);
   const [posting, setPosting] = useState(false);
+  const [attachIds, setAttachIds] = useState<string[]>([]);
+  const [galleryImages, setGalleryImages] = useState<Array<{ id: string; url: string }>>([]);
+  const [galleryLoaded, setGalleryLoaded] = useState(false);
+
+  // 공개 닉네임(실명과 분리)
+  const [plazaNickname, setPlazaNickname] = useState<string | null>(null);
+  const [nicknameInput, setNicknameInput] = useState("");
+  const [nicknameSaving, setNicknameSaving] = useState(false);
 
   // 댓글 상태
   const [commentText, setCommentText] = useState("");
   const [commenting, setCommenting] = useState(false);
 
+  useEffect(() => {
+    fetch("/api/plaza/profile")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setPlazaNickname(d.nickname); })
+      .catch(() => {});
+  }, []);
+
+  const saveNickname = async () => {
+    const value = nicknameInput.trim();
+    if (!value) return;
+    setNicknameSaving(true);
+    try {
+      const res = await fetch("/api/plaza/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nickname: value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "닉네임을 저장하지 못했습니다.");
+      setPlazaNickname(data.nickname);
+    } catch (cause) {
+      alert(cause instanceof Error ? cause.message : "닉네임을 저장하지 못했습니다.");
+    } finally {
+      setNicknameSaving(false);
+    }
+  };
+
+  const loadGalleryForPicker = async () => {
+    if (galleryLoaded) return;
+    try {
+      const res = await fetch("/api/history?limit=60");
+      const data = await res.json();
+      const imgs: Array<{ id: string; url: string }> = [];
+      (Array.isArray(data) ? data : []).forEach(
+        (req: { images?: Array<{ id: string; thumbnailUrl?: string; dataUrl: string }> }) => {
+          (req.images || []).forEach((img) => imgs.push({ id: img.id, url: img.thumbnailUrl || img.dataUrl }));
+        }
+      );
+      setGalleryImages(imgs);
+      setGalleryLoaded(true);
+    } catch {
+      /* 갤러리를 불러오지 못해도 글은 작성할 수 있다. */
+    }
+  };
+
+  const toggleAttach = (id: string) =>
+    setAttachIds((current) =>
+      current.includes(id) ? current.filter((x) => x !== id) : current.length >= 4 ? current : [...current, id]
+    );
+
+  const handleReport = async (postId: string, commentId?: string) => {
+    const reason = window.prompt("신고 사유를 입력해주세요.");
+    if (!reason?.trim()) return;
+    try {
+      const res = await fetch(`/api/board/${postId}/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason.trim(), commentId }),
+      });
+      const data = await res.json();
+      alert(data.message || data.error || "신고가 접수되었습니다.");
+    } catch {
+      alert("신고를 접수하지 못했습니다.");
+    }
+  };
+
   const isAdmin = user?.role === "admin";
 
-  const loadPosts = useCallback(() => {
+  const loadPosts = useCallback((targetPage = 1, append = false) => {
     setLoading(true);
-    fetch(`/api/board?sort=${sort}`)
+    fetch(`/api/board?sort=${sort}&page=${targetPage}`)
       .then((r) => r.json())
       .then((data) => {
         const list = data?.posts ?? (Array.isArray(data) ? data : []);
-        setPosts(
-          list.map((p: Record<string, unknown>) => ({
-            id: p.id as string,
-            title: p.title as string,
-            content: p.content as string,
-            userName: (p.user as { name?: string; email?: string })?.name || (p.user as { email?: string })?.email?.toString().split("@")[0] || "",
-            userEmail: (p.user as { email?: string })?.email || "",
-            commentCount: (p.commentCount ?? (p as { _count?: { comments?: number } })._count?.comments ?? 0) as number,
-            likeCount: (p.likeCount ?? 0) as number,
-            liked: !!p.liked,
-            pinned: !!p.pinned,
-            imageUrls: (p.previewImageUrl ? [p.previewImageUrl] : []) as string[],
-            links: (p.links ?? []) as string[],
-            createdAt: p.createdAt as string,
-          }))
+        const mapped = list.map((p: Record<string, unknown>) => ({
+          id: p.id as string,
+          title: p.title as string,
+          content: p.content as string,
+          userName: (p.user as { plazaNickname?: string })?.plazaNickname || "익명",
+          userId: ((p.userId ?? (p.user as { id?: string })?.id) as string) || "",
+          commentCount: (p.commentCount ?? (p as { _count?: { comments?: number } })._count?.comments ?? 0) as number,
+          likeCount: (p.likeCount ?? 0) as number,
+          liked: !!p.liked,
+          pinned: !!p.pinned,
+          imageUrls: (p.previewImageUrl ? [p.previewImageUrl] : []) as string[],
+          links: (p.links ?? []) as string[],
+          createdAt: p.createdAt as string,
+        }));
+        setPosts((prev) =>
+          append
+            ? [...prev, ...mapped.filter((m: PostSummary) => !prev.some((p) => p.id === m.id))]
+            : mapped
         );
+        setPage(targetPage);
+        setTotalPages((data?.totalPages as number) ?? 1);
       })
-      .catch(() => setPosts([]))
+      .catch(() => {
+        if (!append) setPosts([]);
+      })
       .finally(() => setLoading(false));
   }, [sort]);
 
   useEffect(() => {
-    loadPosts();
+    loadPosts(1, false);
   }, [loadPosts]);
 
   const loadPost = async (id: string) => {
@@ -103,8 +187,8 @@ export default function Board() {
         id: data.id,
         title: data.title,
         content: data.content,
-        userName: data.user?.name || data.user?.email?.split("@")[0] || "",
-        userEmail: data.user?.email || "",
+        userName: data.user?.plazaNickname || "익명",
+        userId: (data.userId ?? data.user?.id) || "",
         commentCount: data.comments?.length ?? 0,
         likeCount: data.likeCount ?? 0,
         liked: !!data.liked,
@@ -112,10 +196,10 @@ export default function Board() {
         imageUrls: (data.images || []).map((img: { blobUrl: string }) => img.blobUrl),
         links: data.links || [],
         createdAt: data.createdAt,
-        comments: (data.comments || []).map((c: { id: string; content: string; createdAt: string; userId: string; likeCount?: number; liked?: boolean; user?: { name?: string; email?: string } }) => ({
+        comments: (data.comments || []).map((c: { id: string; content: string; createdAt: string; userId: string; likeCount?: number; liked?: boolean; user?: { plazaNickname?: string } }) => ({
           id: c.id,
           content: c.content,
-          userName: c.user?.name || c.user?.email?.split("@")[0] || "",
+          userName: c.user?.plazaNickname || "익명",
           createdAt: c.createdAt,
           userId: c.userId,
           likeCount: c.likeCount ?? 0,
@@ -136,14 +220,16 @@ export default function Board() {
           title: title.trim(),
           content: content.trim(),
           links: links.length > 0 ? links : undefined,
+          imageIds: attachIds.length > 0 ? attachIds : undefined,
         }),
       });
       if (res.ok) {
         setTitle("");
         setContent("");
         setLinks([]);
+        setAttachIds([]);
         setShowWrite(false);
-        loadPosts();
+        loadPosts(1, false);
       }
     } finally {
       setPosting(false);
@@ -252,9 +338,14 @@ export default function Board() {
                 <LuPin size={13} /> {selectedPost.pinned ? "핀 해제" : "핀"}
               </button>
             )}
-            {(selectedPost.userEmail === user?.email || isAdmin) && (
+            {((selectedPost.userId && selectedPost.userId === user?.id) || isAdmin) && (
               <button className={styles.deleteBtn} onClick={() => handleDelete(selectedPost.id)}>
                 <LuTrash2 size={12} /> 삭제
+              </button>
+            )}
+            {selectedPost.userId !== user?.id && (
+              <button className={styles.reportBtn} onClick={() => void handleReport(selectedPost.id)} title="게시글 신고">
+                <LuFlag size={12} /> 신고
               </button>
             )}
           </div>
@@ -303,12 +394,23 @@ export default function Board() {
                   <span className={styles.commentDate}>{formatDate(c.createdAt)}</span>
                 </div>
                 <p className={styles.commentContent}>{c.content}</p>
-                <button
-                  className={`${styles.likeBtn} ${styles.likeBtnSmall} ${c.liked ? styles.likeBtnActive : ""}`}
-                  onClick={() => handleCommentLike(selectedPost.id, c.id)}
-                >
-                  <LuHeart size={11} /> {c.likeCount}
-                </button>
+                <div className={styles.commentActions}>
+                  <button
+                    className={`${styles.likeBtn} ${styles.likeBtnSmall} ${c.liked ? styles.likeBtnActive : ""}`}
+                    onClick={() => handleCommentLike(selectedPost.id, c.id)}
+                  >
+                    <LuHeart size={11} /> {c.likeCount}
+                  </button>
+                  {c.userId !== user?.id && (
+                    <button
+                      className={styles.commentReportBtn}
+                      onClick={() => void handleReport(selectedPost.id, c.id)}
+                      title="댓글 신고"
+                    >
+                      <LuFlag size={11} /> 신고
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
             <div className={styles.commentInput}>
@@ -344,6 +446,27 @@ export default function Board() {
 
         <div className={styles.writeForm}>
           <h2 className={styles.writeTitle}>새 글 작성</h2>
+
+          {!plazaNickname && (
+            <div className={styles.nicknameGate}>
+              <h3 className={styles.linkLabel}>공개 닉네임 설정</h3>
+              <p className={styles.nicknameHint}>툰 광장에는 실명·이메일 대신 공개 닉네임이 표시됩니다.</p>
+              <div className={styles.linkInputRow}>
+                <input
+                  type="text"
+                  className={styles.linkField}
+                  placeholder="닉네임 (2~20자)"
+                  value={nicknameInput}
+                  onChange={(e) => setNicknameInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") void saveNickname(); }}
+                />
+                <button className={styles.linkAddBtn} onClick={() => void saveNickname()} disabled={nicknameSaving || !nicknameInput.trim()}>
+                  {nicknameSaving ? "저장 중" : "설정"}
+                </button>
+              </div>
+            </div>
+          )}
+
           <input
             type="text"
             className={styles.writeInput}
@@ -358,6 +481,32 @@ export default function Board() {
             onChange={(e) => setContent(e.target.value)}
             rows={8}
           />
+
+          <div className={styles.linkSection}>
+            <h3 className={styles.linkLabel}>내 생성 이미지 첨부 (최대 4장)</h3>
+            <button className={styles.linkAddBtn} onClick={() => void loadGalleryForPicker()}>
+              내 이미지 불러오기
+            </button>
+            {galleryLoaded && (
+              galleryImages.length === 0 ? (
+                <p className={styles.nicknameHint}>첨부할 수 있는 생성 이미지가 없습니다.</p>
+              ) : (
+                <div className={styles.attachGrid}>
+                  {galleryImages.map((img) => (
+                    <button
+                      key={img.id}
+                      type="button"
+                      className={`${styles.attachThumb} ${attachIds.includes(img.id) ? styles.attachThumbActive : ""}`}
+                      onClick={() => toggleAttach(img.id)}
+                      title={attachIds.includes(img.id) ? "선택 해제" : "선택"}
+                    >
+                      <img src={img.url} alt="" />
+                    </button>
+                  ))}
+                </div>
+              )
+            )}
+          </div>
 
           <div className={styles.linkSection}>
             <h3 className={styles.linkLabel}>외부 링크</h3>
@@ -385,9 +534,9 @@ export default function Board() {
           <button
             className={styles.submitBtn}
             onClick={handlePost}
-            disabled={posting || !title.trim() || !content.trim()}
+            disabled={posting || !title.trim() || !content.trim() || !plazaNickname}
           >
-            {posting ? "게시 중..." : "게시하기"}
+            {!plazaNickname ? "닉네임을 먼저 설정하세요" : posting ? "게시 중..." : "게시하기"}
           </button>
         </div>
       </div>
@@ -453,6 +602,16 @@ export default function Board() {
               </div>
             </div>
           ))}
+          {page < totalPages && (
+            <button
+              type="button"
+              className={styles.loadMoreBtn}
+              onClick={() => loadPosts(page + 1, true)}
+              disabled={loading}
+            >
+              {loading ? "불러오는 중..." : "더 보기"}
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -107,11 +107,21 @@ export async function DELETE(
       select: {
         id: true,
         isDefault: true,
+        _count: { select: { purchasedBy: true } },
         images: { select: { blobUrl: true, thumbnailUrl: true } },
       },
     });
     if (!preset) {
       return NextResponse.json({ error: "캐릭터를 찾을 수 없습니다." }, { status: 404 });
+    }
+
+    // 다른 사용자가 구매한 프리셋은 삭제하면 그들의 보유 자산이 환불 없이 사라진다.
+    // 삭제 대신 마켓에서 비공개(unlist)로 전환하도록 안내한다.
+    if (preset._count.purchasedBy > 0) {
+      return NextResponse.json(
+        { error: "이미 구매한 사용자가 있어 삭제할 수 없습니다. 대신 마켓 공개를 해제해주세요." },
+        { status: 409 }
+      );
     }
 
     await prisma.$transaction(async (tx) => {

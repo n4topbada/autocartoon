@@ -10,7 +10,13 @@ async function performImageGeneration(jobId: string) {
   "use step";
 
   const job = await prisma.generationJob.findUnique({ where: { id: jobId } });
-  if (!job || job.status === "succeeded" || job.status === "canceled") {
+  if (
+    !job ||
+    job.status === "succeeded" ||
+    job.status === "canceled" ||
+    job.status === "failed"
+  ) {
+    // 이미 실패(환불 완료)한 작업을 되살려 무상 이미지가 나가지 않도록 막는다.
     return { status: job?.status ?? "missing" };
   }
 

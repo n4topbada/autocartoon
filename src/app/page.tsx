@@ -32,7 +32,9 @@ import {
 } from "react-icons/lu";
 import { resizeFromFile, fetchImageFromUrl } from "@/lib/image-resize";
 import PromptInput from "@/components/PromptInput";
+import CreditCostBadge from "@/components/CreditCostBadge";
 import { canAccessCharacterDesigner } from "@/lib/character-designer-access";
+import { AI_CREDIT_COSTS } from "@/lib/credit-products";
 
 function DeferredPanelLoader() {
   return (
@@ -596,27 +598,37 @@ export default function Home() {
 
   // 즐겨찾기 토글 (낙관적 업데이트)
   const handleToggleFavorite = (imageId: string) => {
-    // 즉시 UI 갱신
+    // 목표 상태를 명시적으로 계산해 서버에 전달한다(멱등). 더블클릭이나 HTTP 오류로
+    // UI와 DB가 어긋나는 것을 막는다.
+    const current = history.flatMap((h) => h.images).find((img) => img.id === imageId);
+    const target = current ? !current.favorite : true;
     setHistory((prev) =>
       prev.map((item) => ({
         ...item,
         images: item.images.map((img) =>
-          img.id === imageId ? { ...img, favorite: !img.favorite } : img
+          img.id === imageId ? { ...img, favorite: target } : img
         ),
       }))
     );
-    // 백그라운드로 서버 요청
-    fetch(`/api/images/${imageId}`, { method: "PATCH" }).catch(() => {
-      // 실패 시 원복
-      setHistory((prev) =>
-        prev.map((item) => ({
-          ...item,
-          images: item.images.map((img) =>
-            img.id === imageId ? { ...img, favorite: !img.favorite } : img
-          ),
-        }))
-      );
-    });
+    fetch(`/api/images/${imageId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ favorite: target }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("favorite failed");
+      })
+      .catch(() => {
+        // 네트워크 오류뿐 아니라 HTTP 오류에도 원복한다.
+        setHistory((prev) =>
+          prev.map((item) => ({
+            ...item,
+            images: item.images.map((img) =>
+              img.id === imageId ? { ...img, favorite: !target } : img
+            ),
+          }))
+        );
+      });
   };
 
   // 이미지 삭제
@@ -1021,21 +1033,33 @@ export default function Home() {
         queued: "생성 대기열에 등록했습니다.",
         preparing_references: "캐릭터와 참조 이미지를 준비하고 있습니다.",
         generating_image: "AI가 장면을 그리고 있습니다.",
+        storing: "생성한 이미지를 저장하고 있습니다.",
         completed: "이미지 생성이 완료되었습니다.",
       };
+      // 일시적 폴링 실패(네트워크/5xx)를 즉시 실패로 단정하면 사용자가 재시도해
+      // 같은 이미지에 대해 이중 과금이 발생한다. 연속 실패가 임계치를 넘을 때만 포기한다.
+      const MAX_POLL_FAILURES = 5;
+      let consecutiveFailures = 0;
       for (let attempt = 0; attempt < 240; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 3000));
-        const statusResponse = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
-        const statusData = await statusResponse.json();
-        if (!statusResponse.ok) {
-          throw new Error(statusData.error || "생성 상태 확인 실패");
+        let statusData: { job?: { status: string; stage: string; progress: number; error?: string } };
+        try {
+          const statusResponse = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
+          if (!statusResponse.ok) throw new Error("poll failed");
+          statusData = await statusResponse.json();
+          consecutiveFailures = 0;
+        } catch {
+          consecutiveFailures += 1;
+          if (consecutiveFailures >= MAX_POLL_FAILURES) {
+            // 서버 작업은 계속 진행될 수 있으므로 실패로 표시하지 않고 알림을 안내한다.
+            await loadHistory();
+            setError("생성 상태를 확인하지 못했습니다. 작업은 계속 진행되며 완료되면 알림으로 알려드립니다.");
+            return;
+          }
+          continue;
         }
-        const job = statusData.job as {
-          status: string;
-          stage: string;
-          progress: number;
-          error?: string;
-        };
+        const job = statusData.job;
+        if (!job) continue;
         setGenerationStatus(
           `${stageMessages[job.stage] || "이미지를 처리하고 있습니다."} ${job.progress}%`
         );
@@ -1477,6 +1501,7 @@ export default function Home() {
           >
             <LuSparkles size={16} />
             {generating ? "생성 중..." : "이미지 생성"}
+            <CreditCostBadge credits={AI_CREDIT_COSTS.image1k} />
           </button>
           {error && <p className={styles.error}>{error}</p>}
         </aside>

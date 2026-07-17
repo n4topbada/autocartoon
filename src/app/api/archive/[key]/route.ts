@@ -22,14 +22,28 @@ export async function DELETE(
         where: { id, request: { userId: session.userId } },
       });
       if (!image) return NextResponse.json({ error: "이미지를 찾을 수 없습니다." }, { status: 404 });
-      await prisma.generatedImage.delete({ where: { id } });
-      const remaining = await prisma.generatedImage.count({ where: { requestId: image.requestId } });
-      if (remaining === 0) await prisma.generationRequest.delete({ where: { id: image.requestId } });
+      // ContentSlot.imageId / BoardPost.imageIds ID 참조를 함께 정리한다(깨진 슬롯·blob 유실 방지).
+      await prisma.$transaction(async (tx) => {
+        await tx.contentSlot.deleteMany({ where: { imageId: id } });
+        const referencingPosts = await tx.boardPost.findMany({
+          where: { imageIds: { has: id } },
+          select: { id: true, imageIds: true },
+        });
+        for (const post of referencingPosts) {
+          await tx.boardPost.update({
+            where: { id: post.id },
+            data: { imageIds: post.imageIds.filter((imageId) => imageId !== id) },
+          });
+        }
+        await tx.generatedImage.delete({ where: { id } });
+        const remaining = await tx.generatedImage.count({ where: { requestId: image.requestId } });
+        if (remaining === 0) await tx.generationRequest.delete({ where: { id: image.requestId } });
+      });
       await Promise.all([
         deleteBlobIfUnreferenced(image.blobUrl),
         deleteBlobIfUnreferenced(image.thumbnailUrl),
       ]);
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, freedBytes: image.sizeBytes ?? 0 });
     }
 
     const artifact = await prisma.generationArtifact.findFirst({
@@ -41,7 +55,7 @@ export async function DELETE(
       deleteBlobIfUnreferenced(artifact.blobUrl),
       deleteBlobIfUnreferenced(artifact.thumbnailUrl),
     ]);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, freedBytes: artifact.sizeBytes ?? 0 });
   } catch (error) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

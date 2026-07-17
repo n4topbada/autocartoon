@@ -276,6 +276,13 @@
   flex-shrink: 0;
 }
 
+.sendAction {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
 .input {
   width: 100%;
   min-height: 74px;

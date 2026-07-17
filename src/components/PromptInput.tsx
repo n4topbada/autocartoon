@@ -113,6 +113,29 @@ export default function PromptInput({ tags, text, onTextChange, onTagRemove, pla
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 외부에서 text prop이 바뀌면(예: 저장된 프롬프트 선택) contentEditable에 반영한다.
+  // 사용자가 방금 입력해 이미 DOM과 일치하는 경우(=onInput 왕복)는 커서를 건드리지 않는다.
+  useEffect(() => {
+    const el = editRef.current;
+    if (!el || isComposing.current) return;
+    if (extractText() === text.trim()) return;
+    // 태그 span은 보존하고 텍스트 노드만 새 값으로 교체한다.
+    const tagSpans = Array.from(el.querySelectorAll(`span[${TAG_ATTR}]`));
+    el.textContent = "";
+    tagSpans.forEach((span) => {
+      el.append(span, document.createTextNode(" "));
+    });
+    if (text) el.append(document.createTextNode(text));
+    if (document.activeElement === el) {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+  }, [text, extractText]);
+
   const handleInput = useCallback(() => {
     if (isComposing.current) return;
     const newText = extractText();

@@ -31,6 +31,8 @@ import {
   type CharacterDesignerMessage,
   type CharacterDesignerResult,
 } from "@/lib/character-designer-types";
+import CreditCostBadge from "@/components/CreditCostBadge";
+import { AI_CREDIT_COSTS } from "@/lib/credit-products";
 import styles from "./CharacterDesigner.module.css";
 
 interface UiMessage extends CharacterDesignerMessage {
@@ -542,16 +544,19 @@ export default function CharacterDesigner() {
             maxLength={4000}
             disabled={sending}
           />
-          <button
-            type="button"
-            className={styles.sendButton}
-            onClick={() => void sendMessage()}
-            disabled={sending || !input.trim()}
-            title="보내기"
-            aria-label="보내기"
-          >
-            <LuSend size={18} />
-          </button>
+          <div className={styles.sendAction}>
+            <button
+              type="button"
+              className={styles.sendButton}
+              onClick={() => void sendMessage()}
+              disabled={sending || !input.trim()}
+              title={`보내기 · ${AI_CREDIT_COSTS.characterDesigner}크레딧 사용`}
+              aria-label={`보내기, ${AI_CREDIT_COSTS.characterDesigner}크레딧 사용`}
+            >
+              <LuSend size={18} />
+            </button>
+            <CreditCostBadge credits={AI_CREDIT_COSTS.characterDesigner} />
+          </div>
         </div>
       </div>
 

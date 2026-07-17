@@ -71,9 +71,15 @@ export async function reconcileKakaoPayCreditPayment(paymentId: string, userId: 
     order.partner_user_id === userId &&
     order.amount?.total === payment.amountKrw;
   if (!validOrder) {
+    // 주문 조회 검증이 어긋났는데 실제로는 자금이 캡처됐을 수 있다.
+    // 'failed'(사용자 재시도 불가·복구 스윕 제외)로 종결하면 결제 금액이 조용히 유실되므로
+    // 관리자 검토가 필요한 상태로 보존한다.
     await prisma.creditPayment.updateMany({
       where: { id: payment.id, userId, status: "approving" },
-      data: { status: "failed", failureReason: "결제 주문 조회 정보 검증 실패" },
+      data: {
+        status: "needs_review",
+        failureReason: "결제 주문 조회 정보 검증 실패 (관리자 확인 필요)",
+      },
     });
     return false;
   }

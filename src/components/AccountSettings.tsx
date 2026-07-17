@@ -151,6 +151,11 @@ export default function AccountSettings() {
     }
   };
 
+  // 이메일 동의 없이 만든 카카오 전용 계정은 자리표시 이메일을 쓰고 아는 비밀번호가 없다.
+  const kakaoOnly = Boolean(
+    user?.email.toLowerCase().endsWith("@oauth.wonyframe.local")
+  );
+
   const handleWithdrawal = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setWithdrawError("");
@@ -256,34 +261,40 @@ export default function AccountSettings() {
         <section className={styles.panel} aria-labelledby="password-change-title">
           <div className={styles.panelHeading}>
             <LuKeyRound size={18} aria-hidden="true" />
-            <h3 id="password-change-title">비밀번호 변경</h3>
+            <h3 id="password-change-title">{kakaoOnly ? "비밀번호 설정" : "비밀번호 변경"}</h3>
           </div>
 
           <form className={styles.form} onSubmit={handleSubmit}>
-            <div className={styles.field}>
-              <label htmlFor="current-password">현재 비밀번호</label>
-              <div className={styles.passwordInput}>
-                <input
-                  id="current-password"
-                  type={showCurrentPassword ? "text" : "password"}
-                  value={currentPassword}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
-                  autoComplete="current-password"
-                  placeholder={
-                    user.mustChangePassword ? "이메일로 받은 임시 비밀번호" : "현재 비밀번호"
-                  }
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowCurrentPassword((visible) => !visible)}
-                  aria-label={showCurrentPassword ? "현재 비밀번호 숨기기" : "현재 비밀번호 보기"}
-                  title={showCurrentPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
-                >
-                  {showCurrentPassword ? <LuEyeOff size={17} /> : <LuEye size={17} />}
-                </button>
+            {kakaoOnly ? (
+              <p className={styles.mutedNote}>
+                카카오로 가입한 계정입니다. 이메일 로그인을 함께 쓰려면 아래에서 비밀번호를 설정하세요.
+              </p>
+            ) : (
+              <div className={styles.field}>
+                <label htmlFor="current-password">현재 비밀번호</label>
+                <div className={styles.passwordInput}>
+                  <input
+                    id="current-password"
+                    type={showCurrentPassword ? "text" : "password"}
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    autoComplete="current-password"
+                    placeholder={
+                      user.mustChangePassword ? "이메일로 받은 임시 비밀번호" : "현재 비밀번호"
+                    }
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword((visible) => !visible)}
+                    aria-label={showCurrentPassword ? "현재 비밀번호 숨기기" : "현재 비밀번호 보기"}
+                    title={showCurrentPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
+                  >
+                    {showCurrentPassword ? <LuEyeOff size={17} /> : <LuEye size={17} />}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             <div className={styles.field}>
               <label htmlFor="new-password">새 비밀번호</label>
@@ -334,7 +345,7 @@ export default function AccountSettings() {
 
             <button className={styles.submitButton} type="submit" disabled={submitting}>
               <LuShieldCheck size={17} aria-hidden="true" />
-              {submitting ? "변경 중..." : "비밀번호 변경"}
+              {submitting ? "저장 중..." : kakaoOnly ? "비밀번호 설정" : "비밀번호 변경"}
             </button>
           </form>
         </section>
@@ -407,17 +418,19 @@ export default function AccountSettings() {
 
           {showWithdrawal && (
             <form className={styles.withdrawForm} onSubmit={handleWithdrawal}>
-              <div className={styles.field}>
-                <label htmlFor="withdraw-password">현재 비밀번호</label>
-                <input
-                  id="withdraw-password"
-                  type="password"
-                  value={withdrawPassword}
-                  onChange={(event) => setWithdrawPassword(event.target.value)}
-                  autoComplete="current-password"
-                  required
-                />
-              </div>
+              {!kakaoOnly && (
+                <div className={styles.field}>
+                  <label htmlFor="withdraw-password">현재 비밀번호</label>
+                  <input
+                    id="withdraw-password"
+                    type="password"
+                    value={withdrawPassword}
+                    onChange={(event) => setWithdrawPassword(event.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
+                </div>
+              )}
               <div className={styles.field}>
                 <label htmlFor="withdraw-email">확인을 위해 이메일을 다시 입력하세요</label>
                 <input
@@ -448,7 +461,7 @@ export default function AccountSettings() {
                 <button
                   type="submit"
                   className={styles.withdrawConfirmButton}
-                  disabled={withdrawing || !withdrawPassword || !withdrawEmail}
+                  disabled={withdrawing || (!kakaoOnly && !withdrawPassword) || !withdrawEmail}
                 >
                   {withdrawing ? <LuLoaderCircle className={styles.spinner} /> : <LuTrash2 />}
                   {withdrawing ? "처리 중" : "계정 탈퇴"}

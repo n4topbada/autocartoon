@@ -26,9 +26,12 @@ export async function PATCH(
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
     }
 
+    // 클라이언트가 목표 상태를 보내면 그대로 설정(멱등). 없으면 기존처럼 토글한다.
+    const body = (await req.json().catch(() => ({}))) as { favorite?: unknown };
+    const target = typeof body.favorite === "boolean" ? body.favorite : !image.favorite;
     const updated = await prisma.generatedImage.update({
       where: { id },
-      data: { favorite: !image.favorite },
+      data: { favorite: target },
     });
 
     return NextResponse.json({ id: updated.id, favorite: updated.favorite });
@@ -62,18 +65,30 @@ export async function DELETE(
       return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
     }
 
-    // DB 참조를 먼저 제거하고, 다른 기능에서 사용하지 않는 Blob만 정리한다.
-    await prisma.generatedImage.delete({ where: { id } });
-
-    // 해당 요청의 남은 이미지 수 확인 → 0이면 요청도 삭제
-    const remaining = await prisma.generatedImage.count({
-      where: { requestId: image.requestId },
-    });
-    if (remaining === 0) {
-      await prisma.generationRequest.delete({
-        where: { id: image.requestId },
+    // 이미지에 대한 ID 참조(ContentSlot.imageId, BoardPost.imageIds)를 함께 정리한다.
+    // 그렇지 않으면 콘텐츠 슬롯이 '없음'으로 깨지거나, blob-references가 URL만 검사하는 탓에
+    // 아직 참조 중인 blob이 삭제된다.
+    await prisma.$transaction(async (tx) => {
+      await tx.contentSlot.deleteMany({ where: { imageId: id } });
+      const referencingPosts = await tx.boardPost.findMany({
+        where: { imageIds: { has: id } },
+        select: { id: true, imageIds: true },
       });
-    }
+      for (const post of referencingPosts) {
+        await tx.boardPost.update({
+          where: { id: post.id },
+          data: { imageIds: post.imageIds.filter((imageId) => imageId !== id) },
+        });
+      }
+      await tx.generatedImage.delete({ where: { id } });
+      // 요청에 남은 이미지가 없으면 요청도 삭제
+      const remaining = await tx.generatedImage.count({
+        where: { requestId: image.requestId },
+      });
+      if (remaining === 0) {
+        await tx.generationRequest.delete({ where: { id: image.requestId } });
+      }
+    });
 
     await Promise.all([
       deleteBlobIfUnreferenced(image.blobUrl),

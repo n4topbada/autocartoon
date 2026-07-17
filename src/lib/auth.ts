@@ -1,28 +1,25 @@
 import { getSession } from "./session";
 import { prisma } from "./prisma";
 import { canAccessCharacterDesigner } from "./character-designer-access";
-import { headers } from "next/headers";
-import { createUserSession, validateUserSession } from "./user-sessions";
+import { validateUserSession } from "./user-sessions";
 
 export async function requireAuth() {
   const session = await getSession();
   if (!session.userId) {
     throw new AuthError("로그인이 필요합니다.", 401);
   }
-  if (session.sessionId) {
-    const registered = await validateUserSession(session.sessionId, session.userId);
-    if (!registered) {
-      session.destroy();
-      throw new AuthError("로그인 세션이 만료되었거나 다른 기기에서 해제되었습니다.", 401);
-    }
-  } else {
-    const requestHeaders = await headers();
-    const registered = await createUserSession(
-      session.userId,
-      requestHeaders.get("user-agent") || ""
-    );
-    session.sessionId = registered.id;
-    await session.save();
+  // sessionId가 없는 구버전 쿠키는 기기 세션 레코드와 연결돼 있지 않다.
+  // 요청마다 새 기기 세션을 즉석에서 만들면 홈에서 동시에 뜨는 여러 요청이
+  // 서로의 세션 행을 삭제하는 경쟁이 생기므로(다른 기기까지 로그아웃),
+  // 무효 처리하고 한 번만 깨끗이 재로그인하도록 유도한다.
+  if (!session.sessionId) {
+    session.destroy();
+    throw new AuthError("로그인 세션을 갱신해야 합니다. 다시 로그인해주세요.", 401);
+  }
+  const registered = await validateUserSession(session.sessionId, session.userId);
+  if (!registered) {
+    session.destroy();
+    throw new AuthError("로그인 세션이 만료되었거나 다른 기기에서 해제되었습니다.", 401);
   }
   return session;
 }

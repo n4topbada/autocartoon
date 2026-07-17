@@ -64,9 +64,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: INVALID_CREDENTIALS }, { status: 401 });
     }
 
+    // 임시 비밀번호로 로그인했다는 것은 발송 메일을 받았다는 뜻이므로 이메일 소유권 증명으로 본다.
+    // (가입 인증 메일이 실패했거나 구버전 미인증 계정이 영구히 잠기지 않도록 하는 복구 경로)
+    if (usedTemporaryPassword && !user.emailVerified) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerified: true },
+      });
+      user.emailVerified = true;
+    }
+
     if (!user.emailVerified) {
       return NextResponse.json(
-        { error: "이메일 인증이 필요합니다. 메일을 확인해주세요." },
+        { error: "이메일 인증이 필요합니다. 가입 시 받은 인증 메일의 링크를 눌러주세요." },
         { status: 403 }
       );
     }

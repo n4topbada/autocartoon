@@ -82,17 +82,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const firstPreset = await prisma.characterPreset.findFirst({
-      where: {
-        OR: [
-          { userId: session.userId },
-          { purchasedBy: { some: { userId: session.userId } } },
-        ],
-      },
-      select: { id: true },
-    });
     let blobUrl: string;
     let thumbnailUrl: string;
+    let sizeBytes: number | null = null;
     let mimeType = ALLOWED_MIME_TYPES.has(body.mimeType || "")
       ? body.mimeType!
       : "image/png";
@@ -112,11 +104,13 @@ export async function POST(req: NextRequest) {
       }
       blobUrl = providedBlobUrl;
       mimeType = contentType;
+      sizeBytes = contentLength > 0 ? contentLength : null;
       thumbnailUrl = await uploadThumbnailForBlobUrl(blobUrl, "edited");
     } else {
       if (base64!.length > Math.ceil((MAX_IMAGE_BYTES * 4) / 3) + 4) {
         return NextResponse.json({ error: "이미지는 20MB 이하여야 합니다." }, { status: 413 });
       }
+      sizeBytes = Buffer.byteLength(base64!, "base64");
       const uploaded = await uploadBase64ImageWithThumbnail(base64!, mimeType, "edited");
       blobUrl = uploaded.blobUrl;
       thumbnailUrl = uploaded.thumbnailUrl;
@@ -125,8 +119,10 @@ export async function POST(req: NextRequest) {
     const image = await prisma.$transaction(async (tx) => {
       const generationRequest = await tx.generationRequest.create({
         data: {
-          presetId: firstPreset?.id ?? null,
-          presetIds: firstPreset ? [firstPreset.id] : [],
+          // 캔버스 편집은 특정 캐릭터에서 생성된 것이 아니므로 프리셋을 붙이지 않는다.
+          // (임의의 프리셋에 귀속시키면 해당 캐릭터 갤러리/필터에 무관한 편집물이 섞인다)
+          presetId: null,
+          presetIds: [],
           userId: session.userId,
           mode: body.operation === "cutout" ? "cutout" : "edit",
           prompt: body.operation === "cutout" ? "배경 제거" : "캔버스 편집",
@@ -138,6 +134,7 @@ export async function POST(req: NextRequest) {
           blobUrl,
           thumbnailUrl,
           mimeType,
+          sizeBytes,
         },
       });
       if (body.projectId) {
@@ -149,6 +146,7 @@ export async function POST(req: NextRequest) {
             blobUrl,
             thumbnailUrl,
             mimeType,
+            sizeBytes,
           },
         });
       }

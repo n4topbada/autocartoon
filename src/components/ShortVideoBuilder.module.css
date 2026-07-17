@@ -593,7 +593,7 @@
 
 .voiceList label > div {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(0, 1fr) 56px;
   gap: 5px;
 }
 
@@ -610,8 +610,10 @@
 }
 
 .voiceList button {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   border: 1px solid var(--short-line);
   border-radius: 4px;
   background: transparent;

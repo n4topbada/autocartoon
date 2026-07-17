@@ -151,6 +151,10 @@
 
 .sendBtn {
   padding: 10px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: none;
   border-radius: 10px;
   background: var(--accent);

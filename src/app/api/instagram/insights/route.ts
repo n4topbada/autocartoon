@@ -51,6 +51,11 @@ export async function GET() {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    return NextResponse.json({ error: "인사이트 조회 실패" }, { status: 500 });
+    // 조작된 0 통계 대신 재연동을 안내한다(토큰 만료가 가장 흔한 원인).
+    console.error("Instagram insights error:", error);
+    return NextResponse.json(
+      { error: "Instagram 통계를 불러오지 못했습니다. 토큰이 만료되었을 수 있으니 다시 연동해주세요." },
+      { status: 502 }
+    );
   }
 }

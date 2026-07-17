@@ -100,6 +100,7 @@ test("job responses expose durable progress and artifacts", () => {
         blobUrl: "https://example.test/video.mp4",
         thumbnailUrl: null,
         mimeType: "video/mp4",
+        sizeBytes: null,
         metadata: null,
         createdAt: now,
       },

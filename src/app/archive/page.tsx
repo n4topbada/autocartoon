@@ -33,7 +33,15 @@ interface ArchiveItem {
 
 interface ArchiveResponse {
   items: ArchiveItem[];
+  storageBytes?: number;
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return "0 MB";
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1024) return `${(mb / 1024).toFixed(2)} GB`;
+  return `${mb.toFixed(1)} MB`;
 }
 
 const FILTERS = [
@@ -72,6 +80,7 @@ export default function ArchivePage() {
   const [preview, setPreview] = useState<ArchiveItem | null>(null);
   const [editing, setEditing] = useState<ArchiveItem | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,7 +110,18 @@ export default function ArchivePage() {
       const objectUrl = URL.createObjectURL(await response.blob());
       const anchor = document.createElement("a");
       anchor.href = objectUrl;
-      anchor.download = `${item.kind}-${item.key.split(":")[1]}.${item.mediaType === "video" ? "mp4" : "png"}`;
+      // 확장자는 실제 mimeType에서 유도한다(webp/jpeg 원본이 .png로 저장되는 문제 방지).
+      const extByMime: Record<string, string> = {
+        "image/png": "png",
+        "image/jpeg": "jpg",
+        "image/webp": "webp",
+        "image/gif": "gif",
+        "video/mp4": "mp4",
+        "video/webm": "webm",
+        "video/quicktime": "mov",
+      };
+      const ext = extByMime[item.mimeType] || (item.mediaType === "video" ? "mp4" : "png");
+      anchor.download = `${item.kind}-${item.key.split(":")[1]}.${ext}`;
       anchor.click();
       URL.revokeObjectURL(objectUrl);
     } catch (cause) {
@@ -114,8 +134,13 @@ export default function ArchivePage() {
     setDeleting(item.key);
     setError(null);
     try {
-      await readJson(await fetch(`/api/archive/${encodeURIComponent(item.key)}`, { method: "DELETE" }));
+      const result = await readJson<{ ok: boolean; freedBytes?: number }>(
+        await fetch(`/api/archive/${encodeURIComponent(item.key)}`, { method: "DELETE" })
+      );
       setPreview((current) => current?.key === item.key ? null : current);
+      if (result.freedBytes && result.freedBytes > 0) {
+        setNotice(`${formatBytes(result.freedBytes)}의 저장 공간을 확보했습니다.`);
+      }
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "삭제하지 못했습니다.");
@@ -130,7 +155,7 @@ export default function ArchivePage() {
         <Link href="/" className={styles.iconButton} title="돌아가기"><LuArrowLeft /></Link>
         <div>
           <h1>작업 보관함</h1>
-          <span>{data?.pagination.total ?? 0}개</span>
+          <span>{data?.pagination.total ?? 0}개 · 저장 용량 {formatBytes(data?.storageBytes ?? 0)}</span>
         </div>
         <form className={styles.search} onSubmit={(event) => { event.preventDefault(); applySearch(); }}>
           <LuSearch />
@@ -150,6 +175,7 @@ export default function ArchivePage() {
       </nav>
 
       {error && <div className={styles.error} role="alert">{error}<button onClick={() => setError(null)} title="닫기"><LuX /></button></div>}
+      {notice && <div className={styles.notice} role="status">{notice}<button onClick={() => setNotice(null)} title="닫기"><LuX /></button></div>}
 
       {loading ? (
         <div className={styles.empty}><LuLoaderCircle className={styles.spin} /></div>

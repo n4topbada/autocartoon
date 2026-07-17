@@ -352,12 +352,17 @@
 
 .resultActions {
   display: grid;
-  grid-template-columns: 34px 34px minmax(0, 1fr);
+  grid-template-columns: 58px 34px minmax(0, 1fr);
   gap: 6px;
 }
 
 .resultActions button {
   min-height: 34px;
+}
+
+.resultActions button:first-child {
+  padding: 0 5px;
+  gap: 4px;
 }
 
 .resultActions .saveButton {

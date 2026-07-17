@@ -81,10 +81,20 @@ export async function DELETE(
     if (!cut) return NextResponse.json({ error: "컷을 찾을 수 없습니다." }, { status: 404 });
     await prisma.$transaction(async (tx) => {
       await tx.projectCut.delete({ where: { id } });
-      await tx.projectCut.updateMany({
-        where: { projectId: cut.projectId, order: { gt: cut.order } },
-        data: { order: { decrement: 1 } },
+      // 남은 컷 순번을 두 단계(+1000 후 0..n)로 다시 매겨
+      // @@unique([projectId, order]) 충돌(P2002)을 피한다. (reorder 라우트와 동일 방식)
+      const remaining = await tx.projectCut.findMany({
+        where: { projectId: cut.projectId },
+        orderBy: { order: "asc" },
+        select: { id: true },
       });
+      await tx.projectCut.updateMany({
+        where: { projectId: cut.projectId },
+        data: { order: { increment: 1_000 } },
+      });
+      for (let order = 0; order < remaining.length; order += 1) {
+        await tx.projectCut.update({ where: { id: remaining[order].id }, data: { order } });
+      }
     });
     return NextResponse.json({ ok: true });
   } catch (error) {

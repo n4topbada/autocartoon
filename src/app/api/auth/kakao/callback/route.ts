@@ -5,6 +5,7 @@ import { WELCOME_CREDITS } from "@/lib/credit-products";
 import {
   getKakaoUser,
   KAKAO_OAUTH_STATE_COOKIE,
+  kakaoPlaceholderEmail,
   validateKakaoOAuthState,
 } from "@/lib/kakao-auth";
 import { prisma } from "@/lib/prisma";
@@ -47,13 +48,36 @@ export async function GET(req: NextRequest) {
       const matchingUser = await prisma.user.findFirst({
         where: { email: { equals: kakao.verifiedEmail, mode: "insensitive" } },
       });
-      if (matchingUser && !matchingUser.kakaoId) {
-        user = await prisma.user.update({
-          where: { id: matchingUser.id },
-          data: { kakaoId: kakao.id, emailVerified: true },
-        });
-      } else if (matchingUser?.kakaoId && matchingUser.kakaoId !== kakao.id) {
+      if (matchingUser?.kakaoId && matchingUser.kakaoId !== kakao.id) {
         return redirectAndClearState(req, "/login?kakao=already_linked");
+      }
+      if (matchingUser && !matchingUser.kakaoId) {
+        if (matchingUser.emailVerified) {
+          // 기존 계정 주인이 이미 이메일 소유권을 증명한 경우에만 조용히 연결한다.
+          user = await prisma.user.update({
+            where: { id: matchingUser.id },
+            data: { kakaoId: kakao.id },
+          });
+        } else {
+          // 미인증(소유권 미증명) 계정은 사전 선점 공격의 대상일 수 있다.
+          // 카카오가 실제 이메일 소유권을 증명했으므로 진짜 주인이 계정을 회수한다:
+          // 카카오 연결 + 인증 처리 + 기존 비밀번호 무효화(선점된 비밀번호 차단).
+          const rotatedPasswordHash = await bcrypt.hash(
+            randomBytes(32).toString("base64url"),
+            12
+          );
+          user = await prisma.user.update({
+            where: { id: matchingUser.id },
+            data: {
+              kakaoId: kakao.id,
+              emailVerified: true,
+              passwordHash: rotatedPasswordHash,
+              temporaryPasswordHash: null,
+              temporaryPasswordExpiresAt: null,
+              temporaryPasswordIssuedAt: null,
+            },
+          });
+        }
       }
     }
 
@@ -63,7 +87,7 @@ export async function GET(req: NextRequest) {
         const created = await tx.user.create({
           data: {
             kakaoId: kakao.id,
-            email: kakao.verifiedEmail ?? `kakao-${kakao.id}@oauth.wonyframe.local`,
+            email: kakao.verifiedEmail ?? kakaoPlaceholderEmail(kakao.id),
             passwordHash,
             name: kakao.nickname,
             emailVerified: Boolean(kakao.verifiedEmail),

@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
             ]
           : [{ pinned: "desc" }, { createdAt: "desc" }],
         include: {
-          user: { select: { name: true, email: true } },
+          user: { select: { id: true, plazaNickname: true } },
           _count: { select: { comments: true, likes: true } },
           ...(currentUserId
             ? { likes: { where: { userId: currentUserId }, select: { id: true } } }
@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
       previewImageUrl: post.imageIds[0] ? previewMap.get(post.imageIds[0]) ?? null : null,
       createdAt: post.createdAt.toISOString(),
       updatedAt: post.updatedAt.toISOString(),
+      userId: post.userId,
       user: post.user,
       commentCount: post._count.comments,
       likeCount: post._count.likes,
@@ -100,16 +101,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "내용을 입력해주세요" }, { status: 400 });
     }
 
+    // 첨부 이미지는 작성자 소유의 것만 허용한다(남의 비공개 이미지 URL 공개 방지).
+    const requestedImageIds = Array.isArray(imageIds)
+      ? imageIds.filter((value): value is string => typeof value === "string")
+      : [];
+    let finalImageIds: string[] = [];
+    if (requestedImageIds.length > 0) {
+      const owned = await prisma.generatedImage.findMany({
+        where: { id: { in: requestedImageIds }, request: { userId: session.userId } },
+        select: { id: true },
+      });
+      const ownedSet = new Set(owned.map((image) => image.id));
+      finalImageIds = requestedImageIds.filter((id) => ownedSet.has(id));
+    }
+
     const post = await prisma.boardPost.create({
       data: {
         userId: session.userId,
         title: title.trim(),
         content: content.trim(),
-        imageIds: Array.isArray(imageIds) ? imageIds : [],
-        links: Array.isArray(links) ? links : [],
+        imageIds: finalImageIds,
+        links: Array.isArray(links) ? links.filter((l) => typeof l === "string") : [],
       },
       include: {
-        user: { select: { name: true, email: true } },
+        user: { select: { id: true, plazaNickname: true } },
       },
     });
 

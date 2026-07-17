@@ -4,6 +4,12 @@ import { Prisma } from "@prisma/client";
 import { validatePassword } from "@/lib/password-policy";
 import { prisma } from "@/lib/prisma";
 import { WELCOME_CREDITS } from "@/lib/credit-products";
+import {
+  createVerifyToken,
+  isEmailVerificationConfigured,
+  sendVerificationEmail,
+  verifyTokenExpiry,
+} from "@/lib/email-verification";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -48,14 +54,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 인증 메일을 보낼 수 있으면(운영) 소유권을 증명하기 전까지 미인증 상태로 만든다.
+    // Resend 미설정 환경(로컬/개발)에서는 문서화된 대로 자동 인증 처리한다.
+    const requireVerification = isEmailVerificationConfigured();
+    const verifyToken = requireVerification ? createVerifyToken() : null;
+    const verifyTokenExp = verifyToken ? verifyTokenExpiry() : null;
+
     const passwordHash = await bcrypt.hash(password, 12);
-    await prisma.$transaction(async (tx) => {
+    const created = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
           email,
           passwordHash,
           name: email.split("@")[0],
-          emailVerified: true,
+          emailVerified: !requireVerification,
+          verifyToken,
+          verifyTokenExp,
           credits: WELCOME_CREDITS,
           welcomeCreditsGrantedAt: new Date(),
         },
@@ -71,11 +85,24 @@ export async function POST(req: NextRequest) {
           note: "신규 가입 웰컴 크레딧",
         },
       });
+      return user;
     });
 
+    if (verifyToken) {
+      // 메일 발송은 베스트에포트. 실패해도 임시 비밀번호(비밀번호 찾기)로 로그인하면
+      // 소유권이 증명되어 인증이 완료되므로 계정이 영구히 잠기지 않는다.
+      await sendVerificationEmail({
+        email: created.email,
+        name: created.name,
+        token: verifyToken,
+      });
+    }
+
     return NextResponse.json({
-      message: "회원가입이 완료되었습니다. 로그인해주세요.",
-      autoVerified: true,
+      message: requireVerification
+        ? "회원가입이 완료되었습니다. 인증 메일을 확인해주세요."
+        : "회원가입이 완료되었습니다. 로그인해주세요.",
+      autoVerified: !requireVerification,
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {

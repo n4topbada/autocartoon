@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuth } from "@/lib/auth";
-import { deleteBlob } from "@/lib/blob";
+import { deleteBlobIfUnreferenced } from "@/lib/blob-references";
 import { prisma } from "@/lib/prisma";
 
 export async function DELETE(
@@ -14,41 +14,13 @@ export async function DELETE(
       where: { id, project: { userId: session.userId } },
     });
     if (!asset) return NextResponse.json({ error: "자산을 찾을 수 없습니다." }, { status: 404 });
-    const cleanup = await prisma.$transaction(async (tx) => {
-      await tx.projectAsset.delete({ where: { id } });
-      const [generatedImageRefs, artifactRefs, assetRefs, cutRefs] = await Promise.all([
-        tx.generatedImage.count({ where: { blobUrl: asset.blobUrl } }),
-        tx.generationArtifact.count({ where: { blobUrl: asset.blobUrl } }),
-        tx.projectAsset.count({ where: { blobUrl: asset.blobUrl } }),
-        tx.projectCut.count({
-          where: { OR: [{ imageUrl: asset.blobUrl }, { videoUrl: asset.blobUrl }] },
-        }),
-      ]);
 
-      let deleteThumbnail = false;
-      if (asset.thumbnailUrl) {
-        const [generatedThumbnailRefs, artifactThumbnailRefs, assetThumbnailRefs, cutThumbnailRefs] =
-          await Promise.all([
-            tx.generatedImage.count({ where: { thumbnailUrl: asset.thumbnailUrl } }),
-            tx.generationArtifact.count({ where: { thumbnailUrl: asset.thumbnailUrl } }),
-            tx.projectAsset.count({ where: { thumbnailUrl: asset.thumbnailUrl } }),
-            tx.projectCut.count({ where: { thumbnailUrl: asset.thumbnailUrl } }),
-          ]);
-        deleteThumbnail =
-          generatedThumbnailRefs + artifactThumbnailRefs + assetThumbnailRefs + cutThumbnailRefs === 0;
-      }
-
-      return {
-        deleteOriginal: generatedImageRefs + artifactRefs + assetRefs + cutRefs === 0,
-        deleteThumbnail,
-      };
-    });
-
+    await prisma.projectAsset.delete({ where: { id } });
+    // 로우 삭제가 커밋된 뒤, PresetImage·SavedBackground까지 포함한 6개 테이블 전체를
+    // 확인하는 공용 헬퍼로 공유 blob을 실수로 지우지 않도록 한다.
     await Promise.all([
-      cleanup.deleteOriginal ? deleteBlob(asset.blobUrl) : Promise.resolve(),
-      cleanup.deleteThumbnail && asset.thumbnailUrl
-        ? deleteBlob(asset.thumbnailUrl)
-        : Promise.resolve(),
+      deleteBlobIfUnreferenced(asset.blobUrl),
+      deleteBlobIfUnreferenced(asset.thumbnailUrl),
     ]);
     return NextResponse.json({ ok: true });
   } catch (error) {

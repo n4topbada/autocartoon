@@ -79,17 +79,23 @@ export async function POST(
           characterIdByName
         );
         const planByCutId = new Map(generatedPlan.map((cut) => [cut.cutId, cut.dialogues]));
-        await prisma.$transaction(project.cuts.map((cut) => {
-          const dialogues = planByCutId.get(cut.id) ?? [];
-          return prisma.projectCut.update({
-            where: { id: cut.id },
-            data: {
-              dialoguePlan: dialogues as unknown as Prisma.InputJsonValue,
-              dialogue: dialogues.map((dialogue) => dialogue.text).join("\n") || cut.dialogue,
-              speakerPresetId: dialogues[0]?.speakerPresetId ?? cut.speakerPresetId,
-            },
-          });
-        }));
+        // 모델이 빠뜨렸거나 cutId를 훼손한 컷은 건드리지 않는다.
+        // (예전에는 그런 컷의 dialoguePlan을 []로 덮어써 화자 배정까지 날려버렸다)
+        await prisma.$transaction(
+          project.cuts
+            .filter((cut) => planByCutId.has(cut.id))
+            .map((cut) => {
+              const dialogues = planByCutId.get(cut.id)!;
+              return prisma.projectCut.update({
+                where: { id: cut.id },
+                data: {
+                  dialoguePlan: dialogues as unknown as Prisma.InputJsonValue,
+                  dialogue: dialogues.map((dialogue) => dialogue.text).join("\n") || cut.dialogue,
+                  speakerPresetId: dialogues[0]?.speakerPresetId ?? cut.speakerPresetId,
+                },
+              });
+            })
+        );
         return generatedPlan;
       }
     );

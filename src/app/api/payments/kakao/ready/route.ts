@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuth } from "@/lib/auth";
-import { getCreditProduct } from "@/lib/credit-products";
+import { getCreditProduct, getProductTotalCredits } from "@/lib/credit-products";
 import { isKakaoPayConfigured, KakaoPayError, readyKakaoPay } from "@/lib/kakaopay";
 import { prisma } from "@/lib/prisma";
 
@@ -32,12 +32,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "유효하지 않은 크레딧 상품입니다." }, { status: 400 });
     }
 
+    // 보너스 크레딧까지 포함한 총 적립량을 결제 레코드에 저장해 승인 시 전액 적립되게 한다.
+    const totalCredits = getProductTotalCredits(product);
     const partnerOrderId = `wony_${randomUUID().replaceAll("-", "")}`;
     const payment = await prisma.creditPayment.create({
       data: {
         userId: session.userId,
         productCode: product.code,
-        credits: product.credits,
+        credits: totalCredits,
         amountKrw: product.amountKrw,
         partnerOrderId,
       },
@@ -49,7 +51,7 @@ export async function POST(req: NextRequest) {
     const ready = await readyKakaoPay({
       partnerOrderId,
       partnerUserId: session.userId,
-      itemName: `WONY ${product.name} ${product.credits} 크레딧`,
+      itemName: `WONY ${product.name} ${totalCredits} 크레딧`,
       itemCode: product.code,
       amountKrw: product.amountKrw,
       approvalUrl: `${origin}/api/payments/kakao/approve?order=${orderParam}`,

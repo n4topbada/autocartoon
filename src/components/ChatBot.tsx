@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import CreditCostBadge from "@/components/CreditCostBadge";
+import { AI_CREDIT_COSTS } from "@/lib/credit-products";
 import styles from "./ChatBot.module.css";
 
 interface Message {
@@ -115,11 +117,13 @@ export default function ChatBot({ open, onClose }: ChatBotProps) {
       .join("\n");
 
     try {
-      await fetch("/api/help", {
+      const res = await fetch("/api/help", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: recentMessages }),
       });
+      // 응답 상태를 확인하지 않으면 401/500에도 '접수 완료'로 표시돼 요청이 조용히 유실된다.
+      if (!res.ok) throw new Error("상담 요청 실패");
       setMessages((prev) => [
         ...prev,
         {
@@ -210,6 +214,7 @@ export default function ChatBot({ open, onClose }: ChatBotProps) {
             disabled={loading || !input.trim()}
           >
             전송
+            <CreditCostBadge credits={AI_CREDIT_COSTS.chat} />
           </button>
         </div>
       </div>

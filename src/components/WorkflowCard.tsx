@@ -9,6 +9,8 @@ import {
   buildStylizePrompt,
   buildAnglesPrompt,
 } from "@/lib/background-prompts";
+import { getGenerationCreditCost } from "@/lib/credit-products";
+import CreditCostBadge from "@/components/CreditCostBadge";
 import { LuSparkles, LuTrash2 } from "react-icons/lu";
 
 interface GeneratedImage {
@@ -672,6 +674,9 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
               >
                 {quickStep.generating ? <div className={styles.loader} /> : <LuSparkles />}
                 {quickStep.generating ? "배경 생성 중" : quickStep.results.length > 0 ? "다시 생성" : "배경 생성"}
+                <CreditCostBadge
+                  credits={getGenerationCreditCost("background", { count: quickCount, imageSize })}
+                />
               </button>
             </div>
           </div>
@@ -714,6 +719,9 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
                 ) : (
                   "배경 정리하기"
                 )}
+                <CreditCostBadge
+                  credits={getGenerationCreditCost("background", { count: cleanupCount, imageSize })}
+                />
               </button>
             </div>
           </div>
@@ -752,6 +760,9 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
                 ) : (
                   "일러스트로 변환하기"
                 )}
+                <CreditCostBadge
+                  credits={getGenerationCreditCost("background", { count: stylizeCount, imageSize })}
+                />
               </button>
             </div>
           </div>
@@ -801,6 +812,9 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
                 ) : (
                   "앵글 생성"
                 )}
+                <CreditCostBadge
+                  credits={getGenerationCreditCost("background", { count: angleCount, imageSize })}
+                />
               </button>
             </div>
           </div>
