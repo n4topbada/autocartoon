@@ -3,7 +3,7 @@ import { prisma } from "./prisma";
 
 export async function isBlobReferenced(url: string) {
   if (!url) return false;
-  const [generated, artifacts, presets, backgrounds, assets, cuts] = await Promise.all([
+  const [generated, artifacts, presets, backgrounds, assets, cuts, canvasVersions] = await Promise.all([
     prisma.generatedImage.count({ where: { OR: [{ blobUrl: url }, { thumbnailUrl: url }] } }),
     prisma.generationArtifact.count({ where: { OR: [{ blobUrl: url }, { thumbnailUrl: url }] } }),
     prisma.presetImage.count({ where: { OR: [{ blobUrl: url }, { thumbnailUrl: url }] } }),
@@ -12,8 +12,11 @@ export async function isBlobReferenced(url: string) {
     prisma.projectCut.count({
       where: { OR: [{ imageUrl: url }, { thumbnailUrl: url }, { videoUrl: url }] },
     }),
+    prisma.canvasVersion.count({
+      where: { OR: [{ imageUrl: url }, { thumbnailUrl: url }] },
+    }),
   ]);
-  return generated + artifacts + presets + backgrounds + assets + cuts > 0;
+  return generated + artifacts + presets + backgrounds + assets + cuts + canvasVersions > 0;
 }
 
 export async function deleteBlobIfUnreferenced(url?: string | null) {

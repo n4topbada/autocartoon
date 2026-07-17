@@ -79,6 +79,223 @@
   overflow: hidden;
 }
 
+.pagePanel {
+  width: 118px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  gap: 6px;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  background: #101010;
+}
+
+.pagePanelCollapsed {
+  width: 44px;
+  padding: 8px;
+}
+
+.pagePanelHeader {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.pagePanelHeader strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.pagePanelHeader button,
+.pageActions button {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.pagePanelHeader button:hover,
+.pageActions button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.pageActions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.pageActions button {
+  width: 100%;
+  min-width: 0;
+}
+
+.pageActions button:disabled {
+  cursor: default;
+  opacity: 0.3;
+}
+
+.pageActions .pageActionActive {
+  border-color: #8d7fe0;
+  background: #30295a;
+  color: #c8c0ff;
+}
+
+.pageRenameForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px 26px;
+  gap: 3px;
+}
+
+.pageRenameForm input {
+  min-width: 0;
+  height: 27px;
+  padding: 0 6px;
+  border: 1px solid #5f5f5f;
+  border-radius: 4px;
+  outline: none;
+  background: #171717;
+  color: var(--text);
+  font: inherit;
+  font-size: 9px;
+}
+
+.pageRenameForm input:focus {
+  border-color: #8d7fe0;
+}
+
+.pageRenameForm button {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #242424;
+  color: var(--text-sub);
+  cursor: pointer;
+}
+
+.pageRenameForm button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.pageList {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.pageList > button {
+  width: 100%;
+  min-width: 0;
+  padding: 4px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #171717;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.pageList > button:hover {
+  border-color: #5f5f5f;
+}
+
+.pageList .pageItemActive {
+  border-color: #6f61bf;
+  box-shadow: inset 0 0 0 1px #6f61bf;
+}
+
+.pageThumb {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #252525;
+  color: var(--text-dim);
+  font-size: 8px;
+}
+
+.pageThumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.pageMeta {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 3px;
+}
+
+.pageOrder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  color: #9d91e5;
+}
+
+.pageOrder b {
+  color: #9d91e5;
+  font-size: 9px;
+  text-align: center;
+}
+
+.pageMeta small {
+  overflow: hidden;
+  color: var(--text-sub);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pageDownloads {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.pageDownloads button {
+  min-width: 0;
+  min-height: 28px;
+  padding: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 8px;
+  cursor: pointer;
+}
+
+.pageDownloads button:disabled {
+  cursor: default;
+  opacity: 0.3;
+}
+
 /* 우측 끝: 갤러리 이미지 리스트 */
 .imageList {
   width: 200px;
@@ -275,6 +492,7 @@
   cursor: crosshair;
   width: 100%;
   height: 100%;
+  touch-action: none;
 }
 
 /* 하단 툴바 */
@@ -1038,8 +1256,402 @@
   background: rgba(239, 68, 68, 0.1);
 }
 
+.headerActions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.saveStatus {
+  min-width: 66px;
+  color: #9dd8c8;
+  font-size: 10px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.saveStatusDirty { color: #f7c66b; }
+
+.headerIconButton,
+.headerSaveButton,
+.headerDoneButton {
+  min-height: 31px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #181818;
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.headerIconButton { width: 32px; padding: 0; }
+.headerSaveButton,
+.headerDoneButton { padding: 5px 10px; }
+.headerSaveButton { border-color: #3c7066; background: #17352f; }
+.headerDoneButton { border-color: #696969; background: #292929; }
+.headerIconButton:disabled,
+.headerSaveButton:disabled,
+.headerDoneButton:disabled { cursor: default; opacity: 0.45; }
+
+.popupAnchor { position: relative; }
+
+.compactSelect,
+.fontSelect {
+  min-height: 29px;
+  max-width: 174px;
+  padding: 4px 24px 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  outline: 0;
+  background: #171717;
+  color: var(--text);
+  font-size: 10px;
+}
+
+.fontSelect { width: 100%; max-width: none; }
+
+.objectControls {
+  padding: 5px;
+  border: 1px solid #353535;
+  border-radius: 5px;
+  background: #151515;
+}
+
+.numericField {
+  min-width: 70px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-dim);
+  font-size: 9px;
+}
+
+.numericField span { min-width: 20px; text-align: right; }
+
+.numericField input {
+  width: 48px;
+  min-height: 26px;
+  padding: 3px 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  outline: 0;
+  background: #101010;
+  color: var(--text);
+  font-size: 10px;
+}
+
+.toggleCompact {
+  min-height: 27px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-dim);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.toggleCompact input { accent-color: #2f9c88; }
+
+.sfxPopup {
+  width: 250px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.sfxPopup button {
+  min-height: 36px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #1d1d1d;
+  color: #fff;
+  font-family: "Black Han Sans", Impact, sans-serif;
+  font-size: 13px;
+}
+
+.backgroundPopup {
+  width: min(360px, 84vw);
+  gap: 9px;
+}
+
+.segmentedControl {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #111;
+}
+
+.segmentedControl button {
+  min-height: 27px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.segmentedControl .segmentActive { background: #306f63; color: #fff; }
+
+.backgroundRows { display: grid; gap: 7px; }
+
+.backgroundRows > label {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.backgroundRows > label input[type="color"] {
+  width: 40px;
+  height: 26px;
+  padding: 1px;
+  border: 1px solid var(--border);
+  background: #111;
+}
+
+.backgroundRows > label b { color: var(--text-sub); font-size: 9px; text-align: right; }
+
+.doneBtn {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 11px;
+}
+
+.customBubbleButton,
+.clearTextStyleButton {
+  width: 100%;
+  min-height: 29px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #191919;
+  color: var(--text-sub);
+  font-size: 10px;
+}
+
+.customBubbleControls {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+}
+
+.textPopup { min-width: 330px; }
+.shapeGrid { grid-template-columns: repeat(6, 1fr); }
+
+.aiProgress {
+  height: 24px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #3d625b;
+  border-radius: 4px;
+  background: #111;
+}
+
+.aiProgress span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: #2b7466;
+  transition: width 0.3s ease;
+}
+
+.aiProgress b {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 9px;
+}
+
+.maskControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.maskControls label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-dim);
+  font-size: 9px;
+}
+
+.maskControls label input { min-width: 0; flex: 1; }
+
+.maskControls button {
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 9px;
+}
+
+.historyBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.76);
+}
+
+.historyDialog {
+  width: min(920px, 96vw);
+  max-height: min(780px, 92vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #404040;
+  border-radius: 7px;
+  background: #121212;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.historyHeader {
+  min-height: 58px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+
+.historyHeader span { color: #62b8a7; font-size: 8px; font-weight: 700; }
+.historyHeader h2 { margin-top: 2px; color: #fff; font-size: 17px; letter-spacing: 0; }
+.historyHeader button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+}
+
+.historyCompare {
+  min-height: 0;
+  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.historyCompare figure { min-width: 0; margin: 0; }
+.historyCompare img { width: 100%; max-height: 250px; display: block; object-fit: contain; background: #080808; }
+.historyCompare figcaption { padding-top: 4px; overflow: hidden; color: var(--text-dim); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+
+.historyToolbar {
+  padding: 7px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 9px;
+}
+
+.historyToolbar span { display: inline-flex; align-items: center; gap: 5px; }
+.historyToolbar button {
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-sub);
+  font-size: 9px;
+}
+
+.historyList {
+  min-height: 180px;
+  padding: 8px 14px 14px;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.historyList article {
+  min-height: 64px;
+  padding: 6px;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #181818;
+}
+
+.historyList .historySelected { border-color: #418f80; background: #172824; }
+.historyList article label { position: relative; height: 52px; display: block; }
+.historyList article label input { position: absolute; top: 3px; left: 3px; z-index: 1; accent-color: #2f9c88; }
+.historyList article img { width: 72px; height: 52px; display: block; object-fit: cover; background: #090909; }
+.historyList article > div { min-width: 0; display: grid; gap: 3px; }
+.historyList article strong { overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.historyList article span { color: var(--text-dim); font-size: 9px; }
+.historyList article > button {
+  min-height: 30px;
+  padding: 5px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #3c7066;
+  border-radius: 4px;
+  background: #17352f;
+  color: #dff9f2;
+  font-size: 10px;
+}
+
+.historyEmpty {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-align: center;
+}
+
 /* 반응형 */
 @media (max-width: 1024px) {
+  .pagePanel { width: 104px; }
   .imageList { width: 160px; }
   .layerPanel { width: 240px; }
   .toolbar { gap: 8px; padding: 8px 12px; flex-wrap: wrap; }
@@ -1049,6 +1661,12 @@
 @media (max-width: 768px) {
   /* 모바일: body를 단일 세로 스크롤로 만들어 툴바·저장 버튼이 잘리지 않게 한다. */
   .body { flex-direction: column; overflow-y: auto; }
+  .pagePanel { width: 100%; max-height: 150px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .pagePanelCollapsed { width: 100%; max-height: 44px; }
+  .pageList { grid-auto-flow: column; grid-auto-columns: 76px; overflow-x: auto; overflow-y: hidden; }
+  .pageList > button { width: 76px; }
+  .pageThumb { height: 74px; aspect-ratio: auto; }
+  .pageDownloads { grid-template-columns: repeat(2, 72px); }
   .imageList { width: 100%; max-height: 150px; border-left: none; border-top: 1px solid var(--border); }
   .imageListCollapsed { max-height: 44px; }
   .assetTabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -1060,4 +1678,22 @@
   .canvasViewport { min-height: 44vh; max-height: 52vh; }
   /* 모바일에서는 툴바 자체 스크롤을 풀고 페이지 흐름에 자연 높이로 펼친다(단일 스크롤). */
   .toolbar { max-height: none; overflow-y: visible; }
+  .header { padding: 8px; gap: 6px; flex-wrap: wrap; }
+  .editorNotice { order: 3; width: 100%; max-width: none; }
+  .headerActions { flex: 1; }
+  .headerActions .title,
+  .saveStatus { display: none; }
+  .headerSaveButton,
+  .headerDoneButton { padding-inline: 7px; }
+  .objectControls { width: 100%; flex-wrap: wrap; }
+  .textPopup,
+  .backgroundPopup { min-width: 0; width: min(330px, 86vw); }
+  .historyBackdrop { padding: 8px; }
+  .historyDialog { width: 100%; max-height: 96vh; }
+  .historyCompare { grid-template-columns: 1fr; overflow-y: auto; }
+  .historyCompare img { max-height: 180px; }
+  .historyList article { grid-template-columns: 62px minmax(0, 1fr); }
+  .historyList article label,
+  .historyList article img { width: 62px; }
+  .historyList article > button { grid-column: 2; justify-self: start; }
 }

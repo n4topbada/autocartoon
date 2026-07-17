@@ -5,6 +5,7 @@ import {
   uploadThumbnailForBlobUrl,
 } from "@/lib/blob";
 import { prisma } from "@/lib/prisma";
+import { pruneCanvasVersions } from "@/lib/canvas-versions";
 import { refOwnedBy, statObject } from "@/lib/storage";
 import type { Prisma } from "@prisma/client";
 
@@ -112,27 +113,33 @@ export async function POST(req: NextRequest) {
     }
 
     const image = await prisma.$transaction(async (tx) => {
-      const generationRequest = await tx.generationRequest.create({
-        data: {
-          // 캔버스 편집은 특정 캐릭터에서 생성된 것이 아니므로 프리셋을 붙이지 않는다.
-          // (임의의 프리셋에 귀속시키면 해당 캐릭터 갤러리/필터에 무관한 편집물이 섞인다)
-          presetId: null,
-          presetIds: [],
-          userId: session.userId,
-          mode: body.operation === "cutout" ? "cutout" : "edit",
-          prompt: body.operation === "cutout" ? "배경 제거" : "캔버스 편집",
-        },
-      });
-      const savedImage = await tx.generatedImage.create({
-        data: {
-          requestId: generationRequest.id,
-          blobUrl,
-          thumbnailUrl,
-          mimeType,
-          sizeBytes,
-        },
-      });
-      if (body.projectId) {
+      let savedImage: { id: string; mimeType: string } | null = null;
+      // 프로젝트 컷은 ProjectCut + CanvasVersion이 원본 소유자다. GeneratedImage까지
+      // 함께 만들면 매 저장이 생성 아카이브에 중복되고 오래된 Blob도 정리할 수 없다.
+      if (!body.cutId) {
+        const generationRequest = await tx.generationRequest.create({
+          data: {
+            presetId: null,
+            presetIds: [],
+            userId: session.userId,
+            mode: body.operation === "cutout" ? "cutout" : "edit",
+            prompt: body.operation === "cutout" ? "배경 제거" : "캔버스 편집",
+          },
+        });
+        savedImage = await tx.generatedImage.create({
+          data: {
+            requestId: generationRequest.id,
+            blobUrl,
+            thumbnailUrl,
+            mimeType,
+            sizeBytes,
+          },
+          select: { id: true, mimeType: true },
+        });
+      }
+      // 컷 편집 결과는 ProjectCut + CanvasVersion에서 관리한다. 저장할 때마다
+      // 프로젝트 자산을 새로 만들면 자산 패널이 중복 이미지로 빠르게 불어난다.
+      if (body.projectId && !body.cutId) {
         await tx.projectAsset.create({
           data: {
             projectId: body.projectId,
@@ -156,6 +163,20 @@ export async function POST(req: NextRequest) {
               : {}),
           },
         });
+        const version = await tx.canvasVersion.create({
+          data: {
+            cutId: body.cutId,
+            imageUrl: blobUrl,
+            thumbnailUrl,
+            source: body.operation === "cutout" ? "cutout" : "manual",
+            label: body.operation === "cutout" ? "배경 제거 저장" : "캔버스 저장",
+            ...(serializedCanvas
+              ? { canvas: serializedCanvas as Prisma.InputJsonValue }
+              : {}),
+          },
+          select: { id: true },
+        });
+        savedImage = { id: version.id, mimeType };
       }
       if (body.projectId && aspectRatio) {
         await tx.creativeProject.update({
@@ -167,8 +188,15 @@ export async function POST(req: NextRequest) {
           },
         });
       }
+      if (!savedImage) throw new Error("저장 결과를 만들지 못했습니다.");
       return savedImage;
     });
+
+    if (body.cutId) {
+      await pruneCanvasVersions(body.cutId).catch((error) => {
+        console.error("Canvas version prune error:", error);
+      });
+    }
 
     return NextResponse.json({
       id: image.id,

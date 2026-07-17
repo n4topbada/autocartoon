@@ -47,6 +47,9 @@ export async function runImageGenerationJob(
       inputImageUrl: input.inputImage,
       inputImageUrls: input.inputImages,
       referenceAssetUrls: input.referenceAssets,
+      editRegionMode: input.editRegionMode,
+      editMaskUrl: input.editMask,
+      preserveOutsideMask: input.preserveOutsideMask,
     });
     return { status: "succeeded" };
   } catch (error) {

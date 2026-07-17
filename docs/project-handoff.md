@@ -48,7 +48,10 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 - Cloud Tasks 영속 작업, 진행률·재접속·재시도·완료 알림·실패 자동 환불
 - 프로젝트·컷·표지·자산·대사·AI 기획·영상 플랜
 - PDF/DOCX/ZIP/Markdown/TXT/CSV/HTML, 이미지 OCR, 공개 URL 기획 자료 가져오기
-- 레이어 캔버스, 자동 저장, PNG/ZIP, OCR, 영역 AI 다시 그리기
+- 다중 페이지·레이어·그룹·클리핑·필터·정렬·직접 변환 고급 캔버스
+- 33개 폰트, 부분 문자열 서식, 커스텀 말풍선·도형·5종 브러시·효과음
+- OCR, AI 자동·사각형·자유 마스크 다시 그리기, 바깥 픽셀 강제 보존
+- 변경 레이어 저장 최적화, 버전 비교·복원, PNG/ZIP
 - Veo 영상과 ffmpeg.wasm 숏폼 MP4, 캐릭터별 Google TTS
 
 ### 커뮤니티·운영
@@ -77,12 +80,15 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 - Google Storage 의존성 보안 경고 제거
 - 문서를 Cloud Run·Cloud SQL·GCS·Cloud Tasks 기준으로 전면 정정
 - Cloud Tasks를 동시 10건·초당 5건·최대 5회 재시도로 제한해 장애 시 비용과 DB 부하 폭증 방지
+- 레퍼런스 고급 캔버스 전 도구 재조사와 동등성 구현
+- 레이어·텍스트·도형·말풍선 직접 크기/회전, 투명 픽셀 선택 관통과 꼬리 좌표 버그 수정
+- 컷당 캔버스 버전 60개, 복원 전 자동 백업, 변경 픽셀 레이어만 업로드
+- 컷 저장의 생성 아카이브 중복 제거와 Prisma 연결 풀 기본 5개 제한
 
 ## 5. 레퍼런스 대비 남은 항목
 
 | 항목 | 상태 | 이유/다음 단계 |
 | --- | --- | --- |
-| 캔버스 AI 자동 영역·캐릭터 교체·버전 비교 | 부분 | 코드로 확장 가능, 다음 고급 편집 우선순위 |
 | 보관함 전체 메타 통합 검색 | 부분 | 태그·즐겨찾기·프로젝트 자산 인덱스 통합 |
 | 대형 영상 서버 렌더 | 부분 | 현재 브라우저 렌더는 기능 완성, 메모리 한계 보완 필요 |
 | ko/en/ja | 미구현 | 언어·번역 정책 결정 필요 |
@@ -110,7 +116,7 @@ npm run lint
 npx tsc --noEmit
 npx prisma validate
 $env:BUILD_TARGET='cloudrun'; npm run build
-gcloud run deploy wonybananabot --source . --project=wonybananabot --region=asia-northeast3 --update-env-vars=APP_ORIGIN=https://wonybananabot-272254743773.asia-northeast3.run.app --quiet
+gcloud run deploy wonybananabot --source . --project=wonybananabot --region=asia-northeast3 --update-env-vars=APP_ORIGIN=https://wonybananabot-272254743773.asia-northeast3.run.app,PRISMA_CONNECTION_LIMIT=5,PRISMA_POOL_TIMEOUT=30 --quiet
 gcloud tasks queues update wony-jobs --project=wonybananabot --location=asia-northeast3 --max-concurrent-dispatches=10 --max-dispatches-per-second=5 --max-attempts=5 --min-backoff=10s --max-backoff=300s --max-doublings=5
 ```
 

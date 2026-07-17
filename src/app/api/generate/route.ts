@@ -61,6 +61,9 @@ interface ValidatedGenerationRequest {
   inputImages?: InputImage[];
   sourceArtifactId?: string;
   referenceAssetIds?: string[];
+  editRegionMode?: "all" | "auto" | "manual";
+  editMask?: InputImage;
+  preserveOutsideMask?: boolean;
 }
 
 class RequestValidationError extends Error {}
@@ -267,6 +270,33 @@ function parseGenerationRequest(value: unknown): ValidatedGenerationRequest {
     throw new RequestValidationError("제스처 생성에는 캐릭터 프리셋이나 참고 이미지가 필요합니다.");
   }
 
+  const requestedEditRegionMode = value.editRegionMode;
+  const editRegionMode = requestedEditRegionMode === undefined || requestedEditRegionMode === "all"
+    ? "all"
+    : requestedEditRegionMode === "auto"
+      ? "auto"
+      : requestedEditRegionMode === "manual"
+        ? "manual"
+        : (() => {
+            throw new RequestValidationError("editRegionMode는 all, auto, manual 중 하나여야 합니다.");
+          })();
+  const editMask = value.editMask === undefined ? undefined : parseInputImage(value.editMask, "editMask");
+  if (editMask && editMask.mimeType !== "image/png") {
+    throw new RequestValidationError("편집 마스크는 PNG 형식이어야 합니다.");
+  }
+  if ((editRegionMode !== "all" || editMask) && value.mode !== "edit") {
+    throw new RequestValidationError("영역 편집은 edit 모드에서만 사용할 수 있습니다.");
+  }
+  if (editRegionMode === "manual" && !editMask) {
+    throw new RequestValidationError("수동 영역 편집에는 editMask가 필요합니다.");
+  }
+  if (editRegionMode === "auto" && editMask) {
+    throw new RequestValidationError("자동 영역 편집에는 수동 마스크를 함께 보낼 수 없습니다.");
+  }
+  if (editRegionMode !== "all" && !inputImage) {
+    throw new RequestValidationError("영역 편집에는 원본 이미지가 필요합니다.");
+  }
+
   return {
     presetIds,
     mode: value.mode as GenerationMode,
@@ -284,6 +314,9 @@ function parseGenerationRequest(value: unknown): ValidatedGenerationRequest {
     inputImages,
     sourceArtifactId,
     referenceAssetIds,
+    ...(editRegionMode !== "all" ? { editRegionMode } : {}),
+    ...(editMask ? { editMask } : {}),
+    ...(editRegionMode !== "all" ? { preserveOutsideMask: value.preserveOutsideMask !== false } : {}),
   };
 }
 
@@ -446,6 +479,9 @@ export async function POST(req: NextRequest) {
     const storedInputImages = input.inputImages
       ? await Promise.all(input.inputImages.map(storeInput))
       : undefined;
+    const storedEditMask = input.editMask
+      ? await storeInput(input.editMask, MAX_INPUT_IMAGES + 1)
+      : undefined;
     const referenceAssets = input.referenceAssetIds?.length
       ? await prisma.projectAsset.findMany({
           where: {
@@ -470,6 +506,9 @@ export async function POST(req: NextRequest) {
       ...(input.backgroundImageId ? { backgroundImageId: input.backgroundImageId } : {}),
       ...(storedInputImage ? { inputImage: storedInputImage } : {}),
       ...(storedInputImages ? { inputImages: storedInputImages } : {}),
+      ...(input.editRegionMode && input.editRegionMode !== "all" ? { editRegionMode: input.editRegionMode } : {}),
+      ...(storedEditMask ? { editMask: storedEditMask } : {}),
+      ...(input.preserveOutsideMask ? { preserveOutsideMask: true } : {}),
       ...(input.referenceAssetIds?.length
         ? {
             referenceAssets: input.referenceAssetIds.map((id, index) => {

@@ -339,12 +339,28 @@ model ProjectCut {
   project  CreativeProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   jobs     GenerationJob[]
   coverFor CreativeProject? @relation("ProjectCover")
+  versions CanvasVersion[]
 
   @@unique([projectId, order])
   @@index([projectId, updatedAt])
   @@index([imageUrl])
   @@index([thumbnailUrl])
   @@index([videoUrl])
+}
+
+model CanvasVersion {
+  id           String   @id @default(cuid())
+  cutId        String
+  imageUrl     String
+  thumbnailUrl String?
+  canvas       Json?
+  source       String   @default("manual")
+  label        String?
+  createdAt    DateTime @default(now())
+
+  cut ProjectCut @relation(fields: [cutId], references: [id], onDelete: Cascade)
+
+  @@index([cutId, createdAt])
 }
 
 model ProjectAsset {

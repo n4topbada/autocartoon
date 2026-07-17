@@ -27,6 +27,9 @@ export interface StoredImageJobInput {
   inputImage?: StoredImageReference;
   inputImages?: StoredImageReference[];
   referenceAssets?: StoredLabeledImageReference[];
+  editRegionMode?: "auto" | "manual";
+  editMask?: StoredImageReference;
+  preserveOutsideMask?: boolean;
   isAdmin: boolean;
 }
 

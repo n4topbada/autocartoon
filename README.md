@@ -5,6 +5,7 @@
 - 운영: `https://wonybananabot-272254743773.asia-northeast3.run.app`
 - GitHub: `https://github.com/n4topbada/autocartoon`
 - 레퍼런스 기능 비교: [docs/toonagent-reverse-engineering.md](./docs/toonagent-reverse-engineering.md)
+- 고급 캔버스 상세 비교: [docs/advanced-canvas-parity.md](./docs/advanced-canvas-parity.md)
 - 운영 인수인계: [docs/project-handoff.md](./docs/project-handoff.md)
 
 ## 주요 기능
@@ -16,7 +17,8 @@
 - 통합 보관함, 원본·WebP 썸네일, 타입 필터, 페이지 이동, 저장 용량
 - 프로젝트·컷·표지·자산·대사·AI 기획·영상 플랜
 - PDF, DOCX, ZIP, Markdown, TXT, CSV, HTML, 이미지 OCR, 공개 URL 기획 자료 가져오기
-- 레이어·그룹·가이드·정렬·말풍선·도형·그리기·OCR·영역 AI 편집 캔버스
+- 다중 페이지, 레이어·그룹·클리핑·가이드·정렬·필터·말풍선·도형·5종 그리기·OCR 캔버스
+- AI 자동·사각형·자유 마스크 편집, 바깥 픽셀 강제 보존, 버전 비교·복원
 - 현재 컷 PNG, 전체 컷 ZIP, 자동 저장
 - Veo 3.1 Fast와 캐릭터별 Google TTS, ffmpeg.wasm 기반 세로 MP4
 - 공개 닉네임, 최신/인기 게시판, 이미지·링크, 댓글, 좋아요, 신고
@@ -83,6 +85,8 @@ gcloud auth application-default login
 
 ```env
 DATABASE_URL=
+PRISMA_CONNECTION_LIMIT=5
+PRISMA_POOL_TIMEOUT=30
 SESSION_SECRET=
 APP_ORIGIN=http://localhost:3000
 RESEND_API_KEY=
@@ -130,7 +134,7 @@ https://wonybananabot-272254743773.asia-northeast3.run.app/api/auth/kakao/callba
 npx prisma migrate deploy
 $env:BUILD_TARGET='cloudrun'
 npm run build
-gcloud run deploy wonybananabot --source . --project=wonybananabot --region=asia-northeast3 --update-env-vars=APP_ORIGIN=https://wonybananabot-272254743773.asia-northeast3.run.app --quiet
+gcloud run deploy wonybananabot --source . --project=wonybananabot --region=asia-northeast3 --update-env-vars=APP_ORIGIN=https://wonybananabot-272254743773.asia-northeast3.run.app,PRISMA_CONNECTION_LIMIT=5,PRISMA_POOL_TIMEOUT=30 --quiet
 ```
 
 운영 리소스와 배포 후 점검은 [docs/project-handoff.md](./docs/project-handoff.md)를 따릅니다.
@@ -146,4 +150,4 @@ npm run build
 npm audit --omit=dev
 ```
 
-테스트는 프롬프트 제약, 캐릭터 참조, 작업 응답, 프로젝트 정규화, 크레딧 상품·비용, 기획 자료 가져오기와 카카오 계정 연결 안전 조건을 확인합니다.
+테스트는 프롬프트 제약, 캐릭터 참조, 작업 응답, 마스크 밖 픽셀 보존, 회전 좌표·선택, 프로젝트 정규화, 크레딧 상품·비용, 기획 자료 가져오기와 카카오 계정 연결 안전 조건을 확인합니다.

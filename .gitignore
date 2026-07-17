@@ -22,6 +22,7 @@ assets/kang-geonma/*.gif
 /.swc
 .codex-dev.*.log
 src/app/.well-known/workflow/
+public/uploads/
 
 # Local handoff credentials. Never commit plaintext access secrets.
 docs/*.private.md

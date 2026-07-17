@@ -50,6 +50,7 @@ import {
 import styles from "./StudioWorkspace.module.css";
 
 const CanvasEditor = dynamic(() => import("./CanvasEditor"), { ssr: false });
+const BLANK_CANVAS_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
 type StudioMode = "scene" | "gesture" | "video";
 type JobStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
@@ -760,17 +761,37 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
     }
   };
 
-  const setCoverCut = async () => {
-    if (!project || !selectedCut) return;
+  const setCoverCut = async (cutId = selectedCut?.id) => {
+    if (!project || !cutId) return;
     try {
       await readJson(await fetch(`/api/studio/projects/${project.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ coverCutId: selectedCut.id }),
+        body: JSON.stringify({ coverCutId: cutId }),
       }));
       await Promise.all([loadProject(project.id), loadProjects()]);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "표지 지정 실패");
+    }
+  };
+
+  const renameCut = async (cutId: string, title: string) => {
+    if (!project) return;
+    try {
+      const data = await readJson<{ cut: ProjectCut }>(await fetch(`/api/studio/cuts/${cutId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      }));
+      setProject((current) => current
+        ? { ...current, cuts: current.cuts.map((cut) => cut.id === data.cut.id ? data.cut : cut) }
+        : current
+      );
+      if (cutId === selectedCut?.id) {
+        setDraft((current) => ({ ...current, title: data.cut.title }));
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "페이지 이름 변경 실패");
     }
   };
 
@@ -1876,9 +1897,10 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
         </aside>
       </div>
 
-      {editingCut && project && selectedCut?.imageUrl && (
+      {editingCut && project && selectedCut && (
         <CanvasEditor
-          initialImage={{ id: `cut:${selectedCut.id}`, dataUrl: selectedCut.imageUrl }}
+          key={selectedCut.id}
+          initialImage={{ id: `cut:${selectedCut.id}`, dataUrl: selectedCut.imageUrl || BLANK_CANVAS_DATA_URL }}
           initialAspect={project.aspectRatio as "1:1" | "4:5" | "3:4" | "8:11" | "9:16" | "16:9"}
           galleryImages={project.assets
             .filter((asset) => asset.kind === "image")
@@ -1886,9 +1908,26 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
           projectId={project.id}
           cutId={selectedCut.id}
           initialCanvas={selectedCut.canvas}
+          pages={project.cuts.map((cut) => ({
+            id: cut.id,
+            order: cut.order,
+            title: cut.title,
+            imageUrl: cut.imageUrl,
+            thumbnailUrl: cut.thumbnailUrl,
+          }))}
+          currentPageId={selectedCut.id}
+          onSelectPage={selectCut}
+          onAddPage={addCut}
+          onDuplicatePage={duplicateCut}
+          onDeletePage={deleteCut}
+          onMovePage={moveCut}
+          coverPageId={project.coverCutId}
+          onRenamePage={renameCut}
+          onSetCoverPage={setCoverCut}
+          onDownloadCurrentPage={downloadCurrentCut}
+          onDownloadAllPages={downloadAllCuts}
           onClose={() => setEditingCut(false)}
           onSave={() => {
-            setEditingCut(false);
             void loadProject(project.id);
           }}
         />

@@ -1,4 +1,6 @@
 import { prisma } from "./prisma";
+import { Prisma } from "@prisma/client";
+import sharp from "sharp";
 import { generateContent } from "./gemini";
 import {
   deleteBlob,
@@ -15,6 +17,8 @@ import {
   buildEditWithBgImagePrompt,
 } from "./prompts";
 import { updateJobProgress } from "./generation-jobs";
+import { generatePlatformTextContent } from "./platform-ai";
+import { pruneCanvasVersions } from "./canvas-versions";
 
 export type GenerationMode = "text" | "sketch" | "edit" | "transform";
 
@@ -69,6 +73,135 @@ export interface GenerateInput {
   inputImageUrls?: { url: string; mimeType: string }[];
   /** 프로젝트에서 선택한 구도·분위기 참고 자산 */
   referenceAssetUrls?: { url: string; mimeType: string; label: string }[];
+  editRegionMode?: "auto" | "manual";
+  editMask?: { base64: string; mimeType: string };
+  editMaskUrl?: { url: string; mimeType: string };
+  preserveOutsideMask?: boolean;
+}
+
+interface NormalizedEditRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const EDIT_REGION_SCHEMA = {
+  type: "object",
+  properties: {
+    regions: {
+      type: "array",
+      minItems: 1,
+      maxItems: 4,
+      items: {
+        type: "object",
+        properties: {
+          x: { type: "number", minimum: 0, maximum: 1 },
+          y: { type: "number", minimum: 0, maximum: 1 },
+          width: { type: "number", minimum: 0.01, maximum: 1 },
+          height: { type: "number", minimum: 0.01, maximum: 1 },
+        },
+        required: ["x", "y", "width", "height"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["regions"],
+  additionalProperties: false,
+} as const;
+
+function clampUnit(value: unknown) {
+  return Math.max(0, Math.min(1, typeof value === "number" && Number.isFinite(value) ? value : 0));
+}
+
+async function createAutomaticEditMask(
+  source: { base64: string; mimeType: string },
+  prompt: string
+) {
+  const sourceBuffer = Buffer.from(source.base64, "base64");
+  const metadata = await sharp(sourceBuffer).metadata();
+  const width = metadata.width;
+  const height = metadata.height;
+  if (!width || !height) throw new Error("원본 이미지 크기를 읽지 못했습니다.");
+
+  const response = await generatePlatformTextContent({
+    contents: [{
+      role: "user",
+      parts: [
+        {
+          text: [
+            "이미지 수정 요청을 수행할 때 실제로 바뀌어야 할 최소 영역을 찾으세요.",
+            "각 영역은 전체 이미지 기준 0~1 정규화 좌표의 x, y, width, height로 반환합니다.",
+            "대상과 자연스럽게 이어질 여백을 조금 포함하되 무관한 인물과 배경은 제외하세요.",
+            `수정 요청: ${prompt}`,
+          ].join("\n"),
+        },
+        { inlineData: { data: source.base64, mimeType: source.mimeType } },
+      ],
+    }],
+    config: {
+      responseMimeType: "application/json",
+      responseJsonSchema: EDIT_REGION_SCHEMA,
+      temperature: 0.1,
+      maxOutputTokens: 1_024,
+      abortSignal: AbortSignal.timeout(50_000),
+    },
+  });
+  const parsed = JSON.parse(response.text || "{}") as { regions?: NormalizedEditRegion[] };
+  if (!Array.isArray(parsed.regions) || parsed.regions.length === 0) {
+    throw new Error("AI가 수정 영역을 찾지 못했습니다. 수동 영역 지정을 사용해주세요.");
+  }
+
+  const pixels = Buffer.alloc(width * height * 4);
+  for (const region of parsed.regions.slice(0, 4)) {
+    const padding = 0.025;
+    const left = Math.max(0, Math.floor((clampUnit(region.x) - padding) * width));
+    const top = Math.max(0, Math.floor((clampUnit(region.y) - padding) * height));
+    const right = Math.min(width, Math.ceil((clampUnit(region.x) + clampUnit(region.width) + padding) * width));
+    const bottom = Math.min(height, Math.ceil((clampUnit(region.y) + clampUnit(region.height) + padding) * height));
+    for (let y = top; y < bottom; y += 1) {
+      for (let x = left; x < right; x += 1) {
+        const index = (y * width + x) * 4;
+        pixels[index] = 255;
+        pixels[index + 1] = 255;
+        pixels[index + 2] = 255;
+        pixels[index + 3] = 255;
+      }
+    }
+  }
+  const mask = await sharp(pixels, { raw: { width, height, channels: 4 } }).png().toBuffer();
+  return { base64: mask.toString("base64"), mimeType: "image/png" };
+}
+
+export async function compositeGeneratedInsideMask(
+  source: { base64: string; mimeType: string },
+  generated: { base64: string; mimeType: string },
+  mask: { base64: string; mimeType: string }
+) {
+  const sourceBuffer = Buffer.from(source.base64, "base64");
+  const metadata = await sharp(sourceBuffer).metadata();
+  const width = metadata.width;
+  const height = metadata.height;
+  if (!width || !height) throw new Error("원본 이미지 크기를 읽지 못했습니다.");
+  const maskBuffer = await sharp(Buffer.from(mask.base64, "base64"))
+    .resize(width, height, { fit: "fill" })
+    .png()
+    .toBuffer();
+  const generatedBuffer = await sharp(Buffer.from(generated.base64, "base64"))
+    .resize(width, height, { fit: "fill" })
+    .ensureAlpha()
+    .png()
+    .toBuffer();
+  const maskedGenerated = await sharp(generatedBuffer)
+    .composite([{ input: maskBuffer, blend: "dest-in" }])
+    .png()
+    .toBuffer();
+  const composited = await sharp(sourceBuffer)
+    .ensureAlpha()
+    .composite([{ input: maskedGenerated, blend: "over" }])
+    .png()
+    .toBuffer();
+  return { base64: composited.toString("base64"), mimeType: "image/png" };
 }
 
 /**
@@ -174,6 +307,18 @@ export async function generate(input: GenerateInput) {
     ? (await loadStoredImages([input.inputImageUrl]))[0]
     : undefined;
   const inputImage = input.inputImage ?? storedInputImage;
+  const storedEditMask = input.editMaskUrl
+    ? (await loadStoredImages([input.editMaskUrl]))[0]
+    : undefined;
+  let editMask = input.editMask ?? storedEditMask;
+  if (input.editRegionMode === "auto") {
+    if (!inputImage) throw new Error("자동 영역 편집에는 원본 이미지가 필요합니다.");
+    if (input.jobId) await updateJobProgress(input.jobId, "detecting_edit_region", 24).catch(() => undefined);
+    editMask = await createAutomaticEditMask(inputImage, input.prompt);
+  }
+  if (input.preserveOutsideMask && (!inputImage || !editMask)) {
+    throw new Error("영역 보존 편집에 필요한 원본 또는 마스크가 없습니다.");
+  }
 
   // sketch/edit 모드: 사용자 입력 이미지 추가 (배경 뒤에)
   if (inputImage && (input.mode === "sketch" || input.mode === "edit")) {
@@ -191,6 +336,13 @@ export async function generate(input: GenerateInput) {
     : [];
   const labeledImages: { label: string; base64: string; mimeType: string }[] =
     [...characterLabeledImages];
+  if (editMask) {
+    labeledImages.push({
+      label: "=== EDIT MASK: 흰색 또는 불투명 영역만 수정하고 나머지는 보존 ===",
+      base64: editMask.base64,
+      mimeType: editMask.mimeType,
+    });
+  }
   if (input.referenceAssetUrls?.length) {
     const loadedReferenceAssets = await Promise.all(
       input.referenceAssetUrls.map(async (asset) => {
@@ -262,6 +414,11 @@ export async function generate(input: GenerateInput) {
         `"=== 장면 참고 자산 ... ===" 라벨 이미지는 구도·분위기 참고용이며, 그대로 편집하거나 복제하는 대상이 아닙니다.`
       );
     }
+    if (editMask) {
+      guideLines.push(
+        `"=== EDIT MASK ... ===" 라벨 이미지는 편집 허용 범위입니다. 흰색 또는 불투명 영역 안쪽만 자연스럽게 다시 그리고, 그 밖의 구성은 바꾸지 마세요.`
+      );
+    }
     const unlabeledRoles: string[] = [];
     if (useBgImage) unlabeledRoles.push("배경 이미지");
     if (inputImage && (input.mode === "sketch" || input.mode === "edit")) {
@@ -290,13 +447,20 @@ export async function generate(input: GenerateInput) {
   const fulfilledResults = generationResults.flatMap((result) =>
     result.status === "fulfilled" ? [result.value] : []
   );
-  const generatedImages = fulfilledResults.flatMap((result) => result.images).slice(0, requestedCount);
+  let generatedImages = fulfilledResults.flatMap((result) => result.images).slice(0, requestedCount);
   const resultText = fulfilledResults.map((result) => result.text).filter(Boolean).join("\n") || undefined;
 
   if (generatedImages.length === 0) {
     const failure = generationResults.find((result) => result.status === "rejected");
     if (failure?.status === "rejected") throw failure.reason;
     throw new Error(resultText || "AI가 이미지를 반환하지 않았습니다.");
+  }
+
+  if (input.preserveOutsideMask && inputImage && editMask) {
+    if (input.jobId) await updateJobProgress(input.jobId, "compositing_edit_region", 62).catch(() => undefined);
+    generatedImages = await Promise.all(
+      generatedImages.map((image) => compositeGeneratedInsideMask(inputImage, image, editMask!))
+    );
   }
 
   // 6. Blob 업로드를 마친 뒤 관련 DB 레코드는 한 트랜잭션으로 저장한다.
@@ -421,15 +585,42 @@ export async function generate(input: GenerateInput) {
         });
       }
 
-      // 컷이 도중에 삭제됐을 수 있으므로 updateMany로 0행을 허용한다(P2025 방지).
+      // AI 결과가 새 원본이 되므로 이전 캔버스 JSON을 그대로 두면 편집기에서
+      // 오래된 레이어가 다시 열리는 문제가 생긴다. 현재 상태를 버전으로 백업한 뒤
+      // 새 결과와 함께 캔버스를 비우고 AI 버전을 기록한다.
       if (job.cutId) {
-        await tx.projectCut.updateMany({
-          where: { id: job.cutId },
-          data: {
-            imageUrl: uploadedImages[0].blobUrl,
-            thumbnailUrl: uploadedImages[0].thumbnailUrl,
-          },
-        });
+        const currentCut = await tx.projectCut.findUnique({ where: { id: job.cutId } });
+        if (currentCut) {
+          if (currentCut.imageUrl) {
+            await tx.canvasVersion.create({
+              data: {
+                cutId: currentCut.id,
+                imageUrl: currentCut.imageUrl,
+                thumbnailUrl: currentCut.thumbnailUrl,
+                canvas: currentCut.canvas ?? Prisma.JsonNull,
+                source: "ai-backup",
+                label: "AI 수정 전 자동 백업",
+              },
+            });
+          }
+          await tx.projectCut.update({
+            where: { id: currentCut.id },
+            data: {
+              imageUrl: uploadedImages[0].blobUrl,
+              thumbnailUrl: uploadedImages[0].thumbnailUrl,
+              canvas: Prisma.JsonNull,
+            },
+          });
+          await tx.canvasVersion.create({
+            data: {
+              cutId: currentCut.id,
+              imageUrl: uploadedImages[0].blobUrl,
+              thumbnailUrl: uploadedImages[0].thumbnailUrl,
+              source: input.preserveOutsideMask ? "ai-region" : "ai",
+              label: input.preserveOutsideMask ? "AI 영역 다시 그리기" : "AI 다시 그리기",
+            },
+          });
+        }
       }
 
       // 요청한 장수보다 적게 생성됐으면(다중 count 배경) 미생성분을 부분 환불한다(멱등).
@@ -493,6 +684,12 @@ export async function generate(input: GenerateInput) {
       ])
     );
     throw error;
+  }
+
+  if (job?.cutId) {
+    await pruneCanvasVersions(job.cutId).catch((error) => {
+      console.error("Canvas version prune error:", error);
+    });
   }
 
   return {
