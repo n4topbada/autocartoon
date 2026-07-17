@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import sharp from "sharp";
+import { getCanvasBlobUrls } from "../src/lib/canvas-storage";
 import { compositeGeneratedInsideMask } from "../src/lib/generation-service";
 import {
   bubblePointToCanvas,
@@ -55,4 +56,19 @@ test("rotated canvas objects preserve coordinate round trips and hit testing", (
   assert.ok(Math.abs(restored.y - 85) < 0.0001);
   assert.equal(hitTestBubble(100, 140, bubble), "body");
   assert.equal(hitTestBubble(140, 100, bubble), null);
+});
+
+test("canvas storage refs include only non-empty layer pixel URLs", () => {
+  assert.deepEqual(getCanvasBlobUrls({
+    version: 2,
+    layers: [
+      { pixelUrl: "/api/media/layer-a" },
+      { pixelUrl: "" },
+      { pixelUrl: null },
+      { name: "text-only" },
+      { pixelUrl: "gs://bucket/layer-b.png" },
+    ],
+  }), ["/api/media/layer-a", "gs://bucket/layer-b.png"]);
+  assert.deepEqual(getCanvasBlobUrls(null), []);
+  assert.deepEqual(getCanvasBlobUrls({ layers: "invalid" }), []);
 });

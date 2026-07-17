@@ -7,6 +7,7 @@
 - 레퍼런스 기능 비교: [docs/toonagent-reverse-engineering.md](./docs/toonagent-reverse-engineering.md)
 - 고급 캔버스 상세 비교: [docs/advanced-canvas-parity.md](./docs/advanced-canvas-parity.md)
 - 운영 인수인계: [docs/project-handoff.md](./docs/project-handoff.md)
+- GCS 브라우저 직접 업로드 CORS: [scripts/gcs-cors.json](./scripts/gcs-cors.json)
 
 ## 주요 기능
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuth } from "@/lib/auth";
 import { deleteBlobIfUnreferenced } from "@/lib/blob-references";
+import { getCanvasBlobUrls } from "@/lib/canvas-storage";
 import { prisma } from "@/lib/prisma";
 
 const ASPECT_SIZES: Record<string, { width: number; height: number }> = {
@@ -109,7 +110,17 @@ export async function DELETE(
       where: { id, userId: session.userId },
       select: {
         id: true,
-        cuts: { select: { imageUrl: true, thumbnailUrl: true, videoUrl: true } },
+        cuts: {
+          select: {
+            imageUrl: true,
+            thumbnailUrl: true,
+            videoUrl: true,
+            canvas: true,
+            versions: {
+              select: { imageUrl: true, thumbnailUrl: true, canvas: true },
+            },
+          },
+        },
         assets: { select: { blobUrl: true, thumbnailUrl: true } },
       },
     });
@@ -117,6 +128,12 @@ export async function DELETE(
 
     const blobUrls = Array.from(new Set([
       ...project.cuts.flatMap((cut) => [cut.imageUrl, cut.thumbnailUrl, cut.videoUrl]),
+      ...project.cuts.flatMap((cut) => getCanvasBlobUrls(cut.canvas)),
+      ...project.cuts.flatMap((cut) => cut.versions.flatMap((version) => [
+        version.imageUrl,
+        version.thumbnailUrl,
+        ...getCanvasBlobUrls(version.canvas),
+      ])),
       ...project.assets.flatMap((asset) => [asset.blobUrl, asset.thumbnailUrl]),
     ].filter((url): url is string => Boolean(url))));
 

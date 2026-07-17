@@ -25,7 +25,7 @@ GitHub: `https://github.com/n4topbada/autocartoon`
 | Cloud Run | `wonybananabot`, `asia-northeast3` |
 | Cloud SQL | `wony-postgres`, PostgreSQL 16 |
 | Cloud Tasks | `wony-jobs`, `asia-northeast3`; 동시 10, 초당 5, 최대 5회 재시도 |
-| GCS | `wonybananabot-media`, private |
+| GCS | `wonybananabot-media`, private. 브라우저 직접 업로드 CORS는 `scripts/gcs-cors.json` 기준 |
 | Runtime service account | `wony-run@wonybananabot.iam.gserviceaccount.com` |
 | DB secret | Secret Manager `database-url` 참조 |
 | AI | Vertex Gemini, Veo, Google Cloud TTS |
