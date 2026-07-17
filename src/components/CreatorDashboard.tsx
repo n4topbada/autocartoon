@@ -6,17 +6,20 @@ import {
   LuArchive,
   LuArrowRight,
   LuCheck,
+  LuChevronDown,
   LuCircle,
   LuClapperboard,
   LuCoins,
   LuFilm,
   LuImage,
   LuLoaderCircle,
+  LuMegaphone,
   LuPaintbrush,
   LuPlus,
   LuRefreshCw,
   LuUsers,
 } from "react-icons/lu";
+import { ANNOUNCEMENT_CATEGORY_LABELS, type AnnouncementCategory } from "@/lib/announcements";
 import styles from "./CreatorDashboard.module.css";
 
 type DashboardTab = "character" | "characterCreator" | "background";
@@ -54,6 +57,16 @@ interface DashboardData {
   }>;
 }
 
+interface DashboardAnnouncement {
+  id: string;
+  title: string;
+  content: string;
+  category: AnnouncementCategory;
+  pinned: boolean;
+  publishedAt: string | null;
+  isRead: boolean;
+}
+
 const KIND_LABELS: Record<string, string> = {
   image: "장면",
   character: "캐릭터",
@@ -84,6 +97,8 @@ export default function CreatorDashboard({ onNavigate }: { onNavigate: (tab: Das
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [announcements, setAnnouncements] = useState<DashboardAnnouncement[]>([]);
+  const [expandedAnnouncementId, setExpandedAnnouncementId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,6 +108,13 @@ export default function CreatorDashboard({ onNavigate }: { onNavigate: (tab: Das
       if (!response.ok) throw new Error(body.error || "제작 현황을 불러오지 못했습니다.");
       setData(body);
       setError(null);
+      try {
+        const announcementResponse = await fetch("/api/announcements?limit=3", { cache: "no-store" });
+        const announcementBody = await announcementResponse.json() as { announcements?: DashboardAnnouncement[] };
+        if (announcementResponse.ok) setAnnouncements(announcementBody.announcements || []);
+      } catch {
+        // 공지 조회 실패가 제작 현황을 막아서는 안 된다.
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "제작 현황을 불러오지 못했습니다.");
     } finally {
@@ -129,6 +151,19 @@ export default function CreatorDashboard({ onNavigate }: { onNavigate: (tab: Das
     { label: "프로젝트 편집", done: data.onboarding.project, href: "/studio" },
   ];
 
+  const toggleAnnouncement = (announcement: DashboardAnnouncement) => {
+    const opening = expandedAnnouncementId !== announcement.id;
+    setExpandedAnnouncementId(opening ? announcement.id : null);
+    if (!opening || announcement.isRead) return;
+    setAnnouncements((current) => current.map((item) => item.id === announcement.id ? { ...item, isRead: true } : item));
+    window.dispatchEvent(new CustomEvent("wony:announcement-read", { detail: { id: announcement.id } }));
+    void fetch("/api/announcements", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [announcement.id] }),
+    });
+  };
+
   return (
     <div className={styles.dashboard}>
       <header className={styles.topline}>
@@ -142,6 +177,28 @@ export default function CreatorDashboard({ onNavigate }: { onNavigate: (tab: Das
       </header>
 
       {error && <div className={styles.warning} role="status">{error}</div>}
+
+      {announcements.length > 0 && (
+        <section className={styles.notices} aria-label="운영 공지">
+          <div className={styles.noticeHeading}><LuMegaphone /><strong>공지</strong><span>새 소식과 운영 안내</span></div>
+          <div className={styles.noticeList}>
+            {announcements.map((announcement) => {
+              const expanded = expandedAnnouncementId === announcement.id;
+              return (
+                <article className={`${styles.notice} ${announcement.isRead ? "" : styles.noticeUnread}`} key={announcement.id}>
+                  <button type="button" onClick={() => toggleAnnouncement(announcement)} aria-expanded={expanded}>
+                    <span>{ANNOUNCEMENT_CATEGORY_LABELS[announcement.category] || "공지"}</span>
+                    <strong>{announcement.title}</strong>
+                    <time>{announcement.publishedAt ? relativeTime(announcement.publishedAt) : ""}</time>
+                    <LuChevronDown className={expanded ? styles.noticeChevronOpen : ""} />
+                  </button>
+                  {expanded && <p>{announcement.content}</p>}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <section className={styles.stats} aria-label="제작 통계">
         {stats.map((item) => {

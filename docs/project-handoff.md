@@ -1,6 +1,6 @@
 # WONY AutoCartoon 프로젝트 인수인계
 
-작성 기준: 2026-07-17 KST
+작성 기준: 2026-07-18 KST
 
 브랜치: `main`
 
@@ -22,7 +22,7 @@ GitHub: `https://github.com/n4topbada/autocartoon`
 | 항목 | 현재 값 |
 | --- | --- |
 | GCP project | `wonybananabot` |
-| Cloud Run | `wonybananabot`, `asia-northeast3` |
+| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-18 검증 리비전 `wonybananabot-00022-mjn` |
 | Cloud SQL | `wony-postgres`, PostgreSQL 16 |
 | Cloud Tasks | `wony-jobs`, `asia-northeast3`; 동시 10, 초당 5, 최대 5회 재시도 |
 | GCS | `wonybananabot-media`, private. 브라우저 직접 업로드 CORS는 `scripts/gcs-cors.json` 기준 |
@@ -36,8 +36,8 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 
 ### 인증·개인화
 
-- 이메일 가입·인증, 로그인·로그아웃, 12자 영문/숫자 임시 비밀번호, 강제 변경
-- 카카오 OAuth와 명시적 기존 계정 연결
+- 이메일 인증·복구, 로그인·로그아웃, 12자 영문/숫자 임시 비밀번호, 강제 변경
+- 카카오·Google OAuth와 카카오의 명시적 기존 계정 연결
 - HttpOnly 세션, DB 기기 세션 최대 2대, 목록·철회·계정 삭제
 - 사용자별 캐릭터·생성물·배경·프로젝트·보관함·게시글·크레딧 소유권
 
@@ -45,7 +45,7 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 
 - 구조화 캐릭터 생성, 방향별 이미지, 대표·기본 캐릭터, 보이스 최대 3개
 - 일반 장면 최대 4명, 1인·2인 제스처, 저밀도 배경 3단계
-- Cloud Tasks 영속 작업, 진행률·재접속·재시도·완료 알림·실패 자동 환불
+- Cloud Tasks 영속 작업, 진행률·재접속·재시도·작업/공지 통합 알림·실패 자동 환불
 - 프로젝트·컷·표지·자산·대사·AI 기획·영상 플랜
 - PDF/DOCX/ZIP/Markdown/TXT/CSV/HTML, 이미지 OCR, 공개 URL 기획 자료 가져오기
 - 다중 페이지·레이어·그룹·클리핑·필터·정렬·직접 변환 고급 캔버스
@@ -58,7 +58,8 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 
 - 공개 닉네임, 최신/인기 게시판, 이미지·링크, 댓글, 글/댓글 좋아요, 신고, 관리자 고정
 - 통합 보관함, 썸네일, 타입 필터, 페이지 이동, 저장 용량, 삭제
-- 관리자 사용자·크레딧·신고·챗봇 지식
+- 홈 최신 공지와 사용자별 읽음 상태
+- 관리자 공지 작성·수정·게시·고정·만료·삭제·열람 수, 사용자·크레딧·신고·챗봇 지식
 - 관리자 허용 계정용 구조화 캐릭터 디렉터
 
 ### 크레딧·결제
@@ -84,13 +85,14 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 - 레이어·텍스트·도형·말풍선 직접 크기/회전, 투명 픽셀 선택 관통과 꼬리 좌표 버그 수정
 - 컷당 캔버스 버전 60개, 복원 전 자동 백업, 변경 픽셀 레이어만 업로드
 - 컷 저장의 생성 아카이브 중복 제거와 Prisma 연결 풀 기본 5개 제한
+- 레퍼런스 전체 제작 흐름 2026-07-18 재감사와 운영 공지·읽음·통합 알림 구현
 
-## 5. 레퍼런스 대비 남은 항목
+운영 반영 상태: 마이그레이션 실행 `wony-prisma-migrate-99klj` 성공, 리비전 `wonybananabot-00022-mjn`에 트래픽 100% 연결, 해당 리비전 오류 로그 0건이다. 임시 공지로 홈 노출, 통합 알림, 펼침, 읽음 영속화를 확인한 뒤 공지 행과 일회성 검증 Job을 삭제했다.
+
+## 5. 레퍼런스 대비 기능상 남은 항목
 
 | 항목 | 상태 | 이유/다음 단계 |
 | --- | --- | --- |
-| 보관함 전체 메타 통합 검색 | 부분 | 태그·즐겨찾기·프로젝트 자산 인덱스 통합 |
-| 대형 영상 서버 렌더 | 부분 | 현재 브라우저 렌더는 기능 완성, 메모리 한계 보완 필요 |
 | ko/en/ja | 미구현 | 언어·번역 정책 결정 필요 |
 | 휴대폰 본인확인 | 외부 결정 | 공급자·비용·개인정보 정책 필요 |
 | 약관·개인정보·환불 페이지 | 외부 결정 | 사업자 정보와 법률 검토 필요 |
@@ -98,6 +100,8 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 | Instagram/다채널 게시 | 외부 결정 | Meta 앱 검수·토큰 운영 필요 |
 | 카카오페이 운영 | 보류 정상 | 상품·정책·가맹점 심사 뒤 활성화 |
 | Plurank CRM/CX/마케팅 전체 | 범위 결정 | 개인 창작 기능과 별도 제품군 |
+
+보관함 전체 메타 검색과 대형 영상의 서버 렌더링은 유용한 확장 후보지만, 레퍼런스에만 있는 필수 기능 공백으로 계산하지 않는다. 사용자 API 키와 공급자 선택 역시 플랫폼 Vertex AI·크레딧 방식으로 의도적으로 대체했다.
 
 ## 6. 카카오 계정 연결 주의
 

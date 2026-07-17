@@ -59,6 +59,59 @@
   font-size: 12px;
 }
 
+.notices {
+  max-width: 1440px;
+  margin: 0 auto 18px;
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.noticeHeading {
+  min-height: 48px;
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-content: center;
+  gap: 2px 8px;
+  border-right: 1px solid var(--border);
+}
+
+.noticeHeading svg {
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--accent);
+}
+
+.noticeHeading strong { font-size: 12px; }
+.noticeHeading span { color: var(--text-dim); font-size: 9px; }
+.noticeList { min-width: 0; }
+.notice { border-bottom: 1px solid var(--border); }
+.notice:last-child { border-bottom: 0; }
+.notice button {
+  width: 100%;
+  min-height: 42px;
+  padding: 7px 12px;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 62px 16px;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.notice button:hover { background: var(--surface-hover); }
+.notice button > span { color: var(--accent); font-size: 9px; font-weight: 800; }
+.notice button > strong { min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.notice button > time { color: var(--text-dim); font-size: 9px; text-align: right; }
+.notice button > svg { color: var(--text-dim); transition: transform .16s ease; }
+.noticeUnread button > strong::before { content: ""; width: 5px; height: 5px; margin-right: 6px; display: inline-block; border-radius: 50%; background: #e3635d; vertical-align: 1px; }
+.noticeChevronOpen { transform: rotate(180deg); }
+.notice > p { margin: 0; padding: 10px 28px 13px 79px; border-top: 1px solid var(--border); color: var(--text-dim); font-size: 11px; line-height: 1.65; overflow-wrap: anywhere; white-space: pre-line; }
+
 .stats {
   max-width: 1440px;
   margin: 0 auto;
@@ -171,6 +224,11 @@
 @media (max-width: 720px) {
   .dashboard { padding: 18px 14px 34px; }
   .topline h2 { font-size: 20px; }
+  .notices { grid-template-columns: 1fr; }
+  .noticeHeading { border-right: 0; border-bottom: 1px solid var(--border); }
+  .notice button { grid-template-columns: 50px minmax(0, 1fr) 16px; }
+  .notice button > time { display: none; }
+  .notice > p { padding: 10px 14px 13px; }
   .workflow { padding: 14px 0; }
   .sectionHeading { grid-template-columns: 1fr; gap: 9px; }
   .workflowSteps { grid-template-columns: 1fr; }

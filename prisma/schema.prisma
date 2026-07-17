@@ -161,6 +161,37 @@ model User {
   savedProjectBriefs SavedProjectBrief[]
   sessions           UserSession[]
   reports            Report[]
+  announcementReads  AnnouncementRead[]
+}
+
+model Announcement {
+  id          String    @id @default(cuid())
+  title       String
+  content     String    @db.Text
+  category    String    @default("notice")
+  pinned      Boolean   @default(false)
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  reads AnnouncementRead[]
+
+  @@index([published, pinned, publishedAt])
+  @@index([expiresAt])
+}
+
+model AnnouncementRead {
+  announcementId String
+  userId         String
+  readAt         DateTime @default(now())
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([announcementId, userId])
+  @@index([userId, readAt])
 }
 
 // Privacy-preserving, lifetime cap for newly created OAuth accounts from the
