@@ -25,7 +25,10 @@ async function getTasks(): Promise<CloudTasksClient> {
     tasksClientPromise = (async () => {
       const { CloudTasksClient } = await import("@google-cloud/tasks");
       return new CloudTasksClient();
-    })();
+    })().catch((error) => {
+      tasksClientPromise = null;
+      throw error;
+    });
   }
   return tasksClientPromise;
 }
@@ -105,3 +108,4 @@ export function verifyTasksToken(req: Request): boolean {
   const token = process.env.TASKS_AUTH_TOKEN;
   return Boolean(token) && req.headers.get("x-tasks-token") === token;
 }
+
