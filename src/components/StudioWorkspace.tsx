@@ -1504,7 +1504,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
           </div>
 
           <div className={styles.stageArea}>
-            {selectedCut?.imageUrl && mode !== "video" && (
+            {selectedCut && mode !== "video" && (
               <button
                 className={styles.stageEditButton}
                 onClick={() => setEditingCut(true)}
