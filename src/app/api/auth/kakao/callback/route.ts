@@ -1,17 +1,22 @@
 import { randomBytes } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { getAppUrl } from "@/lib/app-url";
 import { WELCOME_CREDITS } from "@/lib/credit-products";
 import {
   getKakaoUser,
+  isKakaoPlaceholderEmail,
+  KAKAO_OAUTH_INTENT_COOKIE,
   KAKAO_OAUTH_STATE_COOKIE,
   kakaoPlaceholderEmail,
   validateKakaoOAuthState,
 } from "@/lib/kakao-auth";
+import { AuthError, requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { createUserSession } from "@/lib/user-sessions";
+import { isDisposableKakaoPlaceholderAccount } from "@/lib/kakao-account-linking";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +30,103 @@ function redirectAndClearState(req: NextRequest, path: string) {
     path: "/",
     maxAge: 0,
   });
+  response.cookies.set(KAKAO_OAUTH_INTENT_COOKIE, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
   return response;
+}
+
+async function canDetachEmptyKakaoAccount(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  email: string,
+  credits: number,
+) {
+  if (!isKakaoPlaceholderEmail(email)) return false;
+  const results = await Promise.all([
+    tx.characterPreset.count({ where: { userId } }),
+    tx.characterGroup.count({ where: { userId } }),
+    tx.savedBackground.count({ where: { userId } }),
+    tx.generationRequest.count({ where: { userId } }),
+    tx.purchasedPreset.count({ where: { userId } }),
+    tx.boardPost.count({ where: { userId } }),
+    tx.boardComment.count({ where: { userId } }),
+    tx.boardLike.count({ where: { userId } }),
+    tx.helpRequest.count({ where: { userId } }),
+    tx.imageTag.count({ where: { userId } }),
+    tx.promptPreset.count({ where: { userId } }),
+    tx.content.count({ where: { userId } }),
+    tx.generationJob.count({ where: { userId } }),
+    tx.creditPayment.count({ where: { userId } }),
+    tx.creativeProject.count({ where: { userId } }),
+    tx.savedProjectBrief.count({ where: { userId } }),
+    tx.report.count({ where: { reporterId: userId } }),
+    tx.instagramAccount.count({ where: { userId } }),
+    tx.creditLedger.findMany({
+      where: { userId },
+      orderBy: { createdAt: "asc" },
+      select: { action: true, source: true, units: true, balanceAfter: true },
+    }),
+  ]);
+  const ledgers = results.at(-1);
+  if (!Array.isArray(ledgers)) return false;
+  return isDisposableKakaoPlaceholderAccount({
+    credits,
+    hasUserData: results.slice(0, -1).some((count) => count !== 0),
+    ledgers,
+  });
+}
+
+async function linkKakaoToCurrentAccount(kakaoId: string) {
+  const session = await requireAuth();
+  return prisma.$transaction(async (tx) => {
+    const [target, linked] = await Promise.all([
+      tx.user.findUnique({ where: { id: session.userId } }),
+      tx.user.findUnique({ where: { kakaoId } }),
+    ]);
+    if (!target) throw new AuthError("로그인 계정을 찾을 수 없습니다.", 401);
+    if (target.kakaoId && target.kakaoId !== kakaoId) return "different_kakao" as const;
+    if (!linked || linked.id === target.id) {
+      await tx.user.update({ where: { id: target.id }, data: { kakaoId } });
+      return "linked" as const;
+    }
+
+    if (!(await canDetachEmptyKakaoAccount(tx, linked.id, linked.email, linked.credits))) {
+      return "account_has_data" as const;
+    }
+
+    await tx.userSession.deleteMany({ where: { userId: linked.id } });
+    await tx.user.update({
+      where: { id: linked.id },
+      data: {
+        kakaoId: null,
+        email: `detached-${linked.id}@oauth.wonyframe.local`,
+        credits: 0,
+      },
+    });
+    await tx.creditLedger.create({
+      data: {
+        userId: linked.id,
+        referenceKey: `account-link:${linked.id}:deactivate`,
+        action: "adjustment",
+        source: "account-link",
+        units: linked.credits,
+        balanceAfter: 0,
+        note: "빈 카카오 계정을 기존 이메일 계정에 연결하며 비활성화",
+      },
+    });
+    await tx.user.update({ where: { id: target.id }, data: { kakaoId } });
+    return "linked" as const;
+  }, { isolationLevel: "Serializable" });
 }
 
 export async function GET(req: NextRequest) {
   const expectedState = req.cookies.get(KAKAO_OAUTH_STATE_COOKIE)?.value ?? null;
+  const intent = req.cookies.get(KAKAO_OAUTH_INTENT_COOKIE)?.value === "link" ? "link" : "login";
   const returnedState = req.nextUrl.searchParams.get("state");
   if (!validateKakaoOAuthState(returnedState, expectedState)) {
     return redirectAndClearState(req, "/login?kakao=invalid_state");
@@ -43,6 +140,22 @@ export async function GET(req: NextRequest) {
 
   try {
     const kakao = await getKakaoUser(code, req.nextUrl.origin);
+    if (intent === "link") {
+      try {
+        const result = await linkKakaoToCurrentAccount(kakao.id);
+        return redirectAndClearState(
+          req,
+          result === "linked"
+            ? "/?tab=settings&kakao=linked"
+            : `/?tab=settings&kakao=${result === "different_kakao" ? "different_kakao" : "link_conflict"}`
+        );
+      } catch (error) {
+        if (error instanceof AuthError) {
+          return redirectAndClearState(req, "/login?kakao=link_login_required");
+        }
+        throw error;
+      }
+    }
     let user = await prisma.user.findUnique({ where: { kakaoId: kakao.id } });
 
     if (!user && kakao.verifiedEmail) {

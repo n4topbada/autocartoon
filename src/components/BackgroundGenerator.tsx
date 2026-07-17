@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { LuDownload, LuMaximize2, LuRefreshCw, LuSave } from "react-icons/lu";
+import { LuDownload, LuMaximize2, LuRefreshCw, LuRotateCcw, LuSave } from "react-icons/lu";
+import type { ImageData } from "./ImageDropZone";
 import WorkflowCard from "./WorkflowCard";
 import ImageModal from "./ImageModal";
 import styles from "./BackgroundGenerator.module.css";
 
 interface CardEntry {
   id: number;
+  initialImage?: ImageData;
 }
 
 interface SavingImage {
@@ -71,6 +73,19 @@ export default function BackgroundGenerator() {
   const addCard = useCallback(() => {
     setCards((prev) => [{ id: nextId }, ...prev]);
     setNextId((n) => n + 1);
+  }, [nextId]);
+
+  const continueFromHistory = useCallback((artifact: BackgroundHistoryArtifact) => {
+    setCards((previous) => [{
+      id: nextId,
+      initialImage: {
+        artifactId: artifact.id,
+        mimeType: artifact.mimeType,
+        preview: artifact.blobUrl,
+      },
+    }, ...previous]);
+    setNextId((value) => value + 1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, [nextId]);
 
   const deleteCard = useCallback((id: number) => {
@@ -160,6 +175,7 @@ export default function BackgroundGenerator() {
               <WorkflowCard
                 key={card.id}
                 id={card.id}
+                initialImage={card.initialImage}
                 onDelete={() => deleteCard(card.id)}
                 onPreview={openPreview}
                 onSaveBackground={handleSaveBackground}
@@ -202,6 +218,13 @@ export default function BackgroundGenerator() {
                     <time>{new Date(job.createdAt).toLocaleString("ko-KR")}</time>
                   </div>
                   <div className={styles.historyActions}>
+                    <button
+                      type="button"
+                      title="이 결과로 이어서 작업"
+                      onClick={() => continueFromHistory(artifact)}
+                    >
+                      <LuRotateCcw />
+                    </button>
                     <button type="button" title="미리보기" onClick={() => openPreview(artifact.blobUrl)}><LuMaximize2 /></button>
                     <a href={artifact.blobUrl} download={`background-${artifact.id}.png`} title="다운로드"><LuDownload /></a>
                     <button

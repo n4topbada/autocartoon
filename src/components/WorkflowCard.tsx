@@ -58,6 +58,7 @@ const MUTUAL_EXCLUSION: Record<string, string> = {
 
 interface WorkflowCardProps {
   id: number;
+  initialImage?: ImageData;
   onDelete: () => void;
   onPreview: (src: string) => void;
   onSaveBackground: (image: GeneratedImage) => void;
@@ -169,7 +170,7 @@ async function runBackgroundJob(args: {
   throw new Error("생성이 오래 걸리고 있습니다. 작업은 서버에서 계속 진행되며 완료 알림으로 알려드립니다.");
 }
 
-export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground, onJobComplete }: WorkflowCardProps) {
+export default function WorkflowCard({ id, initialImage, onDelete, onPreview, onSaveBackground, onJobComplete }: WorkflowCardProps) {
   const [aspectRatio, setAspectRatio] = useState<"1:1" | "4:5" | "9:16" | "16:9">("1:1");
   const [imageSize, setImageSize] = useState<"1K" | "2K">("1K");
   const [quickSource, setQuickSource] = useState<ImageData | null>(null);
@@ -197,7 +198,7 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
 
   // Step 2 state
   const [step2, setStep2] = useState<StepState>({
-    inputImage: null,
+    inputImage: initialImage ?? null,
     results: [],
     selectedIndex: null,
     generating: false,
@@ -208,7 +209,7 @@ export default function WorkflowCard({ id, onDelete, onPreview, onSaveBackground
 
   // Step 3 state
   const [step3, setStep3] = useState<StepState>({
-    inputImage: null,
+    inputImage: initialImage ?? null,
     results: [],
     selectedIndex: null,
     generating: false,

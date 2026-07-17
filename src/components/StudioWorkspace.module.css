@@ -1537,6 +1537,54 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.briefImportNotice {
+  min-height: 30px;
+  margin-bottom: 8px;
+  padding: 7px 9px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(45, 212, 191, 0.28);
+  border-radius: 5px;
+  background: rgba(45, 212, 191, 0.07);
+  color: #7dd3c7;
+  font-size: 10px;
+}
+
+.briefUrlImport {
+  min-height: 34px;
+  margin-bottom: 8px;
+  padding: 0 8px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #111827;
+  color: var(--muted);
+}
+
+.briefUrlImport input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.briefUrlImport button {
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #1f2937;
+  color: var(--text);
+  font-size: 10px;
 }
 
 .dialogSectionTitle span,

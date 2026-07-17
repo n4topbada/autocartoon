@@ -1,5 +1,5 @@
 # Cloud Run용 Next.js standalone 컨테이너.
-# 로컬/Vercel 빌드에는 영향 없음(BUILD_TARGET=cloudrun일 때만 standalone).
+# 로컬 빌드에는 영향 없음(BUILD_TARGET=cloudrun일 때만 standalone).
 FROM node:24-slim AS deps
 WORKDIR /app
 # prisma·sharp 네이티브 빌드에 필요한 최소 패키지

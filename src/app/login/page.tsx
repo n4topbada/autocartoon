@@ -27,6 +27,7 @@ export default function LoginPage() {
       missing_code: "카카오 인증 정보를 받지 못했습니다.",
       failed: "카카오 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.",
       already_linked: "이 이메일은 다른 카카오 계정에 이미 연결되어 있습니다.",
+      link_login_required: "카카오 계정을 연결하려면 이메일 계정으로 먼저 로그인해주세요.",
     };
     setError(messages[status] || messages.failed);
   }, []);

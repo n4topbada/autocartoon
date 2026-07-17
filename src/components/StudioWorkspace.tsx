@@ -33,6 +33,7 @@ import {
   LuDownload,
   LuStar,
   LuBookOpen,
+  LuLink2,
 } from "react-icons/lu";
 import { PROJECT_BRIEF_TEMPLATE } from "@/lib/project-brief";
 import { AI_CREDIT_COSTS, getGenerationCreditCost } from "@/lib/credit-products";
@@ -261,6 +262,9 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
   const [briefLibraryOpen, setBriefLibraryOpen] = useState(false);
   const [briefLibraryLoading, setBriefLibraryLoading] = useState(false);
   const [briefSaving, setBriefSaving] = useState(false);
+  const [briefImporting, setBriefImporting] = useState(false);
+  const [briefImportNotice, setBriefImportNotice] = useState<string | null>(null);
+  const [briefUrl, setBriefUrl] = useState("");
   const [savedBriefs, setSavedBriefs] = useState<SavedBrief[]>([]);
   const [videoPlanOpen, setVideoPlanOpen] = useState(false);
   const [videoPlanDrafts, setVideoPlanDrafts] = useState<Record<string, VideoDialogue[]>>({});
@@ -276,6 +280,8 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
   });
   const [dragActive, setDragActive] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const briefFileRef = useRef<HTMLInputElement>(null);
+  const briefImageRef = useRef<HTMLInputElement>(null);
   const knownStatuses = useRef(new Map<string, JobStatus>());
   const draftCutId = useRef<string | null>(null);
 
@@ -473,6 +479,97 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
       setError(reason instanceof Error ? reason.message : "기획서를 저장하지 못했습니다.");
     } finally {
       setBriefSaving(false);
+    }
+  };
+
+  const importBriefFile = async (file: File | null) => {
+    if (!file) return;
+    setBriefImporting(true);
+    setBriefImportNotice(null);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const result = await readJson<{
+        title: string;
+        content: string;
+        sourceFiles: string[];
+        truncated: boolean;
+      }>(await fetch("/api/studio/briefs/import", { method: "POST", body: form }));
+      setBriefTitle(result.title);
+      setBriefMarkdown(result.content);
+      setBriefImportNotice(
+        `${result.sourceFiles.length}개 문서를 불러왔습니다.${result.truncated ? " 20,000자까지만 반영했습니다." : ""}`
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "기획 자료를 읽지 못했습니다.");
+    } finally {
+      setBriefImporting(false);
+      if (briefFileRef.current) briefFileRef.current.value = "";
+    }
+  };
+
+  const importBriefImage = async (file: File | null) => {
+    if (!file) return;
+    setBriefImporting(true);
+    setBriefImportNotice(null);
+    setError(null);
+    try {
+      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 4 * 1024 * 1024) {
+        throw new Error("이미지 OCR은 4MB 이하 PNG, JPG, WEBP 파일을 사용해주세요.");
+      }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("이미지를 읽지 못했습니다."));
+        reader.readAsDataURL(file);
+      });
+      const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+      const result = await readJson<{ text: string }>(await fetch("/api/studio/ocr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: { base64, mimeType: file.type } }),
+      }));
+      if (!result.text.trim()) throw new Error("이미지에서 읽을 수 있는 글자를 찾지 못했습니다.");
+      setBriefTitle(file.name.replace(/\.[^.]+$/, "").slice(0, 120) || "이미지 기획서");
+      setBriefMarkdown(result.text.trim().slice(0, 20_000));
+      setBriefImportNotice(`이미지에서 글자를 추출했습니다. ${AI_CREDIT_COSTS.ocr}크레딧을 사용했습니다.`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "이미지에서 글자를 추출하지 못했습니다.");
+    } finally {
+      setBriefImporting(false);
+      if (briefImageRef.current) briefImageRef.current.value = "";
+    }
+  };
+
+  const importBriefUrl = async () => {
+    const url = briefUrl.trim();
+    if (!url) return;
+    setBriefImporting(true);
+    setBriefImportNotice(null);
+    setError(null);
+    try {
+      const result = await readJson<{
+        title: string;
+        content: string;
+        sourceFiles: string[];
+        sourceUrl: string;
+        truncated: boolean;
+      }>(await fetch("/api/studio/briefs/import-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      }));
+      setBriefTitle(result.title);
+      setBriefMarkdown(result.content);
+      setBriefUrl(result.sourceUrl);
+      setBriefImportNotice(
+        `공개 URL 자료를 불러왔습니다.${result.truncated ? " 20,000자까지만 반영했습니다." : ""}`
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "URL 자료를 읽지 못했습니다.");
+    } finally {
+      setBriefImporting(false);
     }
   };
 
@@ -1898,12 +1995,52 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                 <div className={styles.dialogSectionTitle}>
                   <strong>기획서 마크다운</strong>
                   <div className={styles.briefEditorActions}>
+                    <input
+                      ref={briefFileRef}
+                      type="file"
+                      accept=".pdf,.docx,.zip,.md,.markdown,.txt,.csv,.html,.htm,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/zip,text/plain,text/csv,text/markdown,text/html"
+                      hidden
+                      onChange={(event) => void importBriefFile(event.target.files?.[0] || null)}
+                    />
+                    <button onClick={() => briefFileRef.current?.click()} disabled={briefImporting || briefGenerating}>
+                      {briefImporting ? <LuLoaderCircle className={styles.spin} /> : <LuUpload />} 자료 가져오기
+                    </button>
+                    <input
+                      ref={briefImageRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      hidden
+                      onChange={(event) => void importBriefImage(event.target.files?.[0] || null)}
+                    />
+                    <button onClick={() => briefImageRef.current?.click()} disabled={briefImporting || briefGenerating}>
+                      <LuImage /> 이미지 OCR <CreditCostBadge credits={AI_CREDIT_COSTS.ocr} />
+                    </button>
                     <button onClick={toggleBriefLibrary}><LuBookOpen /> 저장된 기획서</button>
                     <button onClick={() => void saveCurrentBrief()} disabled={briefSaving || !briefMarkdown.trim()}>
                       {briefSaving ? <LuLoaderCircle className={styles.spin} /> : <LuSave />} 현재 저장
                     </button>
                     <button onClick={() => { setBriefTitle(""); setBriefMarkdown(PROJECT_BRIEF_TEMPLATE); }}>템플릿</button>
                   </div>
+                </div>
+                <div className={styles.briefUrlImport}>
+                  <LuLink2 aria-hidden="true" />
+                  <input
+                    type="url"
+                    value={briefUrl}
+                    maxLength={2_048}
+                    aria-label="가져올 공개 자료 URL"
+                    placeholder="공개 블로그 또는 문서 URL"
+                    onChange={(event) => setBriefUrl(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void importBriefUrl();
+                      }
+                    }}
+                  />
+                  <button type="button" onClick={() => void importBriefUrl()} disabled={briefImporting || briefGenerating || !briefUrl.trim()}>
+                    가져오기
+                  </button>
                 </div>
                 <input
                   className={styles.briefTitleInput}
@@ -1913,6 +2050,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                   placeholder="프로젝트와 저장 기획서 제목 (선택)"
                   aria-label="기획서 제목"
                 />
+                {briefImportNotice && <div className={styles.briefImportNotice} role="status"><LuCheck /> {briefImportNotice}</div>}
                 <textarea
                   className={styles.briefTextarea}
                   value={briefMarkdown}

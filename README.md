@@ -1,37 +1,41 @@
 # WONY AutoCartoon
 
-캐릭터 레퍼런스를 바탕으로 웹툰 장면, 제스처, 배경, 음성, Veo 영상을 만들고 프로젝트 단위로 편집하는 Next.js 제작 서비스입니다. 사용자가 AI API 키를 넣지 않으며, 플랫폼 소유 Vertex AI 계정과 서버 결제 크레딧을 사용합니다.
+캐릭터 레퍼런스로 웹툰 장면, 제스처, 배경, 음성, 숏폼과 Veo 영상을 만들고 프로젝트 단위로 편집하는 Next.js 제작 서비스입니다. 사용자는 AI API 키를 입력하지 않으며 플랫폼 소유 GCP Vertex AI와 서버 크레딧을 사용합니다.
+
+- 운영: `https://wonybananabot-272254743773.asia-northeast3.run.app`
+- GitHub: `https://github.com/n4topbada/autocartoon`
+- 레퍼런스 기능 비교: [docs/toonagent-reverse-engineering.md](./docs/toonagent-reverse-engineering.md)
+- 운영 인수인계: [docs/project-handoff.md](./docs/project-handoff.md)
 
 ## 주요 기능
 
-- 최대 4명 캐릭터를 함께 사용하는 이미지 생성과 편집
-- 정면·좌측·우측·후면 레퍼런스와 대표 이미지 관리
-- 저밀도 배경, 제스처, 오리지널 캐릭터 생성
-- 컷, 대사, 캔버스, 자산, 이미지·영상 작업을 묶은 제작 스튜디오
-- Gemini 기반 캐릭터 디렉터, 기획서 변환, 영상 대사 플랜, OCR
-- Google Cloud TTS 음성 미리듣기와 Veo 3.1 Fast 영상 생성
-- 비동기 Workflow, 진행률, 완료 알림, 재시도, 실패 자동 환불
-- 원본과 WebP 썸네일 분리 저장
-- 이메일 로그인, 카카오 로그인, 임시 비밀번호와 비밀번호 변경
-- 카카오페이 크레딧 충전, 사용·충전·환불 원장
+- 제작 대시보드, 온보딩, 최근 작업·프로젝트 복구
+- 구조화 캐릭터 생성, 방향별 레퍼런스, 대표·기본 캐릭터, 보이스 최대 3개
+- 최대 4명 장면, 1인·2인 제스처, 저밀도 배경 3단계와 과거 결과 재사용
+- Cloud Tasks 영속 작업, 진행률, 완료 알림, 재시도, 실패 자동 환불
+- 통합 보관함, 원본·WebP 썸네일, 타입 필터, 페이지 이동, 저장 용량
+- 프로젝트·컷·표지·자산·대사·AI 기획·영상 플랜
+- PDF, DOCX, ZIP, Markdown, TXT, CSV, HTML, 이미지 OCR, 공개 URL 기획 자료 가져오기
+- 레이어·그룹·가이드·정렬·말풍선·도형·그리기·OCR·영역 AI 편집 캔버스
+- 현재 컷 PNG, 전체 컷 ZIP, 자동 저장
+- Veo 3.1 Fast와 캐릭터별 Google TTS, ffmpeg.wasm 기반 세로 MP4
+- 공개 닉네임, 최신/인기 게시판, 이미지·링크, 댓글, 좋아요, 신고
+- 이메일·카카오 로그인, 임시 비밀번호, 비밀번호 변경, 기기 세션 최대 2대
+- 관리자 사용자·크레딧·신고·지식과 구조화 캐릭터 디렉터
 
-## 크레딧 정책
+## 크레딧
 
-새 계정에는 30크레딧을 한 번 지급합니다. 유상 기본 크레딧은 1개당 12원이며 보너스 크레딧은 상품별로 추가 지급합니다. 페이지 열기, 프로젝트 저장, 업로드 같은 일반 동작은 무료이며 실제 외부 비용이 발생하는 AI·OCR·TTS·영상 호출과 캐릭터 마켓 구매에만 크레딧을 사용합니다.
+새 계정에는 30크레딧을 한 번 지급합니다. 유상 기본 크레딧은 1개당 12원이며, 실제 외부 비용이 드는 AI·OCR·TTS·영상과 유료 캐릭터 구매에만 사용합니다. 서버가 상품과 차감량을 결정하고 같은 작업은 한 번만 차감하며 실패하면 같은 원장 참조로 자동 환불합니다.
 
-| 작업 | 크레딧 |
+| 작업 | 비용 |
 | --- | ---: |
-| AI 채팅, OCR, TTS 미리듣기 | 1 |
-| 캐릭터 설계, AI 기획안, 영상 플랜 | 2 |
+| AI 채팅, OCR, TTS | 1 |
+| 캐릭터 디렉터, AI 기획, 영상 플랜 | 2 |
 | 1K 이미지 1장 | 10 |
 | 2K 이미지 1장 | 20 |
-| Veo 영상 기본 | 60 |
+| Veo 기본 영상 | 60 |
 | 6초 / 8초 | +20 / +40 |
 | 1080p / 오디오 | +40 / +10 |
-
-서버가 상품과 차감량을 결정하므로 클라이언트가 금액을 바꿀 수 없습니다. 동일 작업은 `referenceKey`와 작업별 고유 키로 한 번만 차감됩니다. 모델 호출 또는 결과 저장이 실패하면 같은 원장 참조로 자동 환불합니다. 크레딧이 드는 AI 실행 버튼에는 작은 동전 배지로 실행 전 차감량을 표시하며, 옵션·출력 수·재시도 비용도 서버 계산식과 같은 값을 사용합니다.
-
-현재 충전 상품은 다음과 같습니다.
 
 | 상품 | 기본 | 보너스 | 보너스율 | 총 적립 | 금액 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -40,105 +44,52 @@
 | 크리에이터 | 2,000 | 500 | 25% | 2,500 | 24,000원 |
 | 스튜디오 | 8,000 | 3,000 | 37.5% | 11,000 | 96,000원 |
 
-가격은 운영 전 [Vertex AI 공식 가격표](https://cloud.google.com/vertex-ai/generative-ai/pricing), 원화 환율, 카카오페이 수수료, 저장·전송 비용을 다시 대조해야 합니다. 가격과 크레딧 수량은 `src/lib/credit-products.ts` 한 곳에서 관리합니다.
-
-## 카카오 로그인
-
-카카오 로그인은 서비스 계정 식별 기능입니다. 카카오페이 결제 승인을 대신하지 않습니다. 이메일 제공 동의를 받은 검증 이메일이 기존 계정과 같으면 해당 계정에 카카오 ID를 연결하고, 이메일을 제공하지 않으면 카카오 전용 내부 계정을 만듭니다.
-
-1. [Kakao Developers](https://developers.kakao.com/)에서 애플리케이션을 만듭니다.
-2. 웹 플랫폼 도메인에 로컬 및 운영 주소를 등록합니다.
-3. 카카오 로그인을 활성화하고 아래 Redirect URI를 등록합니다.
-4. REST API 키와 클라이언트 시크릿을 Vercel 환경 변수에 넣습니다.
-
-```text
-http://localhost:3000/api/auth/kakao/callback
-https://wonybananabot.vercel.app/api/auth/kakao/callback
-```
-
-```env
-KAKAO_REST_API_KEY=
-KAKAO_CLIENT_SECRET=
-```
-
-OAuth 요청은 HttpOnly SameSite 쿠키의 일회용 `state`를 검증합니다. 신규 REST API 키의 클라이언트 시크릿 사용을 전제로 구현되어 있습니다.
-
-2026-07-17 기준 Kakao Developers의 `wonybananabot` 앱에서 카카오 로그인, 닉네임 필수 동의, 로컬·운영 Redirect URI를 설정했고 Vercel Production/Preview/Development에 키를 등록했습니다. 운영 주소에서 카카오 동의, 콜백, 신규 계정 생성과 세션 진입까지 E2E 확인했습니다. 이메일 동의 권한은 비즈 앱 전환 전까지 없으므로 이메일 미제공 사용자는 내부 카카오 전용 주소로 식별합니다.
-
-## 카카오페이
-
-카카오 로그인만으로 결제할 수는 없습니다. 카카오페이는 별도 온라인 가맹점 신청, 심사, CID와 시크릿 키가 필요하며 사용자는 카카오톡 또는 결제 화면에서 결제수단을 선택하고 결제를 승인합니다.
-
-개발 테스트:
-
-```env
-KAKAOPAY_SECRET_KEY=카카오페이_Secret_key_dev
-KAKAOPAY_CID=TC0ONETIME
-```
-
-2026-07-17 기준 KakaoPay Developers의 `wonybananabot` 앱에 로컬·운영 Web 도메인을 등록하고 개발용 Secret Key와 `TC0ONETIME`을 Vercel 및 로컬 환경에 반영했습니다. 공식 `ready` API 호출과 운영 크레딧 화면에서 테스트 QR 결제 페이지 진입까지 확인했으며 실제 결제 승인은 수행하지 않았습니다.
-
-> **운영 전환 보류 (2026-07-17):** 위 상품 정책은 코드에 반영했지만 카카오페이 온라인 가맹점 신청과 운영 CID 전환은 아직 진행하지 않습니다. 취소·환불 정책, 사업자 정보, 약관과 실제 원가 검증을 마친 뒤 신청을 재개합니다. 그때까지 개발용 `TC0ONETIME` 테스트 연동만 유지합니다.
-
-운영 전환:
-
-1. [KakaoPay Developers](https://developers.kakaopay.com/)에서 온라인 결제 가맹점 신청을 완료합니다.
-2. 발급된 운영 CID와 운영 시크릿 키로 환경 변수를 교체합니다.
-3. Vercel Production 환경에만 운영 키를 등록합니다.
-4. 실제 소액 결제, 취소, 실패, 중복 콜백, 정산 내역을 확인합니다.
-
-현재 카카오페이 앱의 `온라인 결제` 권한은 Biz 전용이라 운영 결제에는 카카오페이 파트너센터 사업자 등록과 가맹점 심사가 남아 있습니다. 운영 전환 전까지 배포 화면은 테스트 결제 모드로 표시됩니다.
-
-결제 흐름은 `ready -> 카카오 사용자 승인 -> approve -> 서버 금액·주문자 검증 -> approved -> 크레딧 적립` 순서입니다. 적립 트랜잭션이 순간 실패하면 승인 상태를 보존하고 다음 지갑 조회에서 다시 적립합니다. 운영 결제에는 카카오페이 가맹점 수수료가 발생할 수 있습니다.
+카카오페이 라우트와 원장은 구현돼 있지만 **운영 결제가 되지 않는 것이 현재 정상**입니다. 가맹점 심사, 운영 CID, 사업자·약관·환불·정산 정책과 실제 원가를 확정하기 전에는 활성화하지 않습니다.
 
 ## 구성
 
 ```text
 Browser
-  -> Next.js Route Handler
-  -> GenerationJob / CreditPayment / CreditLedger
-  -> Vercel Workflow
+  -> Cloud Run / Next.js Route Handlers
+  -> Cloud SQL PostgreSQL / Prisma
+  -> GenerationJob / GenerationArtifact / CreditLedger
+  -> Cloud Tasks
   -> Vertex AI Gemini / Veo / Google Cloud TTS
-  -> Vercel Blob 원본 + 썸네일
-  -> ProjectAsset / ProjectCut / GenerationArtifact
+  -> private GCS + owner-aware media gateway
 ```
 
-- Next.js 15, React 19, TypeScript
-- Prisma 6, PostgreSQL
-- Vercel Blob, Vercel Workflow, Vercel OIDC
-- Google Vertex AI, Gemini 3.1 Flash Image, Veo 3.1 Fast
-- iron-session HttpOnly 쿠키 인증
-- Resend 이메일
-- Kakao OAuth 2.0, KakaoPay Online Payment
+- Next.js 15, React 19, TypeScript, CSS Modules
+- Prisma 6, PostgreSQL 16, Cloud SQL
+- Cloud Run, Cloud Tasks, private Cloud Storage
+- Vertex AI Gemini/Veo, Google Cloud TTS
+- iron-session HttpOnly 쿠키, bcrypt, DB 기기 세션
+- Resend 이메일, Kakao OAuth 2.0
 
 ## 로컬 실행
 
-```bash
+```powershell
 npm install
-npx vercel env pull .env.local --environment=production
 npx prisma generate
 npm run dev
 ```
 
-기본 주소는 `http://localhost:3000`입니다. 로컬에서 Vertex AI를 직접 호출하려면 Application Default Credentials를 준비합니다.
+기본 주소는 `http://localhost:3000`입니다. 로컬에서 GCP를 호출하려면 Application Default Credentials를 준비합니다.
 
-```bash
+```powershell
 gcloud auth application-default login
 ```
 
-전체 환경 변수 예시는 [`.env.example`](./.env.example)에 있습니다. 핵심 항목은 다음과 같습니다.
+주요 환경 변수:
 
 ```env
 DATABASE_URL=
 SESSION_SECRET=
-BLOB_READ_WRITE_TOKEN=
+APP_ORIGIN=http://localhost:3000
 RESEND_API_KEY=
 PASSWORD_EMAIL_FROM=
-APP_ORIGIN=
-NEXT_PUBLIC_APP_URL=
 
 PLATFORM_AI_PROVIDER=vertex
-GOOGLE_CLOUD_PROJECT=
+GOOGLE_CLOUD_PROJECT=wonybananabot
 GOOGLE_CLOUD_LOCATION=global
 GOOGLE_CLOUD_VIDEO_LOCATION=us-central1
 VERTEX_TEXT_MODEL=gemini-3.1-flash-lite
@@ -146,45 +97,53 @@ VERTEX_IMAGE_MODEL=gemini-3.1-flash-image
 VERTEX_VIDEO_MODEL=veo-3.1-fast-generate-001
 VERTEX_VIDEO_OUTPUT_GCS_URI=gs://BUCKET/autocartoon/veo
 
+GCS_BUCKET=
+CLOUD_RUN_BASE_URL=
+CLOUD_TASKS_LOCATION=asia-northeast3
+CLOUD_TASKS_QUEUE=wony-jobs
+TASKS_AUTH_TOKEN=
+
 KAKAO_REST_API_KEY=
 KAKAO_CLIENT_SECRET=
 KAKAOPAY_SECRET_KEY=
 KAKAOPAY_CID=TC0ONETIME
 ```
 
-운영에서는 Vercel OIDC와 Google Workload Identity Federation을 권장합니다. 저장한 서비스 계정 JSON을 클라이언트에 노출하거나 저장소에 커밋하지 마세요.
+전체 예시는 [`.env.example`](./.env.example)에 있습니다. 비밀 값과 서비스 계정 JSON을 Git에 커밋하지 않습니다. Cloud Run에서는 런타임 서비스 계정과 Secret Manager를 사용합니다.
+
+## 카카오 로그인
+
+카카오 로그인은 계정 식별 기능이며 카카오페이 승인을 대신하지 않습니다. 현재 등록할 콜백:
+
+```text
+http://localhost:3000/api/auth/kakao/callback
+https://wonybananabot-272254743773.asia-northeast3.run.app/api/auth/kakao/callback
+```
+
+자체 도메인을 연결하면 새 도메인의 콜백을 Kakao Developers에 추가하고 `APP_ORIGIN`을 변경합니다. 안정화 기간에는 기존 Cloud Run 콜백을 함께 유지합니다.
+
+카카오가 이메일을 제공하지 않으면 내부 전용 계정이 생깁니다. 기존 이메일 계정으로 로그인한 뒤 설정의 **카카오 연결**을 사용합니다. 실사용 데이터가 있는 두 계정은 자동 병합하지 않습니다.
 
 ## 데이터베이스와 배포
 
-```bash
+```powershell
 npx prisma migrate deploy
+$env:BUILD_TARGET='cloudrun'
 npm run build
-npx vercel --prod
+gcloud run deploy wonybananabot --source . --project=wonybananabot --region=asia-northeast3 --update-env-vars=APP_ORIGIN=https://wonybananabot-272254743773.asia-northeast3.run.app --quiet
 ```
 
-주요 결제 모델:
-
-- `CreditPayment`: 카카오페이 주문, TID, 승인 상태와 금액
-- `CreditLedger`: 지급, 구매, 차감, 환불과 처리 후 잔액
-- `GenerationJob.creditUnits`: 작업 생성 시 확정한 차감량
-- `User.kakaoId`: 카카오 계정 연결
-- `User.welcomeCreditsGrantedAt`: 최초 지급 중복 방지
+운영 리소스와 배포 후 점검은 [docs/project-handoff.md](./docs/project-handoff.md)를 따릅니다.
 
 ## 검증
 
-```bash
+```powershell
 npm test
 npm run lint
 npx tsc --noEmit
+npx prisma validate
 npm run build
+npm audit --omit=dev
 ```
 
-테스트는 프롬프트 제약, 캐릭터 레퍼런스 선택, 작업 응답, 프로젝트 정규화, 크레딧 상품과 이미지·영상 비용 계산을 확인합니다.
-
-## 관련 문서
-
-- [ToonAgent 역설계와 기능 비교](./docs/toonagent-reverse-engineering.md)
-- [현재 구현·기능 차이·접근 정보 인수인계](./docs/project-handoff.md)
-- [Kakao Login REST API](https://developers.kakao.com/docs/ko/kakaologin/rest-api)
-- [KakaoPay 단건 결제](https://developers.kakaopay.com/docs/payment/online/single-payment)
-- [Vertex AI 생성형 AI 가격](https://cloud.google.com/vertex-ai/generative-ai/pricing)
+테스트는 프롬프트 제약, 캐릭터 참조, 작업 응답, 프로젝트 정규화, 크레딧 상품·비용, 기획 자료 가져오기와 카카오 계정 연결 안전 조건을 확인합니다.

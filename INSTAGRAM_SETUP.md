@@ -34,17 +34,17 @@
 - `pages_read_engagement` — 페이지 참여도
 
 ### 6. 환경변수 설정
-Vercel 프로젝트 설정 또는 `.env`에 추가:
+Cloud Run 환경 변수 또는 로컬 `.env`에 추가:
 ```
 INSTAGRAM_APP_ID=앱_ID
 INSTAGRAM_APP_SECRET=앱_시크릿
-INSTAGRAM_REDIRECT_URI=https://wonybananabot.vercel.app/api/instagram/callback
+INSTAGRAM_REDIRECT_URI=https://wonybananabot-272254743773.asia-northeast3.run.app/api/instagram/callback
 ```
 
 ### 7. Redirect URI 등록
 Meta 앱 설정 → Instagram → 기본 표시 → 유효한 OAuth 리디렉트 URI에 추가:
 ```
-https://wonybananabot.vercel.app/api/instagram/callback
+https://wonybananabot-272254743773.asia-northeast3.run.app/api/instagram/callback
 ```
 
 ### 8. 테스터 등록 (개발 모드)
@@ -60,11 +60,7 @@ https://wonybananabot.vercel.app/api/instagram/callback
 ---
 
 ## 활성화 방법
-환경변수 설정 완료 후 `src/app/page.tsx`에서 인스타그램 탭 활성화:
-```tsx
-// 현재: 비활성화
-// activeTab === "instagram" 조건 주석 해제
-```
+환경변수와 Meta 검수가 끝난 뒤 `src/app/page.tsx` 상단 내비게이션에 `instagram` 탭 버튼을 다시 노출한다. 컴포넌트와 API는 이미 연결돼 있다.
 
 ---
 

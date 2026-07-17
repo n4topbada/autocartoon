@@ -270,7 +270,24 @@ export default function Board() {
       setSelectedPost((prev) => prev ? { ...prev, liked: !prev.liked, likeCount: prev.likeCount + (prev.liked ? -1 : 1) } : prev);
     }
     setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, liked: !p.liked, likeCount: p.likeCount + (p.liked ? -1 : 1) } : p));
-    await fetch(`/api/board/${postId}/like`, { method: "POST" }).catch(() => {});
+    try {
+      const response = await fetch(`/api/board/${postId}/like`, { method: "POST" });
+      if (!response.ok) throw new Error("좋아요를 반영하지 못했습니다.");
+    } catch (error) {
+      if (selectedPost?.id === postId) {
+        setSelectedPost((previous) => previous ? {
+          ...previous,
+          liked: !previous.liked,
+          likeCount: previous.likeCount + (previous.liked ? -1 : 1),
+        } : previous);
+      }
+      setPosts((previous) => previous.map((post) => post.id === postId ? {
+        ...post,
+        liked: !post.liked,
+        likeCount: post.likeCount + (post.liked ? -1 : 1),
+      } : post));
+      alert(error instanceof Error ? error.message : "좋아요를 반영하지 못했습니다.");
+    }
   };
 
   // 댓글 좋아요 토글
@@ -281,7 +298,20 @@ export default function Board() {
         comments: prev.comments.map((c) => c.id === commentId ? { ...c, liked: !c.liked, likeCount: c.likeCount + (c.liked ? -1 : 1) } : c),
       } : prev);
     }
-    await fetch(`/api/board/${postId}/comments/${commentId}/like`, { method: "POST" }).catch(() => {});
+    try {
+      const response = await fetch(`/api/board/${postId}/comments/${commentId}/like`, { method: "POST" });
+      if (!response.ok) throw new Error("댓글 좋아요를 반영하지 못했습니다.");
+    } catch (error) {
+      setSelectedPost((previous) => previous ? {
+        ...previous,
+        comments: previous.comments.map((comment) => comment.id === commentId ? {
+          ...comment,
+          liked: !comment.liked,
+          likeCount: comment.likeCount + (comment.liked ? -1 : 1),
+        } : comment),
+      } : previous);
+      alert(error instanceof Error ? error.message : "댓글 좋아요를 반영하지 못했습니다.");
+    }
   };
 
   // 핀 토글 (관리자)

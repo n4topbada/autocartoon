@@ -21,6 +21,7 @@ export async function GET() {
       name: true,
       role: true,
       credits: true,
+      kakaoId: true,
     },
   });
   if (!user) {
@@ -29,7 +30,12 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    ...user,
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    credits: user.credits,
+    kakaoLinked: Boolean(user.kakaoId),
     mustChangePassword: session.usedTemporaryPassword === true,
   });
 }

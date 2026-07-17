@@ -197,6 +197,34 @@
   overflow-wrap: anywhere;
 }
 
+.connectionBadge,
+.connectionButton {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.connectionBadge {
+  background: rgba(34, 197, 94, 0.12);
+  color: #4ade80;
+}
+
+.connectionButton {
+  border: 1px solid #e7c400;
+  background: #fee500;
+  color: #181600;
+}
+
+.connectionButton:hover {
+  background: #f5dc00;
+  color: #181600;
+}
+
 .form {
   display: flex;
   flex-direction: column;

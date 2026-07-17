@@ -82,6 +82,23 @@ export default function AccountSettings() {
     if (user) void loadSessions();
   }, [loadSessions, user]);
 
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get("kakao");
+    if (result === "linked") {
+      setSuccess("카카오 계정을 연결했습니다. 이제 카카오 로그인으로 같은 계정을 사용할 수 있습니다.");
+      void refresh();
+    } else if (result === "different_kakao") {
+      setError("이 계정에는 다른 카카오 계정이 이미 연결되어 있습니다.");
+    } else if (result === "link_conflict") {
+      setError("선택한 카카오 계정에 기존 생성물이나 활동 기록이 있어 자동으로 합칠 수 없습니다. 관리자에게 계정 병합을 요청해주세요.");
+    }
+    if (result) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("kakao");
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, [refresh]);
+
   const revokeSession = async (id?: string, others = false) => {
     setRevokingSession(others ? "others" : id || null);
     setSessionError("");
@@ -254,6 +271,16 @@ export default function AccountSettings() {
             <div>
               <dt>크레딧</dt>
               <dd><a href="/credits">{user.credits.toLocaleString()} 크레딧</a></dd>
+            </div>
+            <div>
+              <dt>카카오 로그인</dt>
+              <dd>
+                {user.kakaoLinked ? (
+                  <span className={styles.connectionBadge}>연결됨</span>
+                ) : (
+                  <a className={styles.connectionButton} href="/api/auth/kakao?intent=link">카카오 연결</a>
+                )}
+              </dd>
             </div>
           </dl>
         </section>

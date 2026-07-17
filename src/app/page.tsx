@@ -30,6 +30,7 @@ import {
   LuPersonStanding,
   LuUsers,
   LuChevronDown,
+  LuHouse,
 } from "react-icons/lu";
 import { resizeFromFile, fetchImageFromUrl } from "@/lib/image-resize";
 import PromptInput from "@/components/PromptInput";
@@ -59,8 +60,10 @@ const CharacterManagementModal = dynamic(
 );
 const ChatBot = dynamic(() => import("@/components/ChatBot"), { loading: DeferredPanelLoader, ssr: false });
 const GenerationNotifications = dynamic(() => import("@/components/GenerationNotifications"), { loading: () => null });
+const CreatorDashboard = dynamic(() => import("@/components/CreatorDashboard"), { loading: DeferredPanelLoader });
 
 type Tab =
+  | "home"
   | "character"
   | "characterCreator"
   | "designer"
@@ -254,7 +257,7 @@ interface UserOption {
 
 export default function Home() {
   const { user, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>("character");
+  const [activeTab, setActiveTab] = useState<Tab>("home");
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const [charGroups, setCharGroups] = useState<CharacterGroupData[]>([]);
@@ -296,6 +299,11 @@ export default function Home() {
   useEffect(() => {
     if (user?.mustChangePassword) setActiveTab("settings");
   }, [user?.mustChangePassword]);
+
+  useEffect(() => {
+    const requestedTab = new URLSearchParams(window.location.search).get("tab");
+    if (requestedTab === "settings") setActiveTab("settings");
+  }, []);
 
   const handleDesignerTabClick = useCallback(() => {
     if (authLoading) {
@@ -1123,13 +1131,20 @@ export default function Home() {
       <header className={styles.header}>
         <h1
           className={styles.logo}
-          onClick={() => { setActiveTab("character"); window.scrollTo(0, 0); }}
+          onClick={() => { setActiveTab("home"); window.scrollTo(0, 0); }}
           style={{ cursor: "pointer" }}
         >
           <span className={styles.logoEmoji}>🍌</span>
           워니바나나봇
         </h1>
         <nav className={styles.tabNav} style={{ flex: 1 }}>
+          <button
+            className={`${styles.tab} ${activeTab === "home" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("home")}
+          >
+            <LuHouse size={14} />
+            홈
+          </button>
           <button
             className={`${styles.tab} ${activeTab === "character" ? styles.tabActive : ""}`}
             onClick={() => setActiveTab("character")}
@@ -1276,7 +1291,9 @@ export default function Home() {
       </header>
 
       <main className={styles.main}>
-        {activeTab === "characterCreator" ? (
+        {activeTab === "home" ? (
+          <CreatorDashboard onNavigate={(tab) => setActiveTab(tab)} />
+        ) : activeTab === "characterCreator" ? (
           <CharacterCreator onPresetSaved={() => { loadPresets(); loadHistory(); }} />
         ) : activeTab === "designer" ? (
           <CharacterDesigner />
