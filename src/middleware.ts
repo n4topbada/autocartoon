@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getIronSession, type SessionOptions } from "iron-session";
 import { isPublicRoute, isStaticPath } from "@/lib/request-routing";
+import { createLoginRedirect } from "@/lib/auth-navigation";
 import type { SessionData } from "@/lib/session";
 
 const MIN_SESSION_SECRET_LENGTH = 32;
@@ -55,7 +56,10 @@ export async function middleware(request: NextRequest) {
         { status: 401 }
       );
     }
-    return NextResponse.redirect(new URL("/login", request.url));
+    const returnTo = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+    return NextResponse.redirect(
+      new URL(createLoginRedirect(returnTo, "login_required"), request.url)
+    );
   }
 
   // 관리자 페이지 접근 제한

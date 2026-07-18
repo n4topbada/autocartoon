@@ -7,6 +7,7 @@ const KAKAO_USER_URL = "https://kapi.kakao.com/v2/user/me";
 
 export const KAKAO_OAUTH_STATE_COOKIE = "wony_kakao_oauth_state";
 export const KAKAO_OAUTH_INTENT_COOKIE = "wony_kakao_oauth_intent";
+export const KAKAO_OAUTH_RETURN_TO_COOKIE = "wony_kakao_oauth_return_to";
 export const KAKAO_OAUTH_STATE_MAX_AGE = 10 * 60;
 
 const KAKAO_PLACEHOLDER_EMAIL_DOMAIN = "@oauth.wonyframe.local";

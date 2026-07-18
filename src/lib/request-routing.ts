@@ -15,9 +15,13 @@ export function isStaticPath(pathname: string): boolean {
   );
 }
 
+export function isPublicPageRoute(pathname: string): boolean {
+  return PUBLIC_PAGE_ROUTES.some((route) => matchesRoute(pathname, route));
+}
+
 export function isPublicRoute(pathname: string): boolean {
   return (
-    PUBLIC_PAGE_ROUTES.some((route) => matchesRoute(pathname, route)) ||
+    isPublicPageRoute(pathname) ||
     // These APIs perform their own object/session/task authentication.
     PUBLIC_API_ROUTES.some((route) => matchesRoute(pathname, route))
   );

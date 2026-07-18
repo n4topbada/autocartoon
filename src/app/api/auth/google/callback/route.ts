@@ -2,9 +2,11 @@ import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { getAppUrl } from "@/lib/app-url";
+import { addReturnTo, normalizeReturnTo } from "@/lib/auth-navigation";
 import { WELCOME_CREDITS } from "@/lib/credit-products";
 import {
   getGoogleUser,
+  GOOGLE_OAUTH_RETURN_TO_COOKIE,
   GOOGLE_OAUTH_STATE_COOKIE,
   GOOGLE_OAUTH_VERIFIER_COOKIE,
   validateGoogleOAuthState,
@@ -19,7 +21,11 @@ export const dynamic = "force-dynamic";
 function redirectAndClearState(req: NextRequest, path: string) {
   const response = NextResponse.redirect(getAppUrl(path, req.nextUrl.origin));
   response.headers.set("Cache-Control", "no-store");
-  for (const name of [GOOGLE_OAUTH_STATE_COOKIE, GOOGLE_OAUTH_VERIFIER_COOKIE]) {
+  for (const name of [
+    GOOGLE_OAUTH_STATE_COOKIE,
+    GOOGLE_OAUTH_VERIFIER_COOKIE,
+    GOOGLE_OAUTH_RETURN_TO_COOKIE,
+  ]) {
     response.cookies.set(name, "", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -34,16 +40,30 @@ function redirectAndClearState(req: NextRequest, path: string) {
 export async function GET(req: NextRequest) {
   const expectedState = req.cookies.get(GOOGLE_OAUTH_STATE_COOKIE)?.value ?? null;
   const verifier = req.cookies.get(GOOGLE_OAUTH_VERIFIER_COOKIE)?.value ?? null;
+  const returnTo = normalizeReturnTo(
+    req.cookies.get(GOOGLE_OAUTH_RETURN_TO_COOKIE)?.value,
+  );
   const returnedState = req.nextUrl.searchParams.get("state");
   if (!validateGoogleOAuthState(returnedState, expectedState) || !verifier) {
-    return redirectAndClearState(req, "/login?google=invalid_state");
+    return redirectAndClearState(
+      req,
+      addReturnTo("/login?google=invalid_state", returnTo),
+    );
   }
   if (req.nextUrl.searchParams.get("error")) {
-    return redirectAndClearState(req, "/login?google=access_denied");
+    return redirectAndClearState(
+      req,
+      addReturnTo("/login?google=access_denied", returnTo),
+    );
   }
 
   const code = req.nextUrl.searchParams.get("code");
-  if (!code) return redirectAndClearState(req, "/login?google=missing_code");
+  if (!code) {
+    return redirectAndClearState(
+      req,
+      addReturnTo("/login?google=missing_code", returnTo),
+    );
+  }
 
   try {
     const google = await getGoogleUser(code, req.nextUrl.origin, verifier);
@@ -54,7 +74,10 @@ export async function GET(req: NextRequest) {
         where: { email: { equals: google.email, mode: "insensitive" } },
       });
       if (matchingUser?.googleId && matchingUser.googleId !== google.id) {
-        return redirectAndClearState(req, "/login?google=already_linked");
+        return redirectAndClearState(
+          req,
+          addReturnTo("/login?google=already_linked", returnTo),
+        );
       }
       if (matchingUser && !matchingUser.googleId) {
         if (matchingUser.emailVerified) {
@@ -128,12 +151,18 @@ export async function GET(req: NextRequest) {
     session.authMethod = "google";
     await session.save();
 
-    return redirectAndClearState(req, "/");
+    return redirectAndClearState(req, returnTo);
   } catch (error) {
     if (error instanceof SignupLimitError) {
-      return redirectAndClearState(req, "/login?google=signup_limit");
+      return redirectAndClearState(
+        req,
+        addReturnTo("/login?google=signup_limit", returnTo),
+      );
     }
     console.error("Google login callback error:", { host: req.nextUrl.host, error });
-    return redirectAndClearState(req, "/login?google=failed");
+    return redirectAndClearState(
+      req,
+      addReturnTo("/login?google=failed", returnTo),
+    );
   }
 }

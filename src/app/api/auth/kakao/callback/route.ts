@@ -3,11 +3,13 @@ import type { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { getAppUrl } from "@/lib/app-url";
+import { addReturnTo, normalizeReturnTo } from "@/lib/auth-navigation";
 import { WELCOME_CREDITS } from "@/lib/credit-products";
 import {
   getKakaoUser,
   isKakaoPlaceholderEmail,
   KAKAO_OAUTH_INTENT_COOKIE,
+  KAKAO_OAUTH_RETURN_TO_COOKIE,
   KAKAO_OAUTH_STATE_COOKIE,
   kakaoPlaceholderEmail,
   validateKakaoOAuthState,
@@ -55,20 +57,19 @@ function logKakaoCallbackRejection(
 function redirectAndClearState(req: NextRequest, path: string) {
   const response = NextResponse.redirect(getAppUrl(path, req.nextUrl.origin));
   response.headers.set("Cache-Control", "no-store");
-  response.cookies.set(KAKAO_OAUTH_STATE_COOKIE, "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0,
-  });
-  response.cookies.set(KAKAO_OAUTH_INTENT_COOKIE, "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0,
-  });
+  for (const name of [
+    KAKAO_OAUTH_STATE_COOKIE,
+    KAKAO_OAUTH_INTENT_COOKIE,
+    KAKAO_OAUTH_RETURN_TO_COOKIE,
+  ]) {
+    response.cookies.set(name, "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 0,
+    });
+  }
   return response;
 }
 
@@ -159,20 +160,32 @@ async function linkKakaoToCurrentAccount(kakaoId: string) {
 export async function GET(req: NextRequest) {
   const expectedState = req.cookies.get(KAKAO_OAUTH_STATE_COOKIE)?.value ?? null;
   const intent = req.cookies.get(KAKAO_OAUTH_INTENT_COOKIE)?.value === "link" ? "link" : "login";
+  const returnTo = normalizeReturnTo(
+    req.cookies.get(KAKAO_OAUTH_RETURN_TO_COOKIE)?.value,
+  );
   const returnedState = req.nextUrl.searchParams.get("state");
   if (!validateKakaoOAuthState(returnedState, expectedState)) {
     logKakaoCallbackRejection(req, "invalid_state", expectedState, returnedState);
-    return redirectAndClearState(req, "/login?kakao=invalid_state");
+    return redirectAndClearState(
+      req,
+      addReturnTo("/login?kakao=invalid_state", returnTo),
+    );
   }
   if (req.nextUrl.searchParams.get("error")) {
     logKakaoCallbackRejection(req, "provider_error", expectedState, returnedState);
-    return redirectAndClearState(req, "/login?kakao=access_denied");
+    return redirectAndClearState(
+      req,
+      addReturnTo("/login?kakao=access_denied", returnTo),
+    );
   }
 
   const code = req.nextUrl.searchParams.get("code");
   if (!code) {
     logKakaoCallbackRejection(req, "missing_code", expectedState, returnedState);
-    return redirectAndClearState(req, "/login?kakao=missing_code");
+    return redirectAndClearState(
+      req,
+      addReturnTo("/login?kakao=missing_code", returnTo),
+    );
   }
 
   try {
@@ -200,7 +213,10 @@ export async function GET(req: NextRequest) {
         where: { email: { equals: kakao.verifiedEmail, mode: "insensitive" } },
       });
       if (matchingUser?.kakaoId && matchingUser.kakaoId !== kakao.id) {
-        return redirectAndClearState(req, "/login?kakao=already_linked");
+        return redirectAndClearState(
+          req,
+          addReturnTo("/login?kakao=already_linked", returnTo),
+        );
       }
       if (matchingUser && !matchingUser.kakaoId) {
         if (matchingUser.emailVerified) {
@@ -278,16 +294,22 @@ export async function GET(req: NextRequest) {
     session.authMethod = "kakao";
     await session.save();
 
-    return redirectAndClearState(req, "/");
+    return redirectAndClearState(req, returnTo);
   } catch (error) {
     if (error instanceof SignupLimitError) {
-      return redirectAndClearState(req, "/login?kakao=signup_limit");
+      return redirectAndClearState(
+        req,
+        addReturnTo("/login?kakao=signup_limit", returnTo),
+      );
     }
     console.error("Kakao login callback error:", {
       host: req.nextUrl.host,
       client: kakaoClientKind(req.headers.get("user-agent")),
       error,
     });
-    return redirectAndClearState(req, "/login?kakao=failed");
+    return redirectAndClearState(
+      req,
+      addReturnTo("/login?kakao=failed", returnTo),
+    );
   }
 }

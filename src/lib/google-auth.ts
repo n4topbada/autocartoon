@@ -7,6 +7,7 @@ const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
 export const GOOGLE_OAUTH_STATE_COOKIE = "wony_google_oauth_state";
 export const GOOGLE_OAUTH_VERIFIER_COOKIE = "wony_google_oauth_verifier";
+export const GOOGLE_OAUTH_RETURN_TO_COOKIE = "wony_google_oauth_return_to";
 export const GOOGLE_OAUTH_STATE_MAX_AGE = 10 * 60;
 
 export type GoogleUser = {

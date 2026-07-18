@@ -60,6 +60,26 @@
   margin-bottom: 32px;
 }
 
+.loginNotice {
+  margin: -14px 0 20px;
+  padding: 11px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--blue-soft);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.loginNotice svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
 .form {
   display: flex;
   flex-direction: column;

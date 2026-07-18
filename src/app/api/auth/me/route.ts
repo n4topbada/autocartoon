@@ -11,7 +11,12 @@ export async function GET() {
   try {
     session = await requireAuth();
   } catch (error) {
-    if (error instanceof AuthError) return NextResponse.json(null);
+    if (error instanceof AuthError) {
+      return NextResponse.json(
+        { error: error.message, code: "AUTH_REQUIRED" },
+        { status: 401 },
+      );
+    }
     throw error;
   }
 
@@ -29,7 +34,10 @@ export async function GET() {
   });
   if (!user) {
     session.destroy();
-    return NextResponse.json(null);
+    return NextResponse.json(
+      { error: "로그인이 필요합니다.", code: "AUTH_REQUIRED" },
+      { status: 401 },
+    );
   }
 
   const passwordlessKakaoAccount =

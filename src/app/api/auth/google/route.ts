@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAppUrl } from "@/lib/app-url";
+import { addReturnTo, normalizeReturnTo } from "@/lib/auth-navigation";
 import {
   createGoogleCodeVerifier,
   createGoogleOAuthState,
   getGoogleAuthorizeUrl,
   GOOGLE_OAUTH_STATE_COOKIE,
   GOOGLE_OAUTH_STATE_MAX_AGE,
+  GOOGLE_OAUTH_RETURN_TO_COOKIE,
   GOOGLE_OAUTH_VERIFIER_COOKIE,
   isGoogleLoginConfigured,
 } from "@/lib/google-auth";
@@ -13,9 +15,10 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const returnTo = normalizeReturnTo(req.nextUrl.searchParams.get("returnTo"));
   if (!isGoogleLoginConfigured()) {
     return NextResponse.redirect(
-      getAppUrl("/login?google=not_configured", req.nextUrl.origin),
+      getAppUrl(addReturnTo("/login?google=not_configured", returnTo), req.nextUrl.origin),
     );
   }
 
@@ -28,6 +31,7 @@ export async function GET(req: NextRequest) {
   for (const [name, value] of [
     [GOOGLE_OAUTH_STATE_COOKIE, state],
     [GOOGLE_OAUTH_VERIFIER_COOKIE, verifier],
+    [GOOGLE_OAUTH_RETURN_TO_COOKIE, returnTo],
   ] as const) {
     response.cookies.set(name, value, {
       httpOnly: true,

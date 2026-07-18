@@ -2,11 +2,12 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { LuKeyRound, LuX } from "react-icons/lu";
+import { LuKeyRound, LuLogIn, LuX } from "react-icons/lu";
 import { FcGoogle } from "react-icons/fc";
 import { RiKakaoTalkFill } from "react-icons/ri";
 import { useAuth } from "@/components/AuthProvider";
 import LegalFooter from "@/components/LegalFooter";
+import { addReturnTo, normalizeReturnTo } from "@/lib/auth-navigation";
 import styles from "./page.module.css";
 
 export default function LoginPage() {
@@ -17,6 +18,8 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
+  const [returnTo, setReturnTo] = useState("/");
+  const [loginNotice, setLoginNotice] = useState("");
 
   const [showForgot, setShowForgot] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
@@ -26,6 +29,15 @@ export default function LoginPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const nextReturnTo = normalizeReturnTo(params.get("returnTo"));
+    const reason = params.get("reason");
+    setReturnTo(nextReturnTo);
+    if (reason === "session_expired") {
+      setLoginNotice("세션이 만료되었습니다. 다시 로그인하면 이전 화면으로 돌아갑니다.");
+    } else if (reason === "login_required") {
+      setLoginNotice("이 화면을 이용하려면 로그인해주세요. 로그인 후 이전 화면으로 돌아갑니다.");
+    }
+
     const kakao = params.get("kakao");
     const google = params.get("google");
     if (!kakao && !google) return;
@@ -71,7 +83,7 @@ export default function LoginPage() {
       const data = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(data.error || "로그인에 실패했습니다.");
       await refresh();
-      router.replace("/");
+      router.replace(returnTo);
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "로그인 실패");
     } finally {
@@ -124,6 +136,13 @@ export default function LoginPage() {
         <h1 className={styles.logo}>🍌 워니바나나봇</h1>
         <p className={styles.subtitle}>웹툰 캐릭터 이미지 생성 서비스</p>
 
+        {loginNotice && (
+          <p className={styles.loginNotice} role="status">
+            <LuLogIn size={17} aria-hidden="true" />
+            <span>{loginNotice}</span>
+          </p>
+        )}
+
         <form className={styles.form} onSubmit={handleLogin}>
           <div className={styles.field}>
             <label className={styles.label} htmlFor="login-email">이메일</label>
@@ -167,11 +186,11 @@ export default function LoginPage() {
         </form>
 
         <div className={styles.socialActions}>
-          <a className={styles.kakaoBtn} href="/api/auth/kakao">
+          <a className={styles.kakaoBtn} href={addReturnTo("/api/auth/kakao", returnTo)}>
             <RiKakaoTalkFill size={18} aria-hidden="true" />
             카카오로 계속하기
           </a>
-          <a className={styles.googleBtn} href="/api/auth/google">
+          <a className={styles.googleBtn} href={addReturnTo("/api/auth/google", returnTo)}>
             <FcGoogle size={18} aria-hidden="true" />
             Google로 계속하기
           </a>
@@ -213,11 +232,11 @@ export default function LoginPage() {
               카카오 또는 Google 계정으로 가입할 수 있습니다.
             </p>
             <div className={styles.socialActions}>
-              <a className={styles.kakaoBtn} href="/api/auth/kakao">
+              <a className={styles.kakaoBtn} href={addReturnTo("/api/auth/kakao", returnTo)}>
                 <RiKakaoTalkFill size={18} aria-hidden="true" />
                 카카오로 가입하기
               </a>
-              <a className={styles.googleBtn} href="/api/auth/google">
+              <a className={styles.googleBtn} href={addReturnTo("/api/auth/google", returnTo)}>
                 <FcGoogle size={18} aria-hidden="true" />
                 Google로 가입하기
               </a>

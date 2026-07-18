@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAppUrl } from "@/lib/app-url";
+import { addReturnTo, normalizeReturnTo } from "@/lib/auth-navigation";
 import {
   createKakaoOAuthState,
   getKakaoAuthorizeUrl,
   isKakaoLoginConfigured,
   KAKAO_OAUTH_INTENT_COOKIE,
+  KAKAO_OAUTH_RETURN_TO_COOKIE,
   KAKAO_OAUTH_STATE_COOKIE,
   KAKAO_OAUTH_STATE_MAX_AGE,
 } from "@/lib/kakao-auth";
@@ -13,9 +15,10 @@ import { AuthError, requireAuth } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const returnTo = normalizeReturnTo(req.nextUrl.searchParams.get("returnTo"));
   if (!isKakaoLoginConfigured()) {
     return NextResponse.redirect(
-      getAppUrl("/login?kakao=not_configured", req.nextUrl.origin)
+      getAppUrl(addReturnTo("/login?kakao=not_configured", returnTo), req.nextUrl.origin)
     );
   }
 
@@ -44,6 +47,13 @@ export async function GET(req: NextRequest) {
     maxAge: KAKAO_OAUTH_STATE_MAX_AGE,
   });
   response.cookies.set(KAKAO_OAUTH_INTENT_COOKIE, intent, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: KAKAO_OAUTH_STATE_MAX_AGE,
+  });
+  response.cookies.set(KAKAO_OAUTH_RETURN_TO_COOKIE, returnTo, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

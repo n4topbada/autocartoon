@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isPublicRoute, isStaticPath } from "../src/lib/request-routing";
+import {
+  isPublicPageRoute,
+  isPublicRoute,
+  isStaticPath,
+} from "../src/lib/request-routing";
 
 test("로그인과 법적 고지 페이지는 비로그인 사용자에게 공개된다", () => {
   for (const pathname of ["/login", "/verify", "/terms", "/privacy", "/refund"]) {
     assert.equal(isPublicRoute(pathname), true, pathname);
+    assert.equal(isPublicPageRoute(pathname), true, pathname);
   }
+  assert.equal(isPublicPageRoute("/api/auth/me"), false);
 });
 
 test("공개 API 접두사는 경로 경계에서만 일치한다", () => {
