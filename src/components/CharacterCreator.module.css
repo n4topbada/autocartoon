@@ -55,7 +55,7 @@
 
 .field > span,
 .failures h3 {
-  color: #b8b8b8;
+  color: var(--text-dim);
   font-size: 12px;
   font-weight: 650;
 }
@@ -78,7 +78,7 @@
 .field select:focus,
 .field textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(108, 92, 231, 0.18);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 .field small {
@@ -116,7 +116,7 @@
 }
 
 .segmented button.selected {
-  background: #3a3568;
+  background: var(--accent);
   color: #fff;
 }
 
@@ -139,9 +139,9 @@
 
 .chips button:hover,
 .chips .chipSelected {
-  border-color: #7770a8;
-  background: #302d4c;
-  color: #fff;
+  border-color: var(--border-strong);
+  background: var(--accent-soft);
+  color: var(--accent-hover);
 }
 
 .formActions {
@@ -229,7 +229,7 @@
 .progressTrack span {
   display: block;
   height: 100%;
-  background: #40c98b;
+  background: var(--success);
   transition: width 0.25s ease;
 }
 
@@ -266,7 +266,7 @@
 .resultActions button:hover,
 .modalHeader button:hover {
   color: var(--text);
-  border-color: #555;
+  border-color: var(--border-strong);
 }
 
 .errorBanner,
@@ -284,15 +284,15 @@
 }
 
 .errorBanner {
-  border-color: rgba(231, 76, 60, 0.45);
-  background: rgba(231, 76, 60, 0.09);
-  color: #ffaaa1;
+  border-color: var(--danger-border);
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .successBanner {
-  border-color: rgba(46, 204, 113, 0.4);
-  background: rgba(46, 204, 113, 0.08);
-  color: #8ce7b2;
+  border-color: var(--success-border);
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .errorBanner button,
@@ -389,7 +389,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 8px 0;
-  color: #e4a09a;
+  color: var(--danger);
   font-size: 12px;
 }
 
@@ -419,9 +419,9 @@
 .modal {
   width: min(430px, 100%);
   padding: 20px;
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #1b1b1b;
+  background: var(--surface);
   display: flex;
   flex-direction: column;
   gap: 16px;

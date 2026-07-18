@@ -1,15 +1,33 @@
 :root {
-  --bg: #0f0f0f;
-  --surface: #1a1a1a;
-  --surface-hover: #242424;
-  --border: #2a2a2a;
-  --text: #e8e8e8;
-  --text-dim: #888;
-  --accent: #6c5ce7;
-  --accent-hover: #7d6ff0;
-  --danger: #e74c3c;
-  --success: #2ecc71;
-  --radius: 12px;
+  color-scheme: light;
+  --bg: #f3f5f2;
+  --surface: #ffffff;
+  --surface-subtle: #f8faf8;
+  --surface-hover: #e9eeea;
+  --border: #d8dfd9;
+  --border-strong: #bdc8c0;
+  --text: #202722;
+  --text-dim: #69736c;
+  --text-sub: var(--text-dim);
+  --accent: #53695d;
+  --accent-hover: #405349;
+  --accent-soft: #e3ebe6;
+  --lavender-soft: #ebe8f2;
+  --blue-soft: #e6eef2;
+  --peach-soft: #f3e8e2;
+  --yellow-soft: #f1edda;
+  --focus-ring: rgba(83, 105, 93, 0.16);
+  --danger: #b64e49;
+  --danger-soft: #faecea;
+  --danger-border: #e8b8b4;
+  --success: #39735b;
+  --success-soft: #e7f2eb;
+  --success-border: #b8d6c4;
+  --warning: #906b27;
+  --warning-soft: #f7f0dc;
+  --shadow-sm: 0 1px 2px rgba(32, 39, 34, 0.05);
+  --shadow-md: 0 12px 32px rgba(32, 39, 34, 0.12);
+  --radius: 6px;
 }
 
 * {
@@ -23,13 +41,26 @@ body {
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+  letter-spacing: 0;
 }
 
 button {
   cursor: pointer;
   font-family: inherit;
+  letter-spacing: 0;
 }
 
 input, textarea, select {
   font-family: inherit;
+  letter-spacing: 0;
+}
+
+::selection {
+  background: #cddbd2;
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

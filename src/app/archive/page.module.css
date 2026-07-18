@@ -4,6 +4,12 @@
   color: var(--text);
 }
 
+.embedded {
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+}
+
 .header {
   min-height: 66px;
   padding: 10px 24px;
@@ -12,6 +18,11 @@
   grid-template-columns: 36px minmax(160px, 1fr) minmax(220px, 360px);
   align-items: center;
   gap: 12px;
+  background: var(--surface);
+}
+
+.headerEmbedded {
+  grid-template-columns: minmax(160px, 1fr) minmax(220px, 360px);
 }
 
 .header h1 {
@@ -108,13 +119,14 @@
   border-radius: 8px;
   overflow: hidden;
   background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .media {
   width: 100%;
   aspect-ratio: 1;
   border: 0;
-  background: #111;
+  background: var(--surface-subtle);
   overflow: hidden;
   display: block;
 }
@@ -139,7 +151,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #9bcfc5;
+  color: var(--accent);
   font-size: 11px;
   font-weight: 700;
 }
@@ -152,7 +164,7 @@
 .card p {
   height: 38px;
   padding: 3px 10px 7px;
-  color: #aaa;
+  color: var(--text-dim);
   font-size: 11px;
   line-height: 1.35;
   display: -webkit-box;
@@ -180,7 +192,7 @@
 }
 
 .actions button:last-child:hover:not(:disabled) {
-  color: #f09083;
+  color: var(--danger);
 }
 
 .empty {
@@ -193,12 +205,17 @@
   color: var(--text-dim);
 }
 
+.embedded .empty {
+  min-height: 320px;
+}
+
 .error {
   margin: 14px 24px 0;
   padding: 9px 10px;
-  border: 1px solid rgba(231, 76, 60, 0.45);
+  border: 1px solid var(--danger-border);
   border-radius: 6px;
-  color: #ffaaa1;
+  background: var(--danger-soft);
+  color: var(--danger);
   display: flex;
   justify-content: space-between;
   font-size: 12px;
@@ -213,9 +230,10 @@
 .notice {
   margin: 14px 24px 0;
   padding: 9px 10px;
-  border: 1px solid rgba(73, 185, 168, 0.45);
+  border: 1px solid var(--success-border);
   border-radius: 6px;
-  color: #7fe0d1;
+  background: var(--success-soft);
+  color: var(--success);
   display: flex;
   justify-content: space-between;
   font-size: 12px;
@@ -274,7 +292,7 @@
   right: 8px;
   width: 34px;
   height: 34px;
-  background: rgba(20, 20, 20, 0.9);
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .previewEdit {
@@ -287,10 +305,10 @@
   align-items: center;
   gap: 6px;
   transform: translateX(-50%);
-  border: 1px solid #4db4a4;
+  border: 1px solid var(--accent);
   border-radius: 6px;
-  background: rgba(18, 31, 29, 0.94);
-  color: #e8f8f5;
+  background: var(--accent);
+  color: #fff;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -298,7 +316,7 @@
 }
 
 .previewEdit:hover {
-  background: #285a52;
+  background: var(--accent-hover);
 }
 
 .spin {
@@ -311,6 +329,10 @@
   .header {
     padding: 10px 14px;
     grid-template-columns: 34px 1fr;
+  }
+
+  .headerEmbedded {
+    grid-template-columns: 1fr;
   }
 
   .search {

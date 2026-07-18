@@ -44,6 +44,9 @@
 - `.env.example`을 실제 코드 환경 변수와 대조해 Instagram 보류 설정까지 보완
 - 사용되지 않게 된 캐릭터 디렉터 이메일 허용 목록과 별도 권한 함수를 제거하고 일반 로그인·크레딧 경계로 통일
 - 홈·더보기·설정·캐릭터 관련 중복 동선을 로고, 1단 메뉴, 계정 아이콘과 두 내부 작업공간으로 정리
+- 제작 동선을 5개 핵심 메뉴와 게시판·WonyBot·계정 보조 동선으로 재구성하고 대시보드 중복 바로가기를 제거
+- 제스처와 배경 생성물을 공통 영속 작업·보관함·캔버스 자산으로 연결하고 비활성 패널 폴링을 중단
+- 다크 테마 잔여값과 잘못 조합된 CSS 변수·카카오 노란 버튼 대비를 수정하고 밝은 공통 디자인 토큰으로 통일
 
 ## 의도적으로 유지한 항목
 
@@ -54,7 +57,7 @@
 
 ## 검증 결과
 
-- `npm test`: 60/60 통과
+- `npm test`: 61/61 통과
 - `npm run lint`: 통과
 - `npx tsc --noEmit --noUnusedLocals --noUnusedParameters --incremental false`: 통과
 - `npx --yes knip --reporter compact`: 경고 0건
@@ -63,7 +66,7 @@
 - `$env:BUILD_TARGET='cloudrun'; npm run build`: 통과
 - Git 추적 파일의 비밀 키·제공된 레퍼런스 비밀번호 패턴: 발견 0건
 - Markdown 상대 링크: 끊어진 링크 0건
-- Cloud Run `wonybananabot-00027-scn`: 트래픽 100%, 배포 후 오류 로그 0건
+- Cloud Run `wonybananabot-00028-wrc`: 트래픽 100%, 컨테이너 정상 기동, 배포 후 오류 로그 0건
 - 운영 `/terms`, `/privacy`, `/refund`: 비로그인 200; `/api/credits`: 비로그인 401
 - 운영 카카오 OAuth callback, 로그인 홈, 계정 설정과 보안 헤더: 정상
 

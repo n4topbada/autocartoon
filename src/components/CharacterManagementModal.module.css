@@ -14,8 +14,8 @@
   max-height: calc(100vh - 36px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: #171717;
-  border: 1px solid #343434;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 20px;
   display: flex;
@@ -65,7 +65,7 @@
 }
 
 .section h3 {
-  color: #c8c8c8;
+  color: var(--text);
   font-size: 13px;
 }
 
@@ -116,7 +116,7 @@
 
 .viewLabel {
   padding: 6px 8px;
-  color: #bbb;
+  color: var(--text-dim);
   font-size: 11px;
   font-weight: 700;
   border-bottom: 1px solid var(--border);
@@ -134,7 +134,7 @@
 .uploadSlot {
   border: 0;
   color: var(--text-dim);
-  background: #202020;
+  background: var(--surface-subtle);
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -144,7 +144,7 @@
 
 .uploadSlot:hover {
   color: var(--text);
-  background: #282828;
+  background: var(--surface-hover);
 }
 
 .imageTools {
@@ -168,14 +168,14 @@
   min-width: 0;
   border: 1px solid var(--border);
   border-radius: 5px;
-  background: #222;
+  background: var(--surface);
   color: var(--text);
   font-size: 11px;
 }
 
 .imageTools .repActive {
-  border-color: #d8aa3a;
-  color: #f2c14e;
+  border-color: var(--warning);
+  color: var(--warning);
 }
 
 .defaultButton,
@@ -193,9 +193,9 @@
 }
 
 .defaultActive {
-  border-color: #d8aa3a;
-  background: rgba(216, 170, 58, 0.12);
-  color: #f2c14e;
+  border-color: var(--warning);
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
 .searchBox {
@@ -256,8 +256,8 @@
 .defaultBadge {
   padding: 1px 6px;
   border-radius: 999px;
-  background: #49b9a8;
-  color: #04211d;
+  background: var(--success-soft);
+  color: var(--success);
   font-size: 10px;
   font-weight: 700;
 }
@@ -291,7 +291,7 @@
 
 .voiceSelected {
   border-color: var(--accent);
-  background: rgba(108, 92, 231, 0.12);
+  background: var(--accent-soft);
 }
 
 .voiceSelect {
@@ -352,13 +352,15 @@
 }
 
 .error {
-  border-color: rgba(231, 76, 60, 0.45);
-  color: #ffaaa1;
+  border-color: var(--danger-border);
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .success {
-  border-color: rgba(46, 204, 113, 0.4);
-  color: #8ce7b2;
+  border-color: var(--success-border);
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .footer {
@@ -392,13 +394,13 @@
 }
 
 .footer .deletePresetButton {
-  border-color: rgba(231, 76, 60, 0.5);
-  background: rgba(231, 76, 60, 0.08);
-  color: #ffaaa1;
+  border-color: var(--danger-border);
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .footer .deletePresetButton:hover:not(:disabled) {
-  background: rgba(231, 76, 60, 0.18);
+  background: #f5ddda;
 }
 
 .footer button:disabled {

@@ -156,7 +156,7 @@
   flex-shrink: 0;
 }
 
-.rowDeleteBtn:hover { color: #ef4444; }
+.rowDeleteBtn:hover { color: var(--danger); }
 
 /* 슬롯 가로 스크롤 */
 .slotsScroll {
@@ -231,7 +231,7 @@
 }
 
 .slot:hover .slotRemove { opacity: 1; }
-.slotRemove:hover { background: #ef4444; }
+.slotRemove:hover { background: var(--danger); }
 
 .addSlot {
   width: 90px;

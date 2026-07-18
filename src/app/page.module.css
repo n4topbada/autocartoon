@@ -8,35 +8,41 @@
 }
 
 .header {
-  padding: 10px 24px;
+  min-height: 64px;
+  padding: 8px 20px;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  z-index: 20;
 }
 
 .headerRight {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
 .adminUserSelectCompact {
-  background: var(--surface);
+  min-height: 36px;
+  background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 6px;
   color: var(--text);
   font-size: 12px;
-  padding: 4px 8px;
+  padding: 4px 9px;
   max-width: 120px;
 }
 
 .chatToggleBtn {
-  background: none;
+  background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 50%;
-  width: 46px;
-  height: 46px;
+  border-radius: 6px;
+  width: 38px;
+  height: 38px;
   padding: 0;
   overflow: hidden;
   display: flex;
@@ -48,13 +54,13 @@
 }
 
 .chatToggleBtn:hover {
-  color: var(--accent);
   border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .robotWonyIcon {
-  width: 42px;
-  height: 42px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -65,7 +71,7 @@
   background: transparent;
   font-size: 17px;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--text);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -80,14 +86,14 @@
 }
 
 .logoEmoji {
-  font-size: 24px;
+  font-size: 22px;
 }
 
 .tabNav {
   flex: 1;
   display: flex;
   flex-wrap: nowrap;
-  gap: 4px;
+  gap: 2px;
   margin-left: auto;
   min-width: 0;
   align-items: center;
@@ -103,10 +109,11 @@
 
 .tab {
   flex: 0 0 auto;
-  padding: 6px 11px;
+  min-height: 36px;
+  padding: 0 11px;
   background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid transparent;
+  border-radius: 6px;
   color: var(--text-dim);
   font-size: 13px;
   font-weight: 500;
@@ -125,9 +132,32 @@
 }
 
 .tabActive {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
+  background: var(--accent-soft);
+  border-color: #cbd8d0;
+  color: var(--accent-hover);
+}
+
+.utilityTab {
+  min-height: 38px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.utilityTab:hover,
+.utilityTabActive {
+  border-color: var(--border-strong);
+  background: var(--lavender-soft);
+  color: var(--text);
 }
 
 /* 관리자 유저 전환 바 */
@@ -187,6 +217,7 @@
   flex-shrink: 0;
   overflow-x: auto;
   scrollbar-width: none;
+  background: var(--surface-subtle);
 }
 
 .workspaceTabs::-webkit-scrollbar {
@@ -216,9 +247,10 @@
 }
 
 .workspaceTabActive {
-  border-color: var(--border);
-  color: var(--text);
+  border-color: var(--border-strong);
+  color: var(--accent-hover);
   background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .workspaceTabCount {
@@ -414,7 +446,7 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   aspect-ratio: 2 / 1;
-  background: #111;
+  background: var(--surface-subtle);
 }
 
 .characterLibraryViews img,
@@ -454,7 +486,7 @@
 }
 
 .characterLibraryActions button:last-child {
-  color: #ffaaa1;
+  color: var(--danger);
 }
 
 .characterLibraryEmpty {
@@ -665,8 +697,8 @@
 }
 
 .tagClearAll:hover {
-  border-color: #ef4444;
-  color: #ef4444;
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 /* 배경 라벨 */
@@ -1094,8 +1126,8 @@
 
 .favFilterActive {
   background: rgba(220, 38, 38, 0.1);
-  border-color: #dc2626;
-  color: #dc2626;
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 /* ===== 통합 갤러리 ===== */
@@ -1172,7 +1204,7 @@
 }
 
 .galleryFavorited {
-  color: #ef4444 !important;
+  color: var(--danger) !important;
 }
 
 .galleryDeleteBtn:hover {
@@ -1235,7 +1267,7 @@
 
 .tagFilterDelete:hover {
   opacity: 1;
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .tagDot {
@@ -1416,7 +1448,7 @@
 }
 
 .promptPresetDelete:hover {
-  color: #ef4444;
+  color: var(--danger);
 }
 
 /* Toast */
@@ -1769,7 +1801,7 @@
   .workspaceTabs { padding: 7px 12px; }
   .workspaceBody { min-height: calc(100vh - 160px); }
   .chatToggleBtn { width: 38px; height: 38px; }
-  .robotWonyIcon { width: 36px; height: 36px; }
+  .robotWonyIcon { width: 30px; height: 30px; }
 
   .main { flex-direction: column; }
   .sidebar {
@@ -1790,6 +1822,35 @@
   .skeletonPulse { width: 100%; aspect-ratio: 1; height: auto; }
 
   .galleryFilters { flex-wrap: wrap; }
+}
+
+@media (max-width: 430px) {
+  .header { gap: 6px; }
+  .logoEmoji { font-size: 19px; }
+  .utilityTab { width: 38px; padding: 0; }
+  .utilityTab span { display: none; }
+  .adminUserSelectCompact { display: none; }
+}
+
+@media (max-width: 540px) {
+  .tabNav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0;
+    overflow: visible;
+  }
+
+  .tab {
+    width: 100%;
+    min-width: 0;
+    padding: 0 2px;
+    justify-content: center;
+    font-size: 10.5px;
+  }
+
+  .tab svg {
+    display: none;
+  }
 }
 
 /* ─── Transform 모드 슬롯 ─── */
@@ -1816,18 +1877,18 @@
 }
 
 .transformSlot:nth-child(1) {
-  background: rgba(124, 58, 237, 0.06);
-  border-color: rgba(124, 58, 237, 0.2);
+  background: var(--blue-soft);
+  border-color: #c5d7df;
 }
 
 .transformSlot:nth-child(2) {
-  background: rgba(124, 58, 237, 0.12);
-  border-color: rgba(124, 58, 237, 0.28);
+  background: var(--lavender-soft);
+  border-color: #d1c9df;
 }
 
 .transformSlot:nth-child(3) {
-  background: rgba(124, 58, 237, 0.20);
-  border-color: rgba(124, 58, 237, 0.35);
+  background: var(--peach-soft);
+  border-color: #dec9be;
 }
 
 .slotNumber {

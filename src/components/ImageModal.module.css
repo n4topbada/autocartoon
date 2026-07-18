@@ -38,7 +38,7 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #1f2937;
+  background: var(--surface);
   border: none;
   color: white;
   display: flex;

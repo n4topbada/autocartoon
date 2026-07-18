@@ -5,7 +5,7 @@
   align-items: center;
   justify-content: center;
   gap: 20px;
-  background: #0a0a0a;
+  background: var(--bg);
   padding: 20px;
 }
 
@@ -24,10 +24,11 @@
 .card {
   width: 400px;
   max-width: 100%;
-  background: #111827;
-  border: 1px solid #1f2937;
-  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   padding: 40px 32px;
+  box-shadow: var(--shadow-md);
 }
 
 .logoIcon {
@@ -41,20 +42,20 @@
   height: 80px;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid #374151;
+  border: 2px solid var(--border);
 }
 
 .logo {
   font-size: 28px;
   font-weight: 800;
-  color: #818cf8;
+  color: var(--accent);
   text-align: center;
   margin-bottom: 4px;
 }
 
 .subtitle {
   text-align: center;
-  color: #6b7280;
+  color: var(--text-dim);
   font-size: 14px;
   margin-bottom: 32px;
 }
@@ -85,40 +86,40 @@
   align-items: center;
   border: 0;
   background: transparent;
-  color: #93c5fd;
+  color: var(--accent);
   font-size: 12px;
 }
 
 .forgotButton:hover {
-  color: #bfdbfe;
+  color: var(--accent-hover);
   text-decoration: underline;
 }
 
 .label {
   font-size: 13px;
   font-weight: 600;
-  color: #9ca3af;
+  color: var(--text-dim);
 }
 
 .input {
   padding: 10px 14px;
-  background: #1f2937;
-  border: 1px solid #374151;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  color: #f3f4f6;
+  color: var(--text);
   font-size: 14px;
   outline: none;
   transition: border-color 0.15s;
 }
 
 .input:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .loginBtn {
   padding: 12px;
-  background: #4f46e5;
+  background: var(--accent);
   border: none;
   border-radius: 8px;
   color: white;
@@ -133,7 +134,7 @@
 }
 
 .loginBtn:hover:not(:disabled) {
-  background: #4338ca;
+  background: var(--accent-hover);
 }
 
 .loginBtn:disabled {
@@ -170,30 +171,30 @@
 }
 
 .googleBtn {
-  border: 1px solid #4b5563;
-  background: #f8fafc;
-  color: #1f2937;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
 }
 
 .googleBtn:hover {
-  background: #e5e7eb;
+  background: var(--surface-hover);
 }
 
 .error {
-  color: #ef4444;
+  color: var(--danger);
   font-size: 13px;
   text-align: center;
 }
 
 .success {
-  color: #34d399;
+  color: var(--success);
   font-size: 13px;
   text-align: center;
 }
 
 .divider {
   height: 1px;
-  background: #1f2937;
+  background: var(--border);
   margin: 24px 0;
 }
 
@@ -201,33 +202,33 @@
   width: 100%;
   padding: 12px;
   background: transparent;
-  border: 1px solid #374151;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  color: #d1d5db;
+  color: var(--text);
   font-size: 14px;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .registerBtn:hover {
-  background: #1f2937;
-  border-color: #4f46e5;
+  background: var(--surface-hover);
+  border-color: var(--accent);
 }
 
 .cancelBtn {
   width: 100%;
   padding: 10px;
   background: transparent;
-  border: 1px solid #374151;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  color: #9ca3af;
+  color: var(--text-dim);
   font-size: 14px;
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .cancelBtn:hover {
-  background: #1f2937;
+  background: var(--surface-hover);
 }
 
 /* 회원가입 모달 */
@@ -243,9 +244,9 @@
 
 .modal {
   position: relative;
-  background: #111827;
-  border: 1px solid #1f2937;
-  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   padding: 32px;
   width: 400px;
   max-width: 90vw;
@@ -264,12 +265,12 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: #9ca3af;
+  color: var(--text-dim);
 }
 
 .modalClose:hover {
-  background: #1f2937;
-  color: #f3f4f6;
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .modalIcon {
@@ -279,16 +280,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(96, 165, 250, 0.4);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: rgba(96, 165, 250, 0.1);
-  color: #93c5fd;
+  background: var(--blue-soft);
+  color: var(--accent);
 }
 
 .modalTitle {
   font-size: 20px;
   font-weight: 700;
-  color: #f3f4f6;
+  color: var(--text);
   text-align: center;
   margin-bottom: 24px;
 }
@@ -303,7 +304,7 @@
 
 .modalDescription {
   margin: -12px 0 22px;
-  color: #9ca3af;
+  color: var(--text-dim);
   font-size: 13px;
   line-height: 1.55;
   text-align: center;

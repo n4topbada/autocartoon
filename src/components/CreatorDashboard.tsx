@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
-  LuArchive,
   LuArrowRight,
   LuCheck,
   LuChevronDown,
@@ -14,15 +13,14 @@ import {
   LuImage,
   LuLoaderCircle,
   LuMegaphone,
-  LuPaintbrush,
-  LuPlus,
   LuRefreshCw,
   LuUsers,
 } from "react-icons/lu";
 import { ANNOUNCEMENT_CATEGORY_LABELS, type AnnouncementCategory } from "@/lib/announcements";
 import styles from "./CreatorDashboard.module.css";
 
-type DashboardTab = "character" | "characterCreator" | "background" | "contents";
+type DashboardTab = "character" | "characterCreator" | "contents";
+type WorkView = "archive" | "characters";
 
 interface DashboardData {
   user: { name: string | null; credits: number; tier: string; tierUsedThisMonth: number };
@@ -93,7 +91,7 @@ function relativeTime(value: string) {
   return new Date(value).toLocaleDateString("ko-KR");
 }
 
-export default function CreatorDashboard({ onNavigate }: { onNavigate: (tab: DashboardTab) => void }) {
+export default function CreatorDashboard({ onNavigate }: { onNavigate: (tab: DashboardTab, workView?: WorkView) => void }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -141,8 +139,8 @@ export default function CreatorDashboard({ onNavigate }: { onNavigate: (tab: Das
 
   const stats = [
     { label: "보유 크레딧", value: data.user.credits, icon: <LuCoins />, href: "/credits" },
-    { label: "내 캐릭터", value: data.counts.characters, icon: <LuUsers />, action: () => onNavigate("contents") },
-    { label: "생성물", value: data.counts.outputs, icon: <LuImage />, href: "/archive" },
+    { label: "내 캐릭터", value: data.counts.characters, icon: <LuUsers />, action: () => onNavigate("contents", "characters") },
+    { label: "생성물", value: data.counts.outputs, icon: <LuImage />, action: () => onNavigate("contents", "archive") },
     { label: "프로젝트", value: data.counts.projects, icon: <LuClapperboard />, href: "/studio" },
   ];
   const workflow = [
@@ -222,7 +220,7 @@ export default function CreatorDashboard({ onNavigate }: { onNavigate: (tab: Das
 
       <div className={styles.columns}>
         <section className={styles.panel}>
-          <div className={styles.panelHeader}><div><span>최근 작업</span><strong>생성 대기열과 결과</strong></div><Link href="/archive">보관함 <LuArrowRight /></Link></div>
+          <div className={styles.panelHeader}><div><span>최근 작업</span><strong>생성 대기열과 결과</strong></div><button type="button" onClick={() => onNavigate("contents", "archive")}>보관함 <LuArrowRight /></button></div>
           <div className={styles.jobList}>
             {data.recentJobs.length === 0 ? <p className={styles.empty}>아직 생성 작업이 없습니다.</p> : data.recentJobs.map((job) => {
               const artifact = job.artifacts[0];
@@ -256,14 +254,6 @@ export default function CreatorDashboard({ onNavigate }: { onNavigate: (tab: Das
         </section>
       </div>
 
-      <section className={styles.quick} aria-label="빠른 실행">
-        <button type="button" onClick={() => onNavigate("characterCreator")}><LuPlus /><span><strong>캐릭터 만들기</strong><small>새 캐릭터 생성</small></span></button>
-        <button type="button" onClick={() => onNavigate("character")}><LuPaintbrush /><span><strong>장면 생성</strong><small>캐릭터 장면 제작</small></span></button>
-        <button type="button" onClick={() => onNavigate("background")}><LuImage /><span><strong>배경 생성</strong><small>저밀도 배경 제작</small></span></button>
-        <Link href="/studio?mode=gesture"><LuUsers /><span><strong>제스처 생성</strong><small>1인·2인 포즈</small></span></Link>
-        <Link href="/shorts"><LuFilm /><span><strong>숏폼 제작</strong><small>컷·음성 MP4 합성</small></span></Link>
-        <Link href="/archive"><LuArchive /><span><strong>작업 보관함</strong><small>생성물 검색·관리</small></span></Link>
-      </section>
     </div>
   );
 }

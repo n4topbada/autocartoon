@@ -1,12 +1,12 @@
 .shell {
-  --short-bg: #111110;
-  --short-panel: #181817;
-  --short-raised: #20201e;
-  --short-line: #343431;
-  --short-text: #ecece6;
-  --short-muted: #9a9a93;
-  --short-teal: #50bca9;
-  --short-red: #df6259;
+  --short-bg: var(--bg);
+  --short-panel: var(--surface);
+  --short-raised: var(--surface-subtle);
+  --short-line: var(--border);
+  --short-text: var(--text);
+  --short-muted: var(--text-dim);
+  --short-teal: var(--accent);
+  --short-red: var(--danger);
   /* 고정 높이 flex 셸: 에러 배너가 떠도 워크스페이스가 남은 높이를 정확히 채워
      페이지 스크롤 + 내부 열 스크롤이 겹치는 이중 스크롤을 없앤다(모바일에서 아래 미디어쿼리로 해제). */
   height: 100dvh;
@@ -23,8 +23,8 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  background: #111110;
-  color: #aaa9a3;
+  background: var(--bg);
+  color: var(--text-dim);
   font-size: 13px;
 }
 
@@ -39,7 +39,7 @@
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid var(--short-line);
-  background: rgba(17, 17, 16, 0.97);
+  background: rgba(255, 255, 255, 0.97);
 }
 
 .iconButton,
@@ -88,7 +88,7 @@
   border: 1px solid transparent;
   border-radius: 5px;
   outline: 0;
-  background: #171716;
+  background: var(--surface);
   color: var(--short-text);
   font-size: 12px;
 }
@@ -116,9 +116,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px solid #6b3834;
-  background: #311b19;
-  color: #f5bbb6;
+  border-bottom: 1px solid var(--danger-border);
+  background: var(--danger-soft);
+  color: var(--danger);
   font-size: 11px;
 }
 
@@ -181,9 +181,9 @@
 }
 
 .sourceTabs .activeTab {
-  border-color: #3f665f;
-  background: #1a2b28;
-  color: #dff8f3;
+  border-color: var(--border-strong);
+  background: var(--accent-soft);
+  color: #fff;
 }
 
 .projectList {
@@ -212,7 +212,7 @@
 }
 
 .projectList > button:hover:not(:disabled) {
-  background: #20201e;
+  background: var(--surface-subtle);
 }
 
 .projectList > button:disabled {
@@ -221,8 +221,8 @@
 }
 
 .projectList .projectActive {
-  border-color: #406a62;
-  background: #1c2c29;
+  border-color: var(--border-strong);
+  background: var(--accent-soft);
 }
 
 .projectList button > span {
@@ -232,7 +232,7 @@
   place-items: center;
   overflow: hidden;
   border-radius: 4px;
-  background: #292927;
+  background: var(--surface-subtle);
 }
 
 .projectList img {
@@ -280,9 +280,9 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px dashed #4a5f5b;
+  border: 1px dashed var(--border-strong);
   border-radius: 6px;
-  background: #141817;
+  background: var(--accent-soft);
   color: var(--short-muted);
   text-align: center;
 }
@@ -306,17 +306,17 @@
   min-height: 34px;
   margin-top: 6px;
   padding: 6px 11px;
-  border: 1px solid #477069;
+  border: 1px solid var(--border-strong);
   border-radius: 5px;
-  background: #1d302c;
-  color: #dff8f3;
+  background: var(--accent-soft);
+  color: #fff;
   font-size: 10px;
   cursor: pointer;
 }
 
 .editor {
   min-width: 0;
-  background: #131312;
+  background: var(--surface-subtle);
 }
 
 .editorHeader {
@@ -352,7 +352,7 @@
   gap: 5px;
   border: 1px solid var(--short-line);
   border-radius: 5px;
-  background: #1b1b1a;
+  background: var(--surface);
   color: var(--short-muted);
   font-size: 9px;
   cursor: pointer;
@@ -403,8 +403,8 @@
   display: grid;
   place-items: center;
   border-radius: 4px;
-  background: #2c4d47;
-  color: #dff8f3;
+  background: var(--accent-soft);
+  color: #fff;
   font-size: 10px;
   font-weight: 800;
 }
@@ -432,7 +432,7 @@
   height: 100%;
   min-height: 142px;
   border-right: 1px solid var(--short-line);
-  background: #292927;
+  background: var(--surface-subtle);
   object-fit: cover;
 }
 
@@ -455,7 +455,7 @@
   border: 1px solid var(--short-line);
   border-radius: 4px;
   outline: 0;
-  background: #111110;
+  background: var(--bg);
   color: var(--short-text);
   font-size: 10px;
 }
@@ -523,7 +523,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border: 1px dashed #465d58;
+  border: 1px dashed var(--border-strong);
   border-radius: 4px;
   background: transparent;
   color: var(--short-muted);
@@ -612,7 +612,7 @@
   border: 1px solid var(--short-line);
   border-radius: 4px;
   outline: 0;
-  background: #111110;
+  background: var(--bg);
   color: var(--short-text);
   font-size: 9px;
 }
@@ -636,7 +636,7 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   border: 1px solid var(--short-line);
   border-radius: 5px;
-  background: #111110;
+  background: var(--bg);
 }
 
 .resolutionControl button {
@@ -649,8 +649,8 @@
 }
 
 .resolutionControl .resolutionActive {
-  background: #2a514a;
-  color: #e8faf6;
+  background: var(--accent);
+  color: #fff;
 }
 
 .storageToggle {
@@ -697,7 +697,7 @@
   gap: 5px;
   border: 1px solid var(--short-line);
   border-radius: 4px;
-  background: #1d1d1b;
+  background: var(--surface-subtle);
   color: var(--short-text);
   font-size: 9px;
   text-decoration: none;
@@ -718,7 +718,7 @@
   gap: 7px;
   border-top: 1px solid var(--short-line);
   border-left: 1px solid var(--short-line);
-  background: rgba(24, 24, 23, 0.98);
+  background: rgba(255, 255, 255, 0.98);
 }
 
 .generateArea > span {
@@ -731,7 +731,7 @@
   height: 4px;
   overflow: hidden;
   border-radius: 2px;
-  background: #30302d;
+  background: var(--border);
 }
 
 .progress span {
@@ -756,8 +756,8 @@
 }
 
 .generateButton {
-  border: 1px solid #62c9b7;
-  background: #347a6f;
+  border: 1px solid var(--accent);
+  background: var(--accent);
 }
 
 .generateButton:disabled {
@@ -766,8 +766,8 @@
 }
 
 .cancelButton {
-  border: 1px solid #a74e48;
-  background: #743a36;
+  border: 1px solid var(--danger-border);
+  background: var(--danger);
 }
 
 .spin {

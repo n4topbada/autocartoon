@@ -23,7 +23,7 @@ GitHub: `https://github.com/n4topbada/autocartoon`
 | 항목 | 현재 값 |
 | --- | --- |
 | GCP project | `wonybananabot` |
-| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-18 검증 리비전 `wonybananabot-00027-scn` |
+| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-18 검증 리비전 `wonybananabot-00028-wrc` |
 | Cloud SQL | `wony-postgres`, PostgreSQL 16 |
 | Cloud Tasks | `wony-jobs`, `asia-northeast3`; 동시 10, 초당 5, 최대 5회 재시도 |
 | GCS | `wonybananabot-media`, private. 브라우저 직접 업로드 CORS는 `scripts/gcs-cors.json` 기준 |
@@ -34,6 +34,31 @@ GitHub: `https://github.com/n4topbada/autocartoon`
 Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`를 명시한다. `APP_ORIGIN`과 카카오 Redirect URI는 현재 Cloud Run URL을 사용하고, 자체 도메인 연결 시 새 도메인을 추가한 뒤 기존 URI를 안정화 기간 동안 함께 유지한다.
 
 ## 3. 현재 제품 기능
+
+### 정보 구조와 공통 실행
+
+- 상단 핵심 메뉴는 `캐릭터 | 배경/장면 | 통합 스튜디오 | 숏폼 | 내 작업` 5개다.
+- 게시판과 WonyBot은 보조 동선으로 나란히 두고, 계정 아이콘은 우측 끝에서 설정·로그아웃을 담당한다.
+- 캐릭터에는 이미지 만들기·설정 설계·제스처, 배경/장면에는 장면 만들기·배경 만들기, 내 작업에는 작업 보관함·내 캐릭터·My Content가 있다.
+- 제스처는 프로젝트 밖 재사용 자산, 스튜디오의 `컷 포즈`는 현재 컷 즉시 작업이다. 둘 다 같은 생성 작업·산출물·보관함을 쓰며 고급 캔버스가 제스처 자산을 읽는다.
+- 배경은 재사용 공간 자산, 장면은 캐릭터와 배경의 조합 결과다. 저장한 배경은 장면 선택 목록과 스튜디오 자산에 즉시 반영된다.
+- 첫 화면의 하단 제작 바로가기는 상단 메뉴와 완전히 중복되어 제거했다.
+- 전역 UI는 밝은 회녹색 바탕, 흰 표면, 세이지·라벤더·블루·피치 보조색과 6px 이하 버튼 반경을 사용한다.
+
+```mermaid
+flowchart LR
+  C["캐릭터"] --> CI["이미지"]
+  C --> CD["설정 설계"]
+  C --> G["제스처 자산"]
+  BS["배경/장면"] --> B["배경 자산"]
+  BS --> S["장면 결과"]
+  G --> A["GenerationArtifact / 작업 보관함"]
+  B --> A
+  S --> A
+  A --> ST["통합 스튜디오 / 고급 캔버스"]
+  ST --> V["숏폼 / Veo"]
+  A --> W["내 작업"]
+```
 
 ### 인증·개인화
 
@@ -98,8 +123,14 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 - 정적 데드코드·중복 의존성·오래된 HTML/Markdown 정리와 Knip 경고 0건
 - 홈 버튼을 없애고 로고를 홈 동선으로 고정, `더보기`의 작업 메뉴를 1단 상단 메뉴로 전개
 - 계정 설정을 사용자 아이콘 메뉴로, 캐릭터 설계를 `캐릭터 만들기`로, 내 캐릭터를 `My Contents`로 통합
+- 9개 제작 메뉴를 5개 핵심 메뉴로 재구성하고 게시판·WonyBot·계정 아이콘을 우측 보조 동선으로 분리
+- 제스처를 캐릭터 내부 재사용 자산 생성기로 구현하고 보관함·고급 캔버스 자산과 같은 산출물 파이프라인으로 연결
+- 배경과 장면을 한 작업공간으로 통합하고 저장 배경을 장면 선택 상태에 즉시 연결
+- 작업 보관함·내 캐릭터·My Content를 `내 작업`으로 통합하고 첫 화면의 중복 제작 바로가기를 삭제
+- 비활성 제스처·배경·보관함 패널의 조회·폴링을 중단해 숨은 네트워크 비용 제거
+- 전체 화면을 톤다운된 밝은 파스텔 팔레트와 현대적인 도구형 버튼으로 전환하고 390px에서 5개 메뉴를 모두 검증
 
-운영 반영 상태: 기존 마이그레이션 실행 `wony-prisma-migrate-99klj`는 성공 상태다. 정보 구조 통합 변경을 담은 리비전 `wonybananabot-00027-scn`에 트래픽 100%를 연결했다. 운영 9개 1단 메뉴, 계정 아이콘 설정, 캐릭터 만들기와 My Contents 내부 탭, 390px 모바일 폭, 비로그인 정책 페이지 3종 `200`, 보호 API `401`, 전역 보안 헤더와 해당 리비전 오류 로그 0건을 확인했다. 이번 변경에는 DB 마이그레이션이 없다.
+운영 반영 상태: 기존 마이그레이션 실행 `wony-prisma-migrate-99klj`는 성공 상태다. 5개 핵심 메뉴, 공통 제스처·배경 자산 흐름과 밝은 UI를 담은 리비전 `wonybananabot-00028-wrc`에 트래픽 100%를 연결했다. Cloud SQL 연결, 서비스 계정, 최대 4 인스턴스, 동시성 80, 600초 제한을 그대로 유지했다. 390px 모바일 폭, 비로그인 정책 페이지 3종 `200`, 보호 프리셋 API `401`, 전역 보안 헤더와 해당 리비전 오류 로그 0건을 확인했다. 이번 변경에는 DB 마이그레이션이 없다.
 
 ## 5. 레퍼런스 대비 기능상 남은 항목
 
@@ -145,7 +176,7 @@ gcloud tasks queues update wony-jobs --project=wonybananabot --location=asia-nor
 
 1. `/login`과 카카오 로그인 콜백
 2. 로고 홈 이동, 사용자 아이콘 계정 설정, 1단 메뉴, 게시판·보관함·스튜디오·숏폼
-3. 캐릭터 만들기의 이미지/설정 설계 탭과 My Contents의 내 캐릭터/콘텐츠 보드 탭
+3. 캐릭터의 이미지/설정 설계/제스처, 배경/장면, 내 작업의 보관함/내 캐릭터/My Content 탭
 4. Vertex 텍스트와 이미지 실제 작업
 5. Cloud Tasks 큐, GCS 산출물, DB job/artifact, 완료 알림
 6. Cloud Run 최근 오류 로그

@@ -25,7 +25,7 @@
 
 .eyebrow {
   margin: 0 0 4px;
-  color: #60a5fa;
+  color: var(--accent);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -41,7 +41,7 @@
 .headerIcon {
   width: 30px;
   height: 30px;
-  color: #34d399;
+  color: var(--success);
 }
 
 .statePanel {
@@ -83,10 +83,10 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border: 1px solid #3b82f6;
+  border: 1px solid var(--accent);
   border-radius: 6px;
   background: transparent;
-  color: #93c5fd;
+  color: var(--accent);
   font-size: 12px;
   font-weight: 700;
 }
@@ -100,7 +100,7 @@
   width: 22px;
   height: 22px;
   flex: 0 0 auto;
-  color: #60a5fa;
+  color: var(--accent);
 }
 
 .spinner {
@@ -123,7 +123,7 @@
   border: 1px solid rgba(245, 158, 11, 0.45);
   border-radius: 8px;
   background: rgba(245, 158, 11, 0.08);
-  color: #fbbf24;
+  color: var(--warning);
 }
 
 .temporaryNotice div {
@@ -134,12 +134,12 @@
 }
 
 .temporaryNotice strong {
-  color: #fde68a;
+  color: var(--warning);
   font-size: 14px;
 }
 
 .temporaryNotice span {
-  color: #d1d5db;
+  color: var(--text);
   font-size: 13px;
   line-height: 1.45;
 }
@@ -166,7 +166,7 @@
   align-items: center;
   gap: 9px;
   margin-bottom: 20px;
-  color: #93c5fd;
+  color: var(--accent);
 }
 
 .panelHeading h3 {
@@ -218,7 +218,7 @@
 
 .connectionBadge {
   background: rgba(34, 197, 94, 0.12);
-  color: #4ade80;
+  color: var(--success);
 }
 
 .connectionButton {
@@ -250,7 +250,7 @@
 }
 
 .field > label {
-  color: #cbd5e1;
+  color: var(--text);
   font-size: 12px;
   font-weight: 600;
 }
@@ -265,16 +265,16 @@
   min-width: 0;
   height: 42px;
   padding: 0 44px 0 12px;
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #111;
+  background: var(--surface-subtle);
   color: var(--text);
   font-size: 13px;
   outline: none;
 }
 
 .passwordInput input:focus {
-  border-color: #60a5fa;
+  border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.14);
 }
 
@@ -310,7 +310,7 @@
 .error {
   border: 1px solid rgba(239, 68, 68, 0.35);
   background: rgba(239, 68, 68, 0.08);
-  color: #fca5a5;
+  color: var(--danger);
 }
 
 .success {
@@ -319,7 +319,7 @@
   gap: 6px;
   border: 1px solid rgba(52, 211, 153, 0.35);
   background: rgba(52, 211, 153, 0.08);
-  color: #6ee7b7;
+  color: var(--success);
 }
 
 .submitButton {
@@ -328,16 +328,16 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px solid #2563eb;
+  border: 1px solid var(--accent);
   border-radius: 6px;
-  background: #2563eb;
+  background: var(--accent);
   color: #fff;
   font-size: 13px;
   font-weight: 700;
 }
 
 .submitButton:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: var(--accent-hover);
 }
 
 .submitButton:disabled {
@@ -371,10 +371,10 @@
 .revokeOthers {
   min-height: 34px;
   padding: 0 10px;
-  border: 1px solid #4a4a4a;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: transparent;
-  color: #cbd5e1;
+  color: var(--text);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -382,8 +382,8 @@
 }
 
 .revokeOthers:hover:not(:disabled) {
-  border-color: #ef4444;
-  color: #fca5a5;
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .revokeOthers:disabled {
@@ -404,7 +404,7 @@
   grid-template-columns: 28px minmax(0, 1fr) 34px;
   align-items: center;
   gap: 10px;
-  color: #93c5fd;
+  color: var(--accent);
 }
 
 .sessionItem > div {
@@ -426,7 +426,7 @@
   padding: 2px 5px;
   border-radius: 4px;
   background: rgba(52, 211, 153, 0.12);
-  color: #6ee7b7;
+  color: var(--success);
   font-size: 9px;
 }
 
@@ -448,8 +448,8 @@
 }
 
 .sessionItem > button:hover:not(:disabled) {
-  border-color: #ef4444;
-  color: #fca5a5;
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .sessionLoading {
@@ -473,7 +473,7 @@
 
 .dangerHeading .panelHeading {
   margin-bottom: 8px;
-  color: #f87171;
+  color: var(--danger);
 }
 
 .dangerDescription {
@@ -509,7 +509,7 @@
   flex: 0 0 auto;
   border: 1px solid rgba(239, 68, 68, 0.55);
   background: transparent;
-  color: #fca5a5;
+  color: var(--danger);
 }
 
 .withdrawOpenButton:hover {
@@ -531,16 +531,16 @@
   min-width: 0;
   height: 42px;
   padding: 0 12px;
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #111;
+  background: var(--surface-subtle);
   color: var(--text);
   font-size: 13px;
   outline: none;
 }
 
 .withdrawForm input:focus {
-  border-color: #ef4444;
+  border-color: var(--danger);
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.12);
 }
 
@@ -558,12 +558,12 @@
 .withdrawCancelButton {
   border: 1px solid var(--border);
   background: transparent;
-  color: #cbd5e1;
+  color: var(--text);
 }
 
 .withdrawConfirmButton {
-  border: 1px solid #dc2626;
-  background: #dc2626;
+  border: 1px solid var(--danger);
+  background: var(--danger);
   color: #fff;
 }
 

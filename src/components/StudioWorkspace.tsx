@@ -1479,27 +1479,27 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
         </aside>
 
         <main className={styles.stageColumn}>
-          <div className={styles.modeBar} aria-label="생성 모드">
+          <div className={styles.modeBar} aria-label="현재 컷 작업">
             <button
               className={mode === "scene" ? styles.modeActive : ""}
               aria-pressed={mode === "scene"}
               onClick={() => setMode("scene")}
             >
-              <LuImage /> 장면
+              <LuImage /> 컷 이미지
             </button>
             <button
               className={mode === "gesture" ? styles.modeActive : ""}
               aria-pressed={mode === "gesture"}
               onClick={() => setMode("gesture")}
             >
-              <LuWandSparkles /> 제스처
+              <LuWandSparkles /> 컷 포즈
             </button>
             <button
               className={mode === "video" ? styles.modeActive : ""}
               aria-pressed={mode === "video"}
               onClick={() => setMode("video")}
             >
-              <LuVideo /> Veo 영상
+              <LuVideo /> 컷 영상
             </button>
           </div>
 

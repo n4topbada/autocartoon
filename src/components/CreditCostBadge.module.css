@@ -7,10 +7,10 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
-  border: 1px solid #5d5737;
+  border: 1px solid #dfcf99;
   border-radius: 5px;
-  background: #252318;
-  color: #f0d66d;
+  background: var(--warning-soft);
+  color: var(--warning);
   font-size: 10px;
   font-weight: 700;
   line-height: 1;

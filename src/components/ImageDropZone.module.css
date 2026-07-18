@@ -3,7 +3,7 @@
   min-height: 200px;
   border: 2px dashed var(--border);
   border-radius: var(--radius);
-  background: #111827;
+  background: var(--surface-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -19,12 +19,12 @@
 .dropZone:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(108, 92, 231, 0.3);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .dragOver {
   border-color: var(--accent);
-  background: rgba(108, 92, 231, 0.08);
+  background: var(--accent-soft);
 }
 
 .disabled {
@@ -42,7 +42,7 @@
   width: 48px;
   height: 48px;
   margin: 0 auto 8px;
-  color: #6b7280;
+  color: var(--text-dim);
 }
 
 .placeholderText {
@@ -77,10 +77,10 @@
   bottom: 8px;
   left: 8px;
   padding: 6px 8px;
-  border: 1px solid #8f4e48;
+  border: 1px solid var(--danger-border);
   border-radius: 4px;
-  background: rgba(69, 29, 27, 0.94);
-  color: #ffd7d2;
+  background: color-mix(in srgb, var(--danger-soft) 94%, transparent);
+  color: var(--danger);
   font-size: 11px;
   text-align: center;
 }

@@ -33,7 +33,19 @@ interface BackgroundHistoryJob {
   artifacts: BackgroundHistoryArtifact[];
 }
 
-export default function BackgroundGenerator() {
+interface SavedBackgroundResult {
+  id: string;
+  name: string;
+  dataUrl: string;
+  thumbnailUrl?: string;
+}
+
+interface BackgroundGeneratorProps {
+  active?: boolean;
+  onBackgroundSaved?: (background: SavedBackgroundResult) => void;
+}
+
+export default function BackgroundGenerator({ active = true, onBackgroundSaved }: BackgroundGeneratorProps) {
   const [cards, setCards] = useState<CardEntry[]>([{ id: 1 }]);
   const [nextId, setNextId] = useState(2);
   const [modalSrc, setModalSrc] = useState<string | null>(null);
@@ -63,12 +75,13 @@ export default function BackgroundGenerator() {
   }, []);
 
   useEffect(() => {
+    if (!active) return;
     void loadHistory(true);
     const interval = window.setInterval(() => {
       if (document.visibilityState === "visible") void loadHistory();
     }, 30_000);
     return () => window.clearInterval(interval);
-  }, [loadHistory]);
+  }, [active, loadHistory]);
 
   const addCard = useCallback(() => {
     setCards((prev) => [{ id: nextId }, ...prev]);
@@ -125,7 +138,9 @@ export default function BackgroundGenerator() {
           mimeType: savingImage.mimeType,
         }),
       });
-      if (!res.ok) throw new Error("저장 실패");
+      const saved = await res.json().catch(() => ({})) as SavedBackgroundResult & { error?: string };
+      if (!res.ok) throw new Error(saved.error || "저장 실패");
+      onBackgroundSaved?.(saved);
       setSaveSuccess(true);
       setTimeout(() => {
         setSavingImage(null);

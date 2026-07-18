@@ -49,6 +49,8 @@ const InstagramTab = dynamic(() => import("@/components/InstagramTab"), { loadin
 const MyContents = dynamic(() => import("@/components/MyContents"), { loading: DeferredPanelLoader });
 const CharacterDesigner = dynamic(() => import("@/components/CharacterDesigner"), { loading: DeferredPanelLoader });
 const CharacterCreator = dynamic(() => import("@/components/CharacterCreator"), { loading: DeferredPanelLoader });
+const GestureGenerator = dynamic(() => import("@/components/GestureGenerator"), { loading: DeferredPanelLoader });
+const ArchiveBrowser = dynamic(() => import("@/components/ArchiveBrowser"), { loading: DeferredPanelLoader });
 const AccountSettings = dynamic(() => import("@/components/AccountSettings"), { loading: DeferredPanelLoader });
 const CanvasEditor = dynamic(() => import("@/components/CanvasEditor"), { loading: DeferredPanelLoader, ssr: false });
 const CharacterManagementModal = dynamic(
@@ -63,7 +65,6 @@ type Tab =
   | "home"
   | "character"
   | "characterCreator"
-  | "background"
   | "board"
   | "instagram"
   | "contents"
@@ -254,8 +255,9 @@ interface UserOption {
 export default function Home() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("home");
-  const [characterWorkspaceView, setCharacterWorkspaceView] = useState<"image" | "design">("image");
-  const [myContentsView, setMyContentsView] = useState<"characters" | "contents">("characters");
+  const [characterWorkspaceView, setCharacterWorkspaceView] = useState<"image" | "design" | "gesture">("image");
+  const [sceneWorkspaceView, setSceneWorkspaceView] = useState<"scene" | "background">("scene");
+  const [myContentsView, setMyContentsView] = useState<"archive" | "characters" | "contents">("archive");
   const [charGroups, setCharGroups] = useState<CharacterGroupData[]>([]);
   const [ungroupedPresets, setUngroupedPresets] = useState<Preset[]>([]);
   const [presetsLoading, setPresetsLoading] = useState(true);
@@ -1083,57 +1085,34 @@ export default function Home() {
         </button>
         <nav className={styles.tabNav} aria-label="주요 메뉴">
           <button
+            className={`${styles.tab} ${activeTab === "characterCreator" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("characterCreator")}
+          >
+            <LuUsers size={14} />
+            캐릭터
+          </button>
+          <button
             className={`${styles.tab} ${activeTab === "character" ? styles.tabActive : ""}`}
             onClick={() => setActiveTab("character")}
           >
             <LuPaintbrush size={14} />
-            장면 생성
-          </button>
-          <button
-            className={`${styles.tab} ${activeTab === "characterCreator" ? styles.tabActive : ""}`}
-            onClick={() => setActiveTab("characterCreator")}
-          >
-            <LuPlus size={14} />
-            캐릭터 만들기
-          </button>
-          <button
-            className={`${styles.tab} ${activeTab === "background" ? styles.tabActive : ""}`}
-            onClick={() => setActiveTab("background")}
-          >
-            <LuImage size={14} />
-            배경 생성
+            배경/장면
           </button>
           <Link className={styles.tab} href="/studio">
             <LuClapperboard size={14} />
             통합 스튜디오
           </Link>
-          <Link className={styles.tab} href="/studio?mode=gesture">
-            <LuPersonStanding size={14} />
-            제스처 생성
-          </Link>
           <Link className={styles.tab} href="/shorts">
             <LuFilm size={14} />
-            숏폼 제작
+            숏폼
           </Link>
-          <Link className={styles.tab} href="/archive">
-            <LuArchive size={14} />
-            작업 보관함
-          </Link>
-          <button
-            type="button"
-            className={`${styles.tab} ${activeTab === "board" ? styles.tabActive : ""}`}
-            onClick={() => setActiveTab("board")}
-          >
-            <LuLayoutList size={14} />
-            게시판
-          </button>
           <button
             type="button"
             className={`${styles.tab} ${activeTab === "contents" ? styles.tabActive : ""}`}
             onClick={() => setActiveTab("contents")}
           >
-            <LuFileText size={14} />
-            My Contents
+            <LuArchive size={14} />
+            내 작업
           </button>
           {/* Instagram 탭은 Meta 검수와 토큰 운영 완료 뒤 노출한다 (docs/instagram-setup.md). */}
         </nav>
@@ -1152,7 +1131,14 @@ export default function Home() {
             </select>
           )}
           <GenerationNotifications />
-          <UserAvatar onOpenSettings={() => setActiveTab("settings")} />
+          <button
+            type="button"
+            className={`${styles.utilityTab} ${activeTab === "board" ? styles.utilityTabActive : ""}`}
+            onClick={() => setActiveTab("board")}
+          >
+            <LuLayoutList size={15} />
+            <span>게시판</span>
+          </button>
           <button
             className={styles.chatToggleBtn}
             onClick={() => setChatOpen(!chatOpen)}
@@ -1160,13 +1146,16 @@ export default function Home() {
           >
             <img src="/robot-wony.png" alt="워니봇" className={styles.robotWonyIcon} />
           </button>
+          <UserAvatar onOpenSettings={() => setActiveTab("settings")} />
         </div>
       </header>
 
       <main className={styles.main}>
         {activeTab === "home" ? (
-          <CreatorDashboard onNavigate={(tab) => {
-            if (tab === "contents") setMyContentsView("characters");
+          <CreatorDashboard onNavigate={(tab, workView) => {
+            if (tab === "contents") setMyContentsView(workView || "archive");
+            if (tab === "character") setSceneWorkspaceView("scene");
+            if (tab === "characterCreator") setCharacterWorkspaceView("image");
             setActiveTab(tab);
           }} />
         ) : activeTab === "characterCreator" ? (
@@ -1192,6 +1181,16 @@ export default function Home() {
               >
                 <LuUserRoundCog size={15} /> 설정 설계
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={characterWorkspaceView === "gesture"}
+                aria-controls="character-gesture-panel"
+                className={`${styles.workspaceTab} ${characterWorkspaceView === "gesture" ? styles.workspaceTabActive : ""}`}
+                onClick={() => setCharacterWorkspaceView("gesture")}
+              >
+                <LuPersonStanding size={15} /> 제스처
+              </button>
             </div>
             <div className={styles.workspaceBody}>
               <div
@@ -1210,17 +1209,33 @@ export default function Home() {
               >
                 <CharacterDesigner />
               </div>
+              <div
+                id="character-gesture-panel"
+                className={styles.workspacePane}
+                role="tabpanel"
+                hidden={characterWorkspaceView !== "gesture"}
+              >
+                <GestureGenerator active={characterWorkspaceView === "gesture"} />
+              </div>
             </div>
           </section>
-        ) : activeTab === "background" ? (
-          <BackgroundGenerator />
         ) : activeTab === "board" ? (
           <Board />
         ) : activeTab === "instagram" ? (
           <InstagramTab />
         ) : activeTab === "contents" ? (
-          <section className={styles.workspaceShell} aria-label="My Contents">
-            <div className={styles.workspaceTabs} role="tablist" aria-label="My Contents 분류">
+          <section className={styles.workspaceShell} aria-label="내 작업">
+            <div className={styles.workspaceTabs} role="tablist" aria-label="내 작업 분류">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={myContentsView === "archive"}
+                aria-controls="work-archive-panel"
+                className={`${styles.workspaceTab} ${myContentsView === "archive" ? styles.workspaceTabActive : ""}`}
+                onClick={() => setMyContentsView("archive")}
+              >
+                <LuArchive size={15} /> 작업 보관함
+              </button>
               <button
                 type="button"
                 role="tab"
@@ -1240,10 +1255,18 @@ export default function Home() {
                 className={`${styles.workspaceTab} ${myContentsView === "contents" ? styles.workspaceTabActive : ""}`}
                 onClick={() => setMyContentsView("contents")}
               >
-                <LuFileText size={15} /> 콘텐츠 보드
+                <LuFileText size={15} /> My Content
               </button>
             </div>
             <div className={styles.workspaceBody}>
+              <div
+                id="work-archive-panel"
+                className={styles.workspacePane}
+                role="tabpanel"
+                hidden={myContentsView !== "archive"}
+              >
+                <ArchiveBrowser active={myContentsView === "archive"} embedded />
+              </div>
               <section
                 id="my-characters-panel"
                 className={`${styles.workspacePane} ${styles.characterLibraryPage}`}
@@ -1309,6 +1332,36 @@ export default function Home() {
         ) : activeTab === "settings" ? (
           <AccountSettings />
         ) : (
+        <section className={styles.workspaceShell} aria-label="배경과 장면">
+          <div className={styles.workspaceTabs} role="tablist" aria-label="배경과 장면 분류">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sceneWorkspaceView === "scene"}
+              aria-controls="scene-generator-panel"
+              className={`${styles.workspaceTab} ${sceneWorkspaceView === "scene" ? styles.workspaceTabActive : ""}`}
+              onClick={() => setSceneWorkspaceView("scene")}
+            >
+              <LuPaintbrush size={15} /> 장면 만들기
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sceneWorkspaceView === "background"}
+              aria-controls="background-generator-panel"
+              className={`${styles.workspaceTab} ${sceneWorkspaceView === "background" ? styles.workspaceTabActive : ""}`}
+              onClick={() => setSceneWorkspaceView("background")}
+            >
+              <LuImage size={15} /> 배경 만들기
+            </button>
+          </div>
+          <div className={styles.workspaceBody}>
+            <div
+              id="scene-generator-panel"
+              className={styles.workspacePane}
+              role="tabpanel"
+              hidden={sceneWorkspaceView !== "scene"}
+            >
         <>
         {/* 좌측 패널 */}
         <aside className={styles.sidebar}>
@@ -1594,7 +1647,7 @@ export default function Home() {
         <div className={styles.content}>
           <div className={styles.galleryHeader}>
             <h2 className={styles.sectionTitle}>
-              <LuSparkles size={14} /> My Gallery
+              <LuSparkles size={14} /> 내 생성물
             </h2>
             <div className={styles.galleryFilters}>
               <button
@@ -1760,6 +1813,27 @@ export default function Home() {
           </div>
         </div>
         </>
+            </div>
+            <div
+              id="background-generator-panel"
+              className={styles.workspacePane}
+              role="tabpanel"
+              hidden={sceneWorkspaceView !== "background"}
+            >
+              <BackgroundGenerator
+                active={sceneWorkspaceView === "background"}
+                onBackgroundSaved={(saved) => {
+                  setSavedBackgrounds((current) => [
+                    saved,
+                    ...current.filter((backgroundItem) => backgroundItem.id !== saved.id),
+                  ]);
+                  setSelectedBgImageId(saved.id);
+                  setBackground("없음");
+                }}
+              />
+            </div>
+          </div>
+        </section>
         )}
       </main>
 

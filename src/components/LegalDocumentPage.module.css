@@ -1,12 +1,12 @@
 .page {
   min-height: 100vh;
-  background: #0b0d10;
-  color: #edf0f3;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .header {
-  border-bottom: 1px solid #292d33;
-  background: #111419;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .headerInner {
@@ -25,14 +25,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid #363c45;
+  border: 1px solid var(--border-strong);
   border-radius: 7px;
-  color: #d9dee5;
+  background: var(--surface);
+  color: var(--text);
 }
 
 .backButton:hover {
-  border-color: #f4c430;
-  color: #f4c430;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .heading h1 {
@@ -44,13 +45,13 @@
 
 .heading p {
   margin: 0;
-  color: #9aa3ae;
+  color: var(--text-dim);
   font-size: 14px;
   line-height: 1.6;
 }
 
 .eyebrow {
-  color: #f4c430;
+  color: var(--warning);
   font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
@@ -59,7 +60,7 @@
 .headerIcon {
   width: 28px;
   height: 28px;
-  color: #5ec79a;
+  color: var(--success);
 }
 
 .tabs {
@@ -76,7 +77,7 @@
   display: inline-flex;
   align-items: center;
   border-bottom: 2px solid transparent;
-  color: #9aa3ae;
+  color: var(--text-dim);
   font-size: 13px;
   font-weight: 700;
   text-decoration: none;
@@ -84,8 +85,8 @@
 
 .tabs a:hover,
 .tabs .activeTab {
-  border-bottom-color: #f4c430;
-  color: #f7f8fa;
+  border-bottom-color: var(--accent);
+  color: var(--text);
 }
 
 .document {
@@ -101,16 +102,16 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid #665820;
+  border: 1px solid #dfcf99;
   border-radius: 7px;
-  background: #27230f;
-  color: #e9d77a;
+  background: var(--warning-soft);
+  color: var(--warning);
   font-size: 12px;
 }
 
 .draftNotice {
   margin: 13px 0 26px;
-  color: #9aa3ae;
+  color: var(--text-dim);
   font-size: 13px;
   line-height: 1.65;
 }
@@ -120,30 +121,30 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 24px;
-  border-top: 1px solid #292d33;
-  border-bottom: 1px solid #292d33;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
 .contents a {
-  color: #aab2bc;
+  color: var(--text-dim);
   font-size: 12px;
   line-height: 1.5;
   text-decoration: none;
 }
 
 .contents a:hover {
-  color: #f4c430;
+  color: var(--accent);
 }
 
 .sections section {
   scroll-margin-top: 16px;
   padding: 30px 0;
-  border-bottom: 1px solid #292d33;
+  border-bottom: 1px solid var(--border);
 }
 
 .sections h2 {
   margin: 0 0 14px;
-  color: #f7f8fa;
+  color: var(--text);
   font-size: 17px;
   line-height: 1.45;
   letter-spacing: 0;
@@ -151,7 +152,7 @@
 
 .sections p,
 .sections li {
-  color: #b7bec7;
+  color: var(--text-dim);
   font-size: 14px;
   line-height: 1.8;
   word-break: keep-all;
