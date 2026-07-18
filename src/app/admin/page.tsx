@@ -6,14 +6,24 @@ import {
   LuArrowLeft,
   LuBell,
   LuCoins,
+  LuCopy,
+  LuEye,
+  LuEyeOff,
+  LuKeyRound,
   LuLoaderCircle,
   LuPencil,
   LuPlus,
   LuRefreshCw,
   LuSave,
+  LuShieldAlert,
   LuTrash2,
   LuX,
 } from "react-icons/lu";
+import {
+  ADMIN_TEMPORARY_PASSWORD_ALPHABET,
+  ADMIN_TEMPORARY_PASSWORD_LENGTH,
+  validateAdminTemporaryPassword,
+} from "@/lib/admin-password-reset";
 import { ANNOUNCEMENT_CATEGORY_LABELS, type AnnouncementCategory } from "@/lib/announcements";
 import styles from "./page.module.css";
 
@@ -24,9 +34,21 @@ interface UserRow {
   role: string;
   credits: number;
   kakaoLinked: boolean;
+  googleLinked: boolean;
   emailVerified: boolean;
+  passwordResetEligible: boolean;
+  temporaryPasswordExpiresAt: string | null;
+  isCurrentUser: boolean;
   paidPayments: number;
   createdAt: string;
+}
+
+interface PasswordResetResult {
+  ok: boolean;
+  email: string;
+  expiresAt: string;
+  revokedSessions: number;
+  selfReset: boolean;
 }
 
 interface AnnouncementRow {
@@ -60,6 +82,22 @@ const EMPTY_ANNOUNCEMENT: AnnouncementForm = {
   expiresAt: "",
 };
 
+function generateTemporaryPassword() {
+  let password = "";
+  do {
+    const randomValues = crypto.getRandomValues(
+      new Uint32Array(ADMIN_TEMPORARY_PASSWORD_LENGTH)
+    );
+    password = Array.from(
+      randomValues,
+      (value) => ADMIN_TEMPORARY_PASSWORD_ALPHABET[
+        value % ADMIN_TEMPORARY_PASSWORD_ALPHABET.length
+      ]
+    ).join("");
+  } while (validateAdminTemporaryPassword(password));
+  return password;
+}
+
 function toLocalDateTime(value: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -79,6 +117,14 @@ export default function AdminPage() {
   const [error, setError] = useState("");
   const [creditInputs, setCreditInputs] = useState<Record<string, string>>({});
   const [grantingUserId, setGrantingUserId] = useState<string | null>(null);
+  const [passwordResetTarget, setPasswordResetTarget] = useState<UserRow | null>(null);
+  const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [passwordExpiry, setPasswordExpiry] = useState("1440");
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [passwordResetting, setPasswordResetting] = useState(false);
+  const [passwordResetError, setPasswordResetError] = useState("");
+  const [passwordResetResult, setPasswordResetResult] = useState<PasswordResetResult | null>(null);
+  const [passwordCopied, setPasswordCopied] = useState(false);
   const [announcements, setAnnouncements] = useState<AnnouncementRow[]>([]);
   const [announcementLoading, setAnnouncementLoading] = useState(true);
   const [announcementError, setAnnouncementError] = useState("");
@@ -188,6 +234,75 @@ export default function AdminPage() {
     }
   };
 
+  const openPasswordReset = (user: UserRow) => {
+    if (!user.passwordResetEligible) return;
+    setPasswordResetTarget(user);
+    setTemporaryPassword(generateTemporaryPassword());
+    setPasswordExpiry("1440");
+    setPasswordVisible(false);
+    setPasswordResetError("");
+    setPasswordResetResult(null);
+    setPasswordCopied(false);
+  };
+
+  const closePasswordReset = () => {
+    if (passwordResetting) return;
+    setPasswordResetTarget(null);
+    setTemporaryPassword("");
+    setPasswordResetError("");
+    setPasswordResetResult(null);
+    setPasswordCopied(false);
+  };
+
+  const copyTemporaryPassword = async () => {
+    try {
+      await navigator.clipboard.writeText(temporaryPassword);
+      setPasswordCopied(true);
+    } catch {
+      setPasswordResetError("클립보드에 복사하지 못했습니다. 비밀번호를 직접 선택해 복사해주세요.");
+    }
+  };
+
+  const handlePasswordReset = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!passwordResetTarget) return;
+    const validationError = validateAdminTemporaryPassword(temporaryPassword);
+    if (validationError) {
+      setPasswordResetError(validationError);
+      return;
+    }
+
+    const confirmation = passwordResetTarget.isCurrentUser
+      ? "내 계정의 기존 비밀번호를 무효화하고 현재 세션을 포함한 모든 로그인을 종료할까요? 임시 비밀번호를 먼저 안전하게 보관해주세요."
+      : `${passwordResetTarget.email} 계정의 기존 비밀번호를 무효화하고 모든 로그인 세션을 종료할까요?`;
+    if (!window.confirm(confirmation)) return;
+
+    setPasswordResetting(true);
+    setPasswordResetError("");
+    setPasswordResetResult(null);
+    try {
+      const result = await readJson<PasswordResetResult>(await fetch(
+        `/api/admin/users/${encodeURIComponent(passwordResetTarget.id)}/temporary-password`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            temporaryPassword,
+            expiresInMinutes: Number(passwordExpiry),
+          }),
+        }
+      ));
+      setPasswordResetResult(result);
+      setUsers((current) => current.map((user) => user.id === passwordResetTarget.id
+        ? { ...user, temporaryPasswordExpiresAt: result.expiresAt }
+        : user));
+    } catch (resetError) {
+      setPasswordResetError(resetError instanceof Error ? resetError.message : "임시 비밀번호를 설정하지 못했습니다.");
+    } finally {
+      setPasswordResetting(false);
+    }
+  };
+
   const refreshAll = () => {
     void loadUsers();
     void loadAnnouncements();
@@ -275,22 +390,28 @@ export default function AdminPage() {
       </section>
 
       <section className={styles.userSection} aria-labelledby="user-heading">
-        <div className={styles.sectionHeader}><div><LuCoins /><span><h2 id="user-heading">사용자 및 크레딧</h2><p>잔액과 결제 연결 상태를 관리합니다.</p></span></div></div>
+        <div className={styles.sectionHeader}><div><LuCoins /><span><h2 id="user-heading">사용자 및 크레딧</h2><p>잔액, 로그인 복구와 결제 연결 상태를 관리합니다.</p></span></div></div>
         {error && <div className={styles.error} role="alert">{error}</div>}
         {loading ? (
           <div className={styles.loading}><LuLoaderCircle className={styles.spin} /> 사용자 목록을 불러오는 중</div>
         ) : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
-              <thead><tr><th>이메일</th><th>이름</th><th>권한</th><th>크레딧</th><th>카카오</th><th>결제</th><th>가입일</th><th>수동 지급</th></tr></thead>
+              <thead><tr><th>이메일</th><th>이름</th><th>권한</th><th>크레딧</th><th>로그인</th><th>결제</th><th>가입일</th><th>수동 지급</th><th>계정 복구</th></tr></thead>
               <tbody>
                 {users.map((user) => (
                   <tr key={user.id}>
-                    <td className={styles.email}>{user.email}</td>
+                    <td className={styles.email}>{user.email}{user.isCurrentUser && <small>현재 계정</small>}</td>
                     <td>{user.name || "-"}</td>
                     <td><span className={user.role === "admin" ? styles.adminBadge : styles.userBadge}>{user.role}</span></td>
                     <td className={styles.creditCell}>{user.credits.toLocaleString()}</td>
-                    <td>{user.kakaoLinked ? "연결" : "-"}</td>
+                    <td>
+                      <span className={styles.loginMethods}>
+                        {!user.kakaoLinked && !user.googleLinked && <span>이메일</span>}
+                        {user.kakaoLinked && <span>카카오</span>}
+                        {user.googleLinked && <span>구글</span>}
+                      </span>
+                    </td>
                     <td>{user.paidPayments.toLocaleString()}건</td>
                     <td className={styles.date}>{new Date(user.createdAt).toLocaleDateString("ko-KR")}</td>
                     <td>
@@ -299,6 +420,22 @@ export default function AdminPage() {
                         <button className={styles.creditBtn} type="button" onClick={() => void handleAddCredits(user.id)} disabled={grantingUserId !== null || !creditInputs[user.id] || Number(creditInputs[user.id]) <= 0}>
                           {grantingUserId === user.id ? <LuLoaderCircle className={styles.spin} /> : <LuCoins />} 지급
                         </button>
+                      </div>
+                    </td>
+                    <td>
+                      <div className={styles.passwordResetAction}>
+                        <button
+                          className={styles.passwordResetButton}
+                          type="button"
+                          onClick={() => openPasswordReset(user)}
+                          disabled={!user.passwordResetEligible}
+                          title={user.passwordResetEligible ? `${user.email} 비밀번호 재설정` : "소셜 로그인 전용 계정"}
+                        >
+                          <LuKeyRound /> {user.passwordResetEligible ? "재설정" : "OAuth 전용"}
+                        </button>
+                        {user.temporaryPasswordExpiresAt && new Date(user.temporaryPasswordExpiresAt) > new Date() && (
+                          <small>{new Date(user.temporaryPasswordExpiresAt).toLocaleString("ko-KR")}까지</small>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -314,6 +451,89 @@ export default function AdminPage() {
         <p>신규 가입 30크레딧, 외부 AI 호출 전 차감, 실패 작업 자동 환불이 기본입니다. 수동 지급도 크레딧 원장에 관리자 ID와 함께 기록됩니다.</p>
         <Link href="/credits" className={styles.walletLink}>사용자 지갑 화면 보기</Link>
       </section>
+
+      {passwordResetTarget && (
+        <div className={styles.modalBackdrop} role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) closePasswordReset();
+        }}>
+          <section className={styles.passwordModal} role="dialog" aria-modal="true" aria-labelledby="password-reset-title">
+            <header className={styles.modalHeader}>
+              <span><LuKeyRound /><strong id="password-reset-title">임시 비밀번호 설정</strong></span>
+              <button type="button" onClick={closePasswordReset} disabled={passwordResetting} title="닫기" aria-label="닫기"><LuX /></button>
+            </header>
+
+            <form className={styles.passwordResetForm} onSubmit={handlePasswordReset}>
+              <div className={styles.resetTarget}>
+                <span>대상 계정</span>
+                <strong>{passwordResetTarget.email}</strong>
+                <small>{passwordResetTarget.name || "이름 없음"} · {passwordResetTarget.role === "admin" ? "관리자" : "사용자"}</small>
+              </div>
+
+              <label>임시 비밀번호
+                <div className={styles.passwordInputRow}>
+                  <input
+                    autoFocus
+                    type={passwordVisible ? "text" : "password"}
+                    value={temporaryPassword}
+                    minLength={ADMIN_TEMPORARY_PASSWORD_LENGTH}
+                    maxLength={ADMIN_TEMPORARY_PASSWORD_LENGTH}
+                    pattern="[A-Za-z0-9]{12}"
+                    autoComplete="new-password"
+                    spellCheck={false}
+                    onChange={(event) => {
+                      setTemporaryPassword(event.target.value.replace(/[^A-Za-z0-9]/g, ""));
+                      setPasswordResetResult(null);
+                      setPasswordCopied(false);
+                    }}
+                    aria-describedby="temporary-password-help"
+                  />
+                  <button type="button" onClick={() => setPasswordVisible((current) => !current)} title={passwordVisible ? "비밀번호 숨기기" : "비밀번호 보기"} aria-label={passwordVisible ? "비밀번호 숨기기" : "비밀번호 보기"}>
+                    {passwordVisible ? <LuEyeOff /> : <LuEye />}
+                  </button>
+                </div>
+              </label>
+              <div className={styles.passwordTools}>
+                <button type="button" onClick={() => {
+                  setTemporaryPassword(generateTemporaryPassword());
+                  setPasswordResetResult(null);
+                  setPasswordCopied(false);
+                }}><LuRefreshCw /> 자동 생성</button>
+                <button type="button" onClick={() => void copyTemporaryPassword()} disabled={!temporaryPassword}><LuCopy /> {passwordCopied ? "복사됨" : "복사"}</button>
+              </div>
+              <small id="temporary-password-help" className={styles.fieldHelp}>영문과 숫자를 모두 포함한 12자입니다.</small>
+
+              <label>유효시간
+                <select value={passwordExpiry} onChange={(event) => setPasswordExpiry(event.target.value)}>
+                  <option value="30">30분</option>
+                  <option value="120">2시간</option>
+                  <option value="1440">24시간</option>
+                </select>
+              </label>
+
+              <div className={styles.resetWarning}>
+                <LuShieldAlert />
+                <p>적용 즉시 기존 이메일 비밀번호가 무효화되고 모든 기기에서 로그아웃됩니다. 사용자는 이 임시 비밀번호로 로그인한 뒤 새 비밀번호를 설정해야 합니다.</p>
+              </div>
+
+              {passwordResetError && <div className={styles.modalError} role="alert">{passwordResetError}</div>}
+              {passwordResetResult && (
+                <div className={styles.resetSuccess} role="status">
+                  발급 완료 · {new Date(passwordResetResult.expiresAt).toLocaleString("ko-KR")}까지 유효 · 세션 {passwordResetResult.revokedSessions}개 종료
+                  {passwordResetResult.selfReset && <strong>현재 관리자 세션도 종료됐습니다. 비밀번호를 복사한 뒤 다시 로그인하세요.</strong>}
+                </div>
+              )}
+
+              <footer className={styles.modalActions}>
+                <button type="button" onClick={closePasswordReset} disabled={passwordResetting}>닫기</button>
+                <button type="submit" disabled={passwordResetting || Boolean(validateAdminTemporaryPassword(temporaryPassword))}>
+                  {passwordResetting ? <LuLoaderCircle className={styles.spin} /> : <LuKeyRound />}
+                  재설정 적용
+                </button>
+              </footer>
+            </form>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
