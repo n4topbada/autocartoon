@@ -23,7 +23,7 @@ GitHub: `https://github.com/n4topbada/autocartoon`
 | 항목 | 현재 값 |
 | --- | --- |
 | GCP project | `wonybananabot` |
-| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-18 검증 리비전 `wonybananabot-00026-zt8` |
+| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-18 검증 리비전 `wonybananabot-00027-scn` |
 | Cloud SQL | `wony-postgres`, PostgreSQL 16 |
 | Cloud Tasks | `wony-jobs`, `asia-northeast3`; 동시 10, 초당 5, 최대 5회 재시도 |
 | GCS | `wonybananabot-media`, private. 브라우저 직접 업로드 CORS는 `scripts/gcs-cors.json` 기준 |
@@ -62,7 +62,7 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 - 통합 보관함, 썸네일, 타입 필터, 페이지 이동, 저장 용량, 삭제
 - 홈 최신 공지와 사용자별 읽음 상태
 - 관리자 공지 작성·수정·게시·고정·만료·삭제·열람 수, 사용자·크레딧·신고·챗봇 지식
-- 관리자 허용 계정용 구조화 캐릭터 디렉터
+- 모든 로그인 사용자가 쓰는 구조화 캐릭터 디렉터와 서버 크레딧 차감
 
 ### 크레딧·결제
 
@@ -96,8 +96,10 @@ Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`
 - 로컬 파일 경로 탈출과 임의 `public/`·MIME 업로드 차단
 - Cloud Run의 손상된 `APP_ORIGIN` 값을 운영 URL 하나로 교정
 - 정적 데드코드·중복 의존성·오래된 HTML/Markdown 정리와 Knip 경고 0건
+- 홈 버튼을 없애고 로고를 홈 동선으로 고정, `더보기`의 작업 메뉴를 1단 상단 메뉴로 전개
+- 계정 설정을 사용자 아이콘 메뉴로, 캐릭터 설계를 `캐릭터 만들기`로, 내 캐릭터를 `My Contents`로 통합
 
-운영 반영 상태: 기존 마이그레이션 실행 `wony-prisma-migrate-99klj`는 성공 상태다. 코드 감사 결과를 담은 리비전 `wonybananabot-00026-zt8`에 트래픽 100%를 연결했다. `APP_ORIGIN`과 Prisma 풀 환경 변수를 재검증했고, 비로그인 정책 페이지 3종 `200`, 보호 API `401`, 카카오 callback URL, 계정 설정, 전역 보안 헤더와 해당 리비전 오류 로그 0건을 확인했다. 이번 변경에는 DB 마이그레이션이 없다.
+운영 반영 상태: 기존 마이그레이션 실행 `wony-prisma-migrate-99klj`는 성공 상태다. 정보 구조 통합 변경을 담은 리비전 `wonybananabot-00027-scn`에 트래픽 100%를 연결했다. 운영 9개 1단 메뉴, 계정 아이콘 설정, 캐릭터 만들기와 My Contents 내부 탭, 390px 모바일 폭, 비로그인 정책 페이지 3종 `200`, 보호 API `401`, 전역 보안 헤더와 해당 리비전 오류 로그 0건을 확인했다. 이번 변경에는 DB 마이그레이션이 없다.
 
 ## 5. 레퍼런스 대비 기능상 남은 항목
 
@@ -142,10 +144,11 @@ gcloud tasks queues update wony-jobs --project=wonybananabot --location=asia-nor
 배포 후 확인:
 
 1. `/login`과 카카오 로그인 콜백
-2. 홈 대시보드·설정·게시판·보관함·스튜디오·숏폼
-3. Vertex 텍스트와 이미지 실제 작업
-4. Cloud Tasks 큐, GCS 산출물, DB job/artifact, 완료 알림
-5. Cloud Run 최근 오류 로그
+2. 로고 홈 이동, 사용자 아이콘 계정 설정, 1단 메뉴, 게시판·보관함·스튜디오·숏폼
+3. 캐릭터 만들기의 이미지/설정 설계 탭과 My Contents의 내 캐릭터/콘텐츠 보드 탭
+4. Vertex 텍스트와 이미지 실제 작업
+5. Cloud Tasks 큐, GCS 산출물, DB job/artifact, 완료 알림
+6. Cloud Run 최근 오류 로그
 
 ## 8. 개발 원칙
 

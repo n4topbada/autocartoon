@@ -7,6 +7,8 @@ import styles from "./page.module.css";
 import UserAvatar from "@/components/UserAvatar";
 import { useAuth } from "@/components/AuthProvider";
 import {
+  LuArchive,
+  LuFileText,
   LuPlus,
   LuHeart,
   LuTrash2,
@@ -22,20 +24,15 @@ import {
   LuDownload,
   LuTag,
   LuShare2,
-  LuShieldAlert,
   LuUserRoundCog,
-  LuSettings,
   LuClapperboard,
   LuFilm,
   LuPersonStanding,
   LuUsers,
-  LuChevronDown,
-  LuHouse,
 } from "react-icons/lu";
 import { resizeFromFile, fetchImageFromUrl } from "@/lib/image-resize";
 import PromptInput from "@/components/PromptInput";
 import CreditCostBadge from "@/components/CreditCostBadge";
-import { canAccessCharacterDesigner } from "@/lib/character-designer-access";
 import { AI_CREDIT_COSTS } from "@/lib/credit-products";
 
 function DeferredPanelLoader() {
@@ -66,7 +63,6 @@ type Tab =
   | "home"
   | "character"
   | "characterCreator"
-  | "designer"
   | "background"
   | "board"
   | "instagram"
@@ -256,17 +252,16 @@ interface UserOption {
 }
 
 export default function Home() {
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("home");
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const [characterWorkspaceView, setCharacterWorkspaceView] = useState<"image" | "design">("image");
+  const [myContentsView, setMyContentsView] = useState<"characters" | "contents">("characters");
   const [charGroups, setCharGroups] = useState<CharacterGroupData[]>([]);
   const [ungroupedPresets, setUngroupedPresets] = useState<Preset[]>([]);
   const [presetsLoading, setPresetsLoading] = useState(true);
   const [selectedPresets, setSelectedPresets] = useState<Preset[]>([]);
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
   const [managingPreset, setManagingPreset] = useState<Preset | null>(null);
-  const [showCharacterLibrary, setShowCharacterLibrary] = useState(false);
   const [editingImage, setEditingImage] = useState<FlatImage | null>(null);
 
   // 태그 시스템
@@ -293,8 +288,6 @@ export default function Home() {
 
   // 챗봇
   const [chatOpen, setChatOpen] = useState(false);
-  const [showDesignerAccessDenied, setShowDesignerAccessDenied] = useState(false);
-  const [designerTabPending, setDesignerTabPending] = useState(false);
 
   useEffect(() => {
     if (user?.mustChangePassword) setActiveTab("settings");
@@ -304,37 +297,6 @@ export default function Home() {
     const requestedTab = new URLSearchParams(window.location.search).get("tab");
     if (requestedTab === "settings") setActiveTab("settings");
   }, []);
-
-  const handleDesignerTabClick = useCallback(() => {
-    if (authLoading) {
-      setDesignerTabPending(true);
-      return;
-    }
-    if (!canAccessCharacterDesigner(user)) {
-      setShowDesignerAccessDenied(true);
-      return;
-    }
-    setActiveTab("designer");
-  }, [authLoading, user]);
-
-  useEffect(() => {
-    if (!designerTabPending || authLoading) return;
-    setDesignerTabPending(false);
-    if (canAccessCharacterDesigner(user)) {
-      setActiveTab("designer");
-    } else {
-      setShowDesignerAccessDenied(true);
-    }
-  }, [authLoading, designerTabPending, user]);
-
-  useEffect(() => {
-    if (!showDesignerAccessDenied) return;
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setShowDesignerAccessDenied(false);
-    };
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [showDesignerAccessDenied]);
 
   // 캐릭터 업로드 상태
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -353,25 +315,6 @@ export default function Home() {
   const [allUsers, setAllUsers] = useState<UserOption[]>([]);
   const [viewingUserId, setViewingUserId] = useState<string | null>(null);
   const isAdmin = user?.role === "admin";
-
-  // 상단 '더보기' 드롭다운: 바깥 클릭·Esc로 닫는다.
-  useEffect(() => {
-    if (!moreMenuOpen) return;
-    const onPointer = (e: MouseEvent) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
-        setMoreMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMoreMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [moreMenuOpen]);
 
   // 즐겨찾기 필터 + 삭제 확인
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
@@ -1129,22 +1072,16 @@ export default function Home() {
     <div className={styles.container}>
       {/* 헤더 */}
       <header className={styles.header}>
-        <h1
+        <button
+          type="button"
           className={styles.logo}
           onClick={() => { setActiveTab("home"); window.scrollTo(0, 0); }}
-          style={{ cursor: "pointer" }}
+          aria-label="홈으로 이동"
         >
           <span className={styles.logoEmoji}>🍌</span>
           워니바나나봇
-        </h1>
-        <nav className={styles.tabNav} style={{ flex: 1 }}>
-          <button
-            className={`${styles.tab} ${activeTab === "home" ? styles.tabActive : ""}`}
-            onClick={() => setActiveTab("home")}
-          >
-            <LuHouse size={14} />
-            홈
-          </button>
+        </button>
+        <nav className={styles.tabNav} aria-label="주요 메뉴">
           <button
             className={`${styles.tab} ${activeTab === "character" ? styles.tabActive : ""}`}
             onClick={() => setActiveTab("character")}
@@ -1160,108 +1097,44 @@ export default function Home() {
             캐릭터 만들기
           </button>
           <button
-            className={`${styles.tab} ${activeTab === "designer" ? styles.tabActive : ""}`}
-            onClick={handleDesignerTabClick}
-            aria-busy={designerTabPending}
-          >
-            <LuUserRoundCog size={14} />
-            캐릭터 설계
-          </button>
-          <button
             className={`${styles.tab} ${activeTab === "background" ? styles.tabActive : ""}`}
             onClick={() => setActiveTab("background")}
           >
             <LuImage size={14} />
             배경 생성
           </button>
-          <button
-            className={`${styles.tab} ${showCharacterLibrary ? styles.tabActive : ""}`}
-            onClick={() => setShowCharacterLibrary(true)}
-          >
-            <LuUsers size={14} />
-            내 캐릭터
-          </button>
           <Link className={styles.tab} href="/studio">
             <LuClapperboard size={14} />
             통합 스튜디오
+          </Link>
+          <Link className={styles.tab} href="/studio?mode=gesture">
+            <LuPersonStanding size={14} />
+            제스처 생성
           </Link>
           <Link className={styles.tab} href="/shorts">
             <LuFilm size={14} />
             숏폼 제작
           </Link>
-          {/* 보조 메뉴는 '더보기'로 접어 상단바 과밀을 막는다(기능은 그대로 유지). */}
-          <div className={styles.moreWrap} ref={moreMenuRef}>
-            <button
-              type="button"
-              className={`${styles.tab} ${
-                ["board", "contents", "settings"].includes(activeTab) ? styles.tabActive : ""
-              }`}
-              onClick={() => setMoreMenuOpen((open) => !open)}
-              aria-haspopup="menu"
-              aria-expanded={moreMenuOpen}
-            >
-              <LuChevronDown size={14} />
-              더보기
-            </button>
-            {moreMenuOpen && (
-              <div className={styles.moreMenu} role="menu">
-                <Link
-                  className={styles.moreItem}
-                  href="/studio?mode=gesture"
-                  role="menuitem"
-                  onClick={() => setMoreMenuOpen(false)}
-                >
-                  <LuPersonStanding size={15} />
-                  제스처 생성
-                </Link>
-                <Link
-                  className={styles.moreItem}
-                  href="/archive"
-                  role="menuitem"
-                  onClick={() => setMoreMenuOpen(false)}
-                >
-                  <LuImage size={15} />
-                  작업 보관함
-                </Link>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={`${styles.moreItem} ${activeTab === "board" ? styles.moreItemActive : ""}`}
-                  onClick={() => {
-                    setMoreMenuOpen(false);
-                    setActiveTab("board");
-                  }}
-                >
-                  <LuLayoutList size={15} />
-                  게시판
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={`${styles.moreItem} ${activeTab === "contents" ? styles.moreItemActive : ""}`}
-                  onClick={() => {
-                    setMoreMenuOpen(false);
-                    setActiveTab("contents");
-                  }}
-                >
-                  <LuLayoutList size={15} />
-                  My Contents
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={`${styles.moreItem} ${activeTab === "settings" ? styles.moreItemActive : ""}`}
-                  onClick={() => {
-                    setMoreMenuOpen(false);
-                    setActiveTab("settings");
-                  }}
-                >
-                  <LuSettings size={15} />
-                  설정
-                </button>
-              </div>
-            )}
-          </div>
+          <Link className={styles.tab} href="/archive">
+            <LuArchive size={14} />
+            작업 보관함
+          </Link>
+          <button
+            type="button"
+            className={`${styles.tab} ${activeTab === "board" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("board")}
+          >
+            <LuLayoutList size={14} />
+            게시판
+          </button>
+          <button
+            type="button"
+            className={`${styles.tab} ${activeTab === "contents" ? styles.tabActive : ""}`}
+            onClick={() => setActiveTab("contents")}
+          >
+            <LuFileText size={14} />
+            My Contents
+          </button>
           {/* Instagram 탭은 Meta 검수와 토큰 운영 완료 뒤 노출한다 (docs/instagram-setup.md). */}
         </nav>
         <div className={styles.headerRight}>
@@ -1279,7 +1152,7 @@ export default function Home() {
             </select>
           )}
           <GenerationNotifications />
-          <UserAvatar />
+          <UserAvatar onOpenSettings={() => setActiveTab("settings")} />
           <button
             className={styles.chatToggleBtn}
             onClick={() => setChatOpen(!chatOpen)}
@@ -1292,11 +1165,53 @@ export default function Home() {
 
       <main className={styles.main}>
         {activeTab === "home" ? (
-          <CreatorDashboard onNavigate={(tab) => setActiveTab(tab)} />
+          <CreatorDashboard onNavigate={(tab) => {
+            if (tab === "contents") setMyContentsView("characters");
+            setActiveTab(tab);
+          }} />
         ) : activeTab === "characterCreator" ? (
-          <CharacterCreator onPresetSaved={() => { loadPresets(); loadHistory(); }} />
-        ) : activeTab === "designer" ? (
-          <CharacterDesigner />
+          <section className={styles.workspaceShell} aria-label="캐릭터 만들기">
+            <div className={styles.workspaceTabs} role="tablist" aria-label="캐릭터 만들기 방식">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={characterWorkspaceView === "image"}
+                aria-controls="character-image-panel"
+                className={`${styles.workspaceTab} ${characterWorkspaceView === "image" ? styles.workspaceTabActive : ""}`}
+                onClick={() => setCharacterWorkspaceView("image")}
+              >
+                <LuSparkles size={15} /> 이미지 만들기
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={characterWorkspaceView === "design"}
+                aria-controls="character-design-panel"
+                className={`${styles.workspaceTab} ${characterWorkspaceView === "design" ? styles.workspaceTabActive : ""}`}
+                onClick={() => setCharacterWorkspaceView("design")}
+              >
+                <LuUserRoundCog size={15} /> 설정 설계
+              </button>
+            </div>
+            <div className={styles.workspaceBody}>
+              <div
+                id="character-image-panel"
+                className={styles.workspacePane}
+                role="tabpanel"
+                hidden={characterWorkspaceView !== "image"}
+              >
+                <CharacterCreator onPresetSaved={() => { loadPresets(); loadHistory(); }} />
+              </div>
+              <div
+                id="character-design-panel"
+                className={styles.workspacePane}
+                role="tabpanel"
+                hidden={characterWorkspaceView !== "design"}
+              >
+                <CharacterDesigner />
+              </div>
+            </div>
+          </section>
         ) : activeTab === "background" ? (
           <BackgroundGenerator />
         ) : activeTab === "board" ? (
@@ -1304,7 +1219,93 @@ export default function Home() {
         ) : activeTab === "instagram" ? (
           <InstagramTab />
         ) : activeTab === "contents" ? (
-          <MyContents galleryImages={flatImages.map((img) => ({ id: img.id, dataUrl: img.dataUrl, thumbnailUrl: img.thumbnailUrl }))} />
+          <section className={styles.workspaceShell} aria-label="My Contents">
+            <div className={styles.workspaceTabs} role="tablist" aria-label="My Contents 분류">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={myContentsView === "characters"}
+                aria-controls="my-characters-panel"
+                className={`${styles.workspaceTab} ${myContentsView === "characters" ? styles.workspaceTabActive : ""}`}
+                onClick={() => setMyContentsView("characters")}
+              >
+                <LuUsers size={15} /> 내 캐릭터
+                <span className={styles.workspaceTabCount}>{ownedPresets.length}</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={myContentsView === "contents"}
+                aria-controls="my-contents-panel"
+                className={`${styles.workspaceTab} ${myContentsView === "contents" ? styles.workspaceTabActive : ""}`}
+                onClick={() => setMyContentsView("contents")}
+              >
+                <LuFileText size={15} /> 콘텐츠 보드
+              </button>
+            </div>
+            <div className={styles.workspaceBody}>
+              <section
+                id="my-characters-panel"
+                className={`${styles.workspacePane} ${styles.characterLibraryPage}`}
+                role="tabpanel"
+                hidden={myContentsView !== "characters"}
+                aria-labelledby="my-characters-title"
+              >
+                <div className={styles.characterLibraryHeader}>
+                  <div>
+                    <h2 id="my-characters-title">내 캐릭터</h2>
+                    <span>{ownedPresets.length}명</span>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.characterLibraryAdd}
+                    onClick={() => setShowUploadModal(true)}
+                  >
+                    <LuPlus /> 새 캐릭터 등록
+                  </button>
+                </div>
+
+                {presetsLoading ? (
+                  <div className={styles.characterLibraryEmpty}><span className={styles.spinner} /> 불러오는 중</div>
+                ) : ownedPresets.length === 0 ? (
+                  <div className={styles.characterLibraryEmpty}>등록한 캐릭터가 없습니다.</div>
+                ) : (
+                  <div className={styles.characterLibraryGrid}>
+                    {ownedPresets.map((preset) => (
+                      <article className={styles.characterLibraryCard} key={preset.id}>
+                        <div className={styles.characterLibraryViews}>
+                          {["front", "left", "right", "back"].map((view, index) => {
+                            const image = preset.images.find((item) => item.view === view) || preset.images[index];
+                            return image
+                              ? <img key={view} src={image.thumbnailUrl || image.dataUrl} alt={`${preset.name} ${view}`} />
+                              : <span key={view}><LuImage /></span>;
+                          })}
+                        </div>
+                        <div className={styles.characterLibraryInfo}>
+                          <div>
+                            <h3>{preset.name}</h3>
+                            <span>{preset.isDefault ? "기본 캐릭터" : preset.voiceConfig?.[0]?.label || "보이스 미설정"}</span>
+                          </div>
+                          <div className={styles.characterLibraryActions}>
+                            <button type="button" title="캐릭터 편집" aria-label={`${preset.name} 편집`} onClick={() => void handleManagePreset(preset)}><LuPencil /></button>
+                            <button type="button" title="캐릭터 삭제" aria-label={`${preset.name} 삭제`} onClick={() => void deleteOwnedPreset(preset)}><LuTrash2 /></button>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+              <div
+                id="my-contents-panel"
+                className={styles.workspacePane}
+                role="tabpanel"
+                hidden={myContentsView !== "contents"}
+              >
+                <MyContents galleryImages={flatImages.map((img) => ({ id: img.id, dataUrl: img.dataUrl, thumbnailUrl: img.thumbnailUrl }))} />
+              </div>
+            </div>
+          </section>
         ) : activeTab === "settings" ? (
           <AccountSettings />
         ) : (
@@ -1879,60 +1880,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* 캐릭터 관리 모달 */}
-      {showCharacterLibrary && (
-        <div className={styles.modalOverlay} onClick={() => setShowCharacterLibrary(false)}>
-          <section className={`${styles.modal} ${styles.characterLibraryModal}`} onClick={(event) => event.stopPropagation()} aria-labelledby="character-library-title">
-            <div className={styles.characterLibraryHeader}>
-              <div>
-                <h2 id="character-library-title">내 캐릭터 관리</h2>
-                <span>{ownedPresets.length}명</span>
-              </div>
-              <div>
-                <button
-                  className={styles.characterLibraryAdd}
-                  onClick={() => { setShowCharacterLibrary(false); setShowUploadModal(true); }}
-                >
-                  <LuPlus /> 새 캐릭터 등록
-                </button>
-                <button className={styles.characterLibraryClose} onClick={() => setShowCharacterLibrary(false)} title="닫기"><LuX /></button>
-              </div>
-            </div>
-
-            {presetsLoading ? (
-              <div className={styles.characterLibraryEmpty}><span className={styles.spinner} /> 불러오는 중</div>
-            ) : ownedPresets.length === 0 ? (
-              <div className={styles.characterLibraryEmpty}>등록한 캐릭터가 없습니다.</div>
-            ) : (
-              <div className={styles.characterLibraryGrid}>
-                {ownedPresets.map((preset) => (
-                  <article className={styles.characterLibraryCard} key={preset.id}>
-                    <div className={styles.characterLibraryViews}>
-                      {["front", "left", "right", "back"].map((view, index) => {
-                        const image = preset.images.find((item) => item.view === view) || preset.images[index];
-                        return image
-                          ? <img key={view} src={image.thumbnailUrl || image.dataUrl} alt={`${preset.name} ${view}`} />
-                          : <span key={view}><LuImage /></span>;
-                      })}
-                    </div>
-                    <div className={styles.characterLibraryInfo}>
-                      <div>
-                        <h3>{preset.name}</h3>
-                        <span>{preset.isDefault ? "기본 캐릭터" : preset.voiceConfig?.[0]?.label || "음성 미설정"}</span>
-                      </div>
-                      <div className={styles.characterLibraryActions}>
-                        <button type="button" title="캐릭터 편집" onClick={() => { setShowCharacterLibrary(false); void handleManagePreset(preset); }}><LuPencil /></button>
-                        <button type="button" title="캐릭터 삭제" onClick={() => void deleteOwnedPreset(preset)}><LuTrash2 /></button>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
-      )}
-
       {managingPreset && (
         <CharacterManagementModal
           preset={managingPreset}
@@ -2064,41 +2011,6 @@ export default function Home() {
                 }
               >
                 {uploading ? "등록 중..." : "등록하기"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showDesignerAccessDenied && (
-        <div
-          className={styles.modalOverlay}
-          onClick={() => setShowDesignerAccessDenied(false)}
-        >
-          <div
-            className={`${styles.modal} ${styles.accessModal}`}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="designer-access-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <span className={styles.accessIcon} aria-hidden="true">
-              <LuShieldAlert size={24} />
-            </span>
-            <h2 id="designer-access-title" className={styles.modalTitle}>
-              접근 권한이 없습니다
-            </h2>
-            <p className={styles.accessDescription}>
-              캐릭터 설계는 wony@wonyframe.com 계정과 관리자만 사용할 수 있습니다.
-            </p>
-            <div className={styles.modalActions}>
-              <button
-                type="button"
-                className={styles.modalConfirm}
-                onClick={() => setShowDesignerAccessDenied(false)}
-                autoFocus
-              >
-                확인
               </button>
             </div>
           </div>

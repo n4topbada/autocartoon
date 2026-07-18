@@ -209,3 +209,21 @@
 .faqClose:hover {
   background: #374151;
 }
+
+@media (max-width: 1200px) {
+  .container {
+    gap: 0;
+  }
+
+  .userName {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .avatar {
+    width: 38px;
+    height: 38px;
+    font-size: 14px;
+  }
+}

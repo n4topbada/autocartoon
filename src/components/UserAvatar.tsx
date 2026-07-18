@@ -7,12 +7,13 @@ import {
   LuLogOut,
   LuMail,
   LuSettings,
+  LuUserRoundCog,
   LuWalletCards,
 } from "react-icons/lu";
 import { useAuth } from "./AuthProvider";
 import styles from "./UserAvatar.module.css";
 
-export default function UserAvatar() {
+export default function UserAvatar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const [showFaq, setShowFaq] = useState(false);
@@ -31,15 +32,30 @@ export default function UserAvatar() {
 
   return (
     <div className={styles.container} ref={ref}>
-      <button className={styles.avatar} type="button" onClick={() => setOpen(!open)} aria-label="사용자 메뉴">
+      <button
+        className={styles.avatar}
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-label="사용자 메뉴"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
         {initial}
       </button>
       <span className={styles.userName}>{user.name || user.email.split("@")[0]}</span>
 
       {open && (
-        <div className={styles.dropdown}>
+        <div className={styles.dropdown} role="menu">
           <div className={styles.info}><div className={styles.email}>{user.email}</div></div>
           <div className={styles.divider} />
+          <button
+            className={styles.menuItem}
+            type="button"
+            role="menuitem"
+            onClick={() => { setOpen(false); onOpenSettings(); }}
+          >
+            <LuUserRoundCog size={14} /> 계정 설정
+          </button>
           <div className={styles.stat}>
             <span className={styles.statLabel}><LuCoins size={13} /> 크레딧</span>
             <span className={styles.statValue}>{user.credits.toLocaleString()}</span>

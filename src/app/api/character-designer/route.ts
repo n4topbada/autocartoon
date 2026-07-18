@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AuthError, requireCharacterDesigner } from "@/lib/auth";
+import { AuthError, requireAuth } from "@/lib/auth";
 import { generatePlatformTextContent } from "@/lib/platform-ai";
 import {
   buildCharacterDesignerSystemPrompt,
@@ -137,7 +137,7 @@ async function generateDesign(
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireCharacterDesigner();
+    const session = await requireAuth();
 
     let body: unknown;
     try {
@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
     );
 
     const result = await withCreditCharge(
-      user.id,
+      session.userId,
       { units: AI_CREDIT_COSTS.characterDesigner, source: "character-designer" },
       () => generateDesign(message, history, currentDesign, requestedSections)
     );

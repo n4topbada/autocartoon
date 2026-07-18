@@ -1,5 +1,5 @@
 .container {
-  /* 고정 높이 앱 셸: 헤더 높이가 바뀌어도(더보기/줄바꿈) 패널이 남은 공간을 정확히 채워
+  /* 고정 높이 앱 셸: 헤더 높이가 바뀌어도 패널이 남은 공간을 정확히 채워
      매직넘버(calc(100vh-72px)) 없이 이중 스크롤이 생기지 않는다. 모바일에서는 아래 미디어쿼리로 해제. */
   height: 100vh;
   overflow: hidden;
@@ -8,7 +8,7 @@
 }
 
 .header {
-  padding: 12px 32px;
+  padding: 10px 24px;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -60,6 +60,9 @@
 }
 
 .logo {
+  padding: 0;
+  border: 0;
+  background: transparent;
   font-size: 17px;
   font-weight: 700;
   color: var(--accent);
@@ -67,6 +70,13 @@
   align-items: center;
   gap: 8px;
   white-space: nowrap;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.logo:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 
 .logoEmoji {
@@ -74,68 +84,26 @@
 }
 
 .tabNav {
+  flex: 1;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
-  row-gap: 6px;
   margin-left: auto;
   min-width: 0;
   align-items: center;
-  /* 드롭다운(더보기)이 잘리지 않도록 visible. 좁은 폭에서는 탭이 줄바꿈되어 발견성 유지. */
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
 }
 
-/* 상단 '더보기' 오버플로 메뉴 */
-.moreWrap {
-  position: relative;
-  display: inline-flex;
-}
-
-.moreMenu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 60;
-  min-width: 180px;
-  padding: 6px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.moreItem {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius);
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  text-decoration: none;
-  white-space: nowrap;
-  transition: background 0.12s;
-}
-
-.moreItem:hover {
-  background: var(--surface-hover);
-}
-
-.moreItemActive {
-  color: var(--accent);
-  background: var(--surface-hover);
+.tabNav::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
-  padding: 6px 16px;
+  flex: 0 0 auto;
+  padding: 6px 11px;
   background: transparent;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -198,6 +166,88 @@
   min-height: 0;
   display: flex;
   gap: 0;
+}
+
+.workspaceShell {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.workspaceTabs {
+  min-height: 48px;
+  padding: 7px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.workspaceTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.workspaceTab {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.workspaceTab:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.workspaceTabActive {
+  border-color: var(--border);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.workspaceTabCount {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-hover);
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.workspaceBody,
+.workspacePane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.workspacePane {
+  width: 100%;
+}
+
+.workspacePane[hidden] {
+  display: none;
 }
 
 /* 사이드바 */
@@ -281,10 +331,10 @@
   color: white;
 }
 
-.characterLibraryModal {
-  width: min(1040px, calc(100vw - 40px));
-  max-height: calc(100vh - 48px);
-  overflow: auto;
+.characterLibraryPage {
+  padding: 20px 24px 28px;
+  overflow-y: auto;
+  flex-direction: column;
 }
 
 .characterLibraryHeader,
@@ -321,7 +371,6 @@
 }
 
 .characterLibraryAdd,
-.characterLibraryClose,
 .characterLibraryActions button {
   min-height: 34px;
   display: inline-flex;
@@ -342,7 +391,6 @@
   color: #fff;
 }
 
-.characterLibraryClose,
 .characterLibraryActions button {
   width: 34px;
   padding: 0;
@@ -420,16 +468,13 @@
 }
 
 @media (max-width: 620px) {
-  .characterLibraryModal {
-    width: calc(100vw - 20px);
-  }
-
   .characterLibraryHeader {
     align-items: flex-start;
+    flex-wrap: wrap;
   }
 
-  .characterLibraryHeader > div:last-child {
-    align-items: flex-end;
+  .characterLibraryPage {
+    padding: 16px;
   }
 
   .characterLibraryGrid {
@@ -1691,36 +1736,6 @@
   cursor: not-allowed;
 }
 
-.accessModal {
-  width: min(400px, 90vw);
-  align-items: center;
-  gap: 14px;
-  border-radius: 8px;
-  text-align: center;
-}
-
-.accessIcon {
-  width: 48px;
-  height: 48px;
-  border: 1px solid rgba(246, 195, 68, 0.42);
-  border-radius: 7px;
-  display: grid;
-  place-items: center;
-  color: #f6c344;
-  background: rgba(246, 195, 68, 0.08);
-}
-
-.accessDescription {
-  color: var(--text-dim);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.accessModal .modalActions {
-  width: 100%;
-  justify-content: center;
-}
-
 /* 반응형 */
 /* 태블릿 */
 @media (max-width: 1024px) {
@@ -1742,8 +1757,19 @@
   .container { height: auto; overflow: visible; }
   .header { flex-wrap: wrap; padding: 8px 12px; }
   .logo { font-size: 14px; }
-  .tabNav { order: 3; width: 100%; justify-content: flex-start; }
-  .headerRight { gap: 6px; }
+  .tabNav {
+    order: 3;
+    flex: 1 0 100%;
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+  .headerRight { gap: 6px; margin-left: auto; min-width: 0; }
+
+  .workspaceTabs { padding: 7px 12px; }
+  .workspaceBody { min-height: calc(100vh - 160px); }
+  .chatToggleBtn { width: 38px; height: 38px; }
+  .robotWonyIcon { width: 36px; height: 36px; }
 
   .main { flex-direction: column; }
   .sidebar {

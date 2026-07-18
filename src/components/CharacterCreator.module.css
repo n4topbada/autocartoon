@@ -1,7 +1,8 @@
 .workspace {
   flex: 1;
   min-width: 0;
-  min-height: calc(100vh - 71px);
+  min-height: 0;
+  height: 100%;
   display: grid;
   grid-template-columns: minmax(340px, 430px) minmax(0, 1fr);
   background: var(--bg);
@@ -14,7 +15,7 @@
   flex-direction: column;
   gap: 16px;
   overflow-y: auto;
-  max-height: calc(100vh - 71px);
+  max-height: none;
 }
 
 .headingRow,
@@ -236,7 +237,7 @@
   min-width: 0;
   padding: 24px;
   overflow-y: auto;
-  max-height: calc(100vh - 71px);
+  max-height: none;
 }
 
 .resultsHeader {
@@ -467,6 +468,8 @@
 
 @media (max-width: 900px) {
   .workspace {
+    height: auto;
+    min-height: 100%;
     grid-template-columns: 1fr;
   }
 

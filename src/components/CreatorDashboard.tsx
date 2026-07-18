@@ -22,7 +22,7 @@ import {
 import { ANNOUNCEMENT_CATEGORY_LABELS, type AnnouncementCategory } from "@/lib/announcements";
 import styles from "./CreatorDashboard.module.css";
 
-type DashboardTab = "character" | "characterCreator" | "background";
+type DashboardTab = "character" | "characterCreator" | "background" | "contents";
 
 interface DashboardData {
   user: { name: string | null; credits: number; tier: string; tierUsedThisMonth: number };
@@ -141,7 +141,7 @@ export default function CreatorDashboard({ onNavigate }: { onNavigate: (tab: Das
 
   const stats = [
     { label: "보유 크레딧", value: data.user.credits, icon: <LuCoins />, href: "/credits" },
-    { label: "내 캐릭터", value: data.counts.characters, icon: <LuUsers />, action: () => onNavigate("characterCreator") },
+    { label: "내 캐릭터", value: data.counts.characters, icon: <LuUsers />, action: () => onNavigate("contents") },
     { label: "생성물", value: data.counts.outputs, icon: <LuImage />, href: "/archive" },
     { label: "프로젝트", value: data.counts.projects, icon: <LuClapperboard />, href: "/studio" },
   ];

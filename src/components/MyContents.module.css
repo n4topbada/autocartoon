@@ -96,6 +96,10 @@
 
 .empty p { margin-bottom: 12px; }
 
+.empty .createBtn {
+  margin: 0 auto;
+}
+
 /* 콘텐츠 행들 */
 .contentRows {
   display: flex;

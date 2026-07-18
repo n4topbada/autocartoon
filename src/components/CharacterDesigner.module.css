@@ -4,7 +4,7 @@
   --designer-warm: #f6c344;
   width: 100%;
   min-width: 0;
-  height: calc(100vh - 72px);
+  height: 100%;
   display: grid;
   grid-template-columns: minmax(340px, 0.9fr) minmax(420px, 1.1fr);
   background: var(--bg);

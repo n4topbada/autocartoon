@@ -12,6 +12,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
+  // 상위 사용자 폴더의 다른 lockfile을 모노레포 루트로 오인하지 않게 한다.
+  outputFileTracingRoot: process.cwd(),
   // 런타임 경로로 JSON/proto를 읽는 패키지는 Webpack 서버 번들에서 제외한다.
   serverExternalPackages: ["@google-cloud/tasks", "mammoth", "pdf-parse"],
   async headers() {

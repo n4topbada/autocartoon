@@ -42,6 +42,8 @@
 - 중복 포인터 문서 `autocartoon.md` 제거
 - 오래된 `NEXT_PUBLIC_SITE_URL`, `WONY_PHONE` 환경 변수 별칭 제거
 - `.env.example`을 실제 코드 환경 변수와 대조해 Instagram 보류 설정까지 보완
+- 사용되지 않게 된 캐릭터 디렉터 이메일 허용 목록과 별도 권한 함수를 제거하고 일반 로그인·크레딧 경계로 통일
+- 홈·더보기·설정·캐릭터 관련 중복 동선을 로고, 1단 메뉴, 계정 아이콘과 두 내부 작업공간으로 정리
 
 ## 의도적으로 유지한 항목
 
@@ -52,7 +54,7 @@
 
 ## 검증 결과
 
-- `npm test`: 58/58 통과
+- `npm test`: 60/60 통과
 - `npm run lint`: 통과
 - `npx tsc --noEmit --noUnusedLocals --noUnusedParameters --incremental false`: 통과
 - `npx --yes knip --reporter compact`: 경고 0건
@@ -61,7 +63,7 @@
 - `$env:BUILD_TARGET='cloudrun'; npm run build`: 통과
 - Git 추적 파일의 비밀 키·제공된 레퍼런스 비밀번호 패턴: 발견 0건
 - Markdown 상대 링크: 끊어진 링크 0건
-- Cloud Run `wonybananabot-00026-zt8`: 트래픽 100%, 배포 후 오류 로그 0건
+- Cloud Run `wonybananabot-00027-scn`: 트래픽 100%, 배포 후 오류 로그 0건
 - 운영 `/terms`, `/privacy`, `/refund`: 비로그인 200; `/api/credits`: 비로그인 401
 - 운영 카카오 OAuth callback, 로그인 홈, 계정 설정과 보안 헤더: 정상
 
