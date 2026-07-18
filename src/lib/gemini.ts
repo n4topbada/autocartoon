@@ -1,4 +1,5 @@
 import { GoogleGenAI, type Content, type Part } from "@google/genai";
+import { withTransientAIRetry } from "./ai-retry";
 import { getImageModel, getPlatformAIClients } from "./platform-ai";
 
 type Modality = "IMAGE" | "TEXT";
@@ -97,7 +98,16 @@ export async function generateContent(
   let lastError: unknown;
   for (const client of await getPlatformAIClients()) {
     try {
-      return await callGemini(client, contents, config);
+      return await withTransientAIRetry(
+        () => callGemini(client, contents, config),
+        {
+          onRetry: (_error, attempt, delayMs) => {
+            console.warn(
+              `[Platform AI] Image generation was throttled; retry ${attempt} in ${delayMs}ms.`
+            );
+          },
+        }
+      );
     } catch (error) {
       lastError = error;
       console.warn("[Platform AI] Image generation failed; trying next client.");

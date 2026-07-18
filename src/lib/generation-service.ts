@@ -183,10 +183,31 @@ export async function compositeGeneratedInsideMask(
   const width = metadata.width;
   const height = metadata.height;
   if (!width || !height) throw new Error("원본 이미지 크기를 읽지 못했습니다.");
-  const maskBuffer = await sharp(Buffer.from(mask.base64, "base64"))
+  const normalizedMask = await sharp(Buffer.from(mask.base64, "base64"))
     .resize(width, height, { fit: "fill" })
-    .png()
-    .toBuffer();
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const maskAlpha = Buffer.alloc(width * height);
+  for (let index = 0; index < width * height; index += 1) {
+    const offset = index * 4;
+    const luminance = Math.round(
+      (normalizedMask.data[offset] * 77 +
+        normalizedMask.data[offset + 1] * 150 +
+        normalizedMask.data[offset + 2] * 29) /
+        256
+    );
+    maskAlpha[index] = Math.round(
+      (luminance * normalizedMask.data[offset + 3]) / 255
+    );
+  }
+  const alphaMaskPixels = Buffer.alloc(width * height * 4, 255);
+  for (let index = 0; index < width * height; index += 1) {
+    alphaMaskPixels[index * 4 + 3] = maskAlpha[index];
+  }
+  const maskBuffer = await sharp(alphaMaskPixels, {
+    raw: { width, height, channels: 4 },
+  }).png().toBuffer();
   const generatedBuffer = await sharp(Buffer.from(generated.base64, "base64"))
     .resize(width, height, { fit: "fill" })
     .ensureAlpha()
@@ -434,16 +455,27 @@ export async function generate(input: GenerateInput) {
 
   // 5. Gemini 호출
   const requestedCount = Math.max(1, Math.min(5, input.count || 1));
-  const generationResults = await Promise.allSettled(
-    Array.from({ length: requestedCount }, () => generateContent({
-      prompt,
-      aspectRatio: input.aspectRatio,
-      imageSize: input.imageSize,
-      referenceImages,
-      labeledImages: labeledImages.length > 0 ? labeledImages : undefined,
-      modalities: ["IMAGE", "TEXT"],
-    }))
-  );
+  const generationResults: PromiseSettledResult<Awaited<ReturnType<typeof generateContent>>>[] = [];
+  // Image models have comparatively tight burst quotas. Batch requests are
+  // intentionally serialized so a single user's multi-image request does not
+  // throttle itself or the next queued job.
+  for (let index = 0; index < requestedCount; index += 1) {
+    try {
+      generationResults.push({
+        status: "fulfilled",
+        value: await generateContent({
+          prompt,
+          aspectRatio: input.aspectRatio,
+          imageSize: input.imageSize,
+          referenceImages,
+          labeledImages: labeledImages.length > 0 ? labeledImages : undefined,
+          modalities: ["IMAGE", "TEXT"],
+        }),
+      });
+    } catch (reason) {
+      generationResults.push({ status: "rejected", reason });
+    }
+  }
   const fulfilledResults = generationResults.flatMap((result) =>
     result.status === "fulfilled" ? [result.value] : []
   );

@@ -14,6 +14,7 @@ export async function GET() {
           orderBy: { order: "asc" },
           take: 1,
         },
+        _count: { select: { slots: true } },
       },
     });
 
@@ -38,7 +39,7 @@ export async function GET() {
         title: c.title,
         comment: c.comment,
         thumbnail: c.slots[0] ? imageMap.get(c.slots[0].imageId) ?? null : null,
-        slotCount: c.slots.length,
+        slotCount: c._count.slots,
         createdAt: c.createdAt.toISOString(),
         updatedAt: c.updatedAt.toISOString(),
       }))

@@ -11,6 +11,7 @@
 - 고급 캔버스 상세 비교: [docs/advanced-canvas-parity.md](./docs/advanced-canvas-parity.md)
 - 운영 인수인계: [docs/project-handoff.md](./docs/project-handoff.md)
 - 코드 감사 기록: [docs/code-audit-2026-07-18.md](./docs/code-audit-2026-07-18.md)
+- 운영 기능 E2E 결과: [docs/production-e2e-2026-07-18.md](./docs/production-e2e-2026-07-18.md)
 - 카카오 알림톡 도입 절차: [docs/kakao-alimtalk-setup.md](./docs/kakao-alimtalk-setup.md)
 - Instagram 보류 범위: [docs/instagram-setup.md](./docs/instagram-setup.md)
 - GCS 브라우저 직접 업로드 CORS: [scripts/gcs-cors.json](./scripts/gcs-cors.json)
@@ -197,3 +198,15 @@ npm audit --omit=dev
 ```
 
 테스트는 프롬프트 제약, 캐릭터 참조, 작업 응답, 마스크 밖 픽셀 보존, 회전 좌표·선택, 프로젝트 정규화, 크레딧 상품·비용, 공개 정책 경로, OAuth 계정 관리, 저장 경로·업로드 정책과 카카오 계정 연결 안전 조건을 확인합니다.
+
+운영 기능 E2E는 테스트 전용 계정을 별도로 준비한 뒤 환경 변수로만 자격 증명을 전달합니다. 실제 Gemini, Vertex AI, Veo, TTS, Cloud Tasks, Cloud SQL, GCS와 크레딧 원장을 호출하므로 명시적으로 비용 테스트를 수행할 때만 실행합니다.
+
+```powershell
+$env:E2E_BASE_URL='https://wonybananabot-272254743773.asia-northeast3.run.app'
+$env:E2E_EMAIL='...'
+$env:E2E_PASSWORD='...'
+$env:E2E_SECONDARY_EMAIL='...'
+$env:E2E_SECONDARY_PASSWORD='...'
+$env:E2E_ALLOW_PAID='true'
+node scripts/production-e2e.mjs
+```

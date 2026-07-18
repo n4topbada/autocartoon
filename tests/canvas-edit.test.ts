@@ -42,6 +42,39 @@ test("masked AI edit preserves every pixel outside the mask", async () => {
   assert.deepEqual(pixel(5, 5), [30, 100, 240, 255]);
 });
 
+test("masked AI edit treats opaque black pixels as protected", async () => {
+  const width = 8;
+  const height = 8;
+  const source = await solidPng(width, height, { r: 220, g: 20, b: 60, alpha: 1 });
+  const generated = await solidPng(width, height, { r: 30, g: 100, b: 240, alpha: 1 });
+  const maskPixels = Buffer.alloc(width * height * 4);
+  for (let index = 0; index < width * height; index += 1) {
+    maskPixels[index * 4 + 3] = 255;
+  }
+  for (let y = 2; y < 6; y += 1) {
+    for (let x = 2; x < 6; x += 1) {
+      const offset = (y * width + x) * 4;
+      maskPixels.fill(255, offset, offset + 4);
+    }
+  }
+  const mask = await sharp(maskPixels, { raw: { width, height, channels: 4 } }).png().toBuffer();
+
+  const result = await compositeGeneratedInsideMask(
+    { base64: source.toString("base64"), mimeType: "image/png" },
+    { base64: generated.toString("base64"), mimeType: "image/png" },
+    { base64: mask.toString("base64"), mimeType: "image/png" }
+  );
+  const pixels = await sharp(Buffer.from(result.base64, "base64")).raw().toBuffer();
+  const pixel = (x: number, y: number) => Array.from(
+    pixels.subarray((y * width + x) * 4, (y * width + x) * 4 + 4)
+  );
+
+  assert.deepEqual(pixel(0, 0), [220, 20, 60, 255]);
+  assert.deepEqual(pixel(7, 7), [220, 20, 60, 255]);
+  assert.deepEqual(pixel(2, 2), [30, 100, 240, 255]);
+  assert.deepEqual(pixel(5, 5), [30, 100, 240, 255]);
+});
+
 test("rotated canvas objects preserve coordinate round trips and hit testing", () => {
   const bubble = {
     ...createBubble("rectangle", 100, 100),

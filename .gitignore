@@ -21,6 +21,7 @@ assets/kang-geonma/*.webp
 assets/kang-geonma/*.gif
 /.swc
 .codex-dev.*.log
+.e2e-*.json
 src/app/.well-known/workflow/
 public/uploads/
 
