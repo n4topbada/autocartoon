@@ -153,6 +153,10 @@
   align-items: start;
 }
 
+.accountPanelWide {
+  grid-column: 1 / -1;
+}
+
 .panel {
   min-width: 0;
   border: 1px solid var(--border);
@@ -181,7 +185,7 @@
 
 .accountList > div {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: 96px minmax(0, 1fr);
   gap: 14px;
   padding: 13px 0;
   border-bottom: 1px solid var(--border);
@@ -232,9 +236,38 @@
   color: #181600;
 }
 
-.mutedInline {
-  color: var(--text-dim);
+.googleConnectionButton {
+  border-color: var(--border-strong);
+  background: var(--surface-subtle);
+  color: var(--text);
+}
+
+.googleConnectionButton:hover {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.migrationNote {
+  margin-top: 16px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--blue-soft);
+}
+
+.migrationNote strong {
+  color: var(--text);
   font-size: 12px;
+}
+
+.migrationNote span {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.55;
 }
 
 .form {
@@ -314,6 +347,31 @@
 }
 
 .success {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  background: rgba(52, 211, 153, 0.08);
+  color: var(--success);
+}
+
+.globalError,
+.globalSuccess {
+  max-width: 960px;
+  margin: 0 auto 20px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.globalError {
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--danger);
+}
+
+.globalSuccess {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -479,13 +537,6 @@
 .dangerDescription {
   max-width: 680px;
   margin: 0;
-  color: var(--text-dim);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.mutedNote {
-  margin: 0 0 4px;
   color: var(--text-dim);
   font-size: 12px;
   line-height: 1.6;

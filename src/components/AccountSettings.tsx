@@ -84,18 +84,28 @@ export default function AccountSettings() {
   }, [loadSessions, user]);
 
   useEffect(() => {
-    const result = new URLSearchParams(window.location.search).get("kakao");
-    if (result === "linked") {
+    const params = new URLSearchParams(window.location.search);
+    const kakaoResult = params.get("kakao");
+    const googleResult = params.get("google");
+    if (kakaoResult === "linked") {
       setSuccess("카카오 계정을 연결했습니다. 이제 카카오 로그인으로 같은 계정을 사용할 수 있습니다.");
       void refresh();
-    } else if (result === "different_kakao") {
+    } else if (kakaoResult === "different_kakao") {
       setError("이 계정에는 다른 카카오 계정이 이미 연결되어 있습니다.");
-    } else if (result === "link_conflict") {
+    } else if (kakaoResult === "link_conflict") {
       setError("선택한 카카오 계정에 기존 생성물이나 활동 기록이 있어 자동으로 합칠 수 없습니다. 관리자에게 계정 병합을 요청해주세요.");
+    } else if (googleResult === "linked") {
+      setSuccess("Google 계정을 연결했습니다. 이제 Google 로그인으로 같은 계정을 사용할 수 있습니다.");
+      void refresh();
+    } else if (googleResult === "different_google") {
+      setError("이 계정에는 다른 Google 계정이 이미 연결되어 있습니다.");
+    } else if (googleResult === "link_conflict") {
+      setError("선택한 Google 계정이 다른 사용자 계정에 연결되어 있습니다. 관리자에게 계정 병합을 요청해주세요.");
     }
-    if (result) {
+    if (kakaoResult || googleResult) {
       const url = new URL(window.location.href);
       url.searchParams.delete("kakao");
+      url.searchParams.delete("google");
       window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
     }
   }, [refresh]);
@@ -170,6 +180,7 @@ export default function AccountSettings() {
   };
 
   const canManageWithoutPassword = Boolean(user?.canManageAccountWithoutPassword);
+  const passwordLoginAvailable = Boolean(user?.passwordLoginAvailable);
 
   const handleWithdrawal = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -237,18 +248,28 @@ export default function AccountSettings() {
     <section className={styles.page} aria-labelledby="account-settings-title">
       <AccountSettingsHeader />
 
-      {user.mustChangePassword && (
+      {passwordLoginAvailable && user.mustChangePassword && (
         <div className={styles.temporaryNotice} role="status">
           <LuKeyRound size={18} aria-hidden="true" />
           <div>
             <strong>임시 비밀번호로 로그인했습니다.</strong>
-            <span>30분이 지나기 전에 새 비밀번호로 변경해주세요.</span>
+            <span>새 비밀번호로 변경하거나 카카오·Google 계정을 연결해주세요.</span>
           </div>
         </div>
       )}
 
+      {error && <p className={styles.globalError} role="alert">{error}</p>}
+      {success && (
+        <p className={styles.globalSuccess} role="status">
+          <LuCheck size={16} aria-hidden="true" /> {success}
+        </p>
+      )}
+
       <div className={styles.settingsGrid}>
-        <section className={styles.panel} aria-labelledby="account-info-title">
+        <section
+          className={`${styles.panel} ${!passwordLoginAvailable ? styles.accountPanelWide : ""}`}
+          aria-labelledby="account-info-title"
+        >
           <div className={styles.panelHeading}>
             <LuUserRound size={18} aria-hidden="true" />
             <h3 id="account-info-title">계정 정보</h3>
@@ -286,27 +307,34 @@ export default function AccountSettings() {
                 {user.googleLinked ? (
                   <span className={styles.connectionBadge}>연결됨</span>
                 ) : (
-                  <span className={styles.mutedInline}>미연결</span>
+                  <a
+                    className={`${styles.connectionButton} ${styles.googleConnectionButton}`}
+                    href="/api/auth/google?intent=link"
+                  >
+                    Google 연결
+                  </a>
                 )}
               </dd>
             </div>
           </dl>
+          {passwordLoginAvailable && (
+            <div className={styles.migrationNote}>
+              <strong>기존 이메일 계정</strong>
+              <span>
+                소셜 계정을 연결하면 기존 비밀번호와 임시 비밀번호가 폐기되고 이후에는 카카오 또는 Google로 로그인합니다.
+              </span>
+            </div>
+          )}
         </section>
 
-        <section className={styles.panel} aria-labelledby="password-change-title">
-          <div className={styles.panelHeading}>
-            <LuKeyRound size={18} aria-hidden="true" />
-            <h3 id="password-change-title">
-              {canManageWithoutPassword ? "비밀번호 설정" : "비밀번호 변경"}
-            </h3>
-          </div>
+        {passwordLoginAvailable && (
+          <section className={styles.panel} aria-labelledby="password-change-title">
+            <div className={styles.panelHeading}>
+              <LuKeyRound size={18} aria-hidden="true" />
+              <h3 id="password-change-title">비밀번호 변경</h3>
+            </div>
 
-          <form className={styles.form} onSubmit={handleSubmit}>
-            {canManageWithoutPassword ? (
-              <p className={styles.mutedNote}>
-                소셜 로그인으로 본인 확인된 세션입니다. 이메일 로그인을 함께 쓰려면 아래에서 비밀번호를 설정하세요.
-              </p>
-            ) : (
+            <form className={styles.form} onSubmit={handleSubmit}>
               <div className={styles.field}>
                 <label htmlFor="current-password">현재 비밀번호</label>
                 <div className={styles.passwordInput}>
@@ -331,65 +359,54 @@ export default function AccountSettings() {
                   </button>
                 </div>
               </div>
-            )}
 
-            <div className={styles.field}>
-              <label htmlFor="new-password">새 비밀번호</label>
-              <div className={styles.passwordInput}>
-                <input
-                  id="new-password"
-                  type={showNewPassword ? "text" : "password"}
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                  autoComplete="new-password"
-                  placeholder="영문과 숫자를 포함한 10자 이상"
-                  minLength={MIN_PASSWORD_LENGTH}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowNewPassword((visible) => !visible)}
-                  aria-label={showNewPassword ? "새 비밀번호 숨기기" : "새 비밀번호 보기"}
-                  title={showNewPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
-                >
-                  {showNewPassword ? <LuEyeOff size={17} /> : <LuEye size={17} />}
-                </button>
+              <div className={styles.field}>
+                <label htmlFor="new-password">새 비밀번호</label>
+                <div className={styles.passwordInput}>
+                  <input
+                    id="new-password"
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    autoComplete="new-password"
+                    placeholder="영문과 숫자를 포함한 10자 이상"
+                    minLength={MIN_PASSWORD_LENGTH}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword((visible) => !visible)}
+                    aria-label={showNewPassword ? "새 비밀번호 숨기기" : "새 비밀번호 보기"}
+                    title={showNewPassword ? "비밀번호 숨기기" : "비밀번호 보기"}
+                  >
+                    {showNewPassword ? <LuEyeOff size={17} /> : <LuEye size={17} />}
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div className={styles.field}>
-              <label htmlFor="confirm-password">새 비밀번호 확인</label>
-              <div className={styles.passwordInput}>
-                <input
-                  id="confirm-password"
-                  type={showNewPassword ? "text" : "password"}
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  autoComplete="new-password"
-                  placeholder="새 비밀번호 재입력"
-                  minLength={MIN_PASSWORD_LENGTH}
-                  required
-                />
+              <div className={styles.field}>
+                <label htmlFor="confirm-password">새 비밀번호 확인</label>
+                <div className={styles.passwordInput}>
+                  <input
+                    id="confirm-password"
+                    type={showNewPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    autoComplete="new-password"
+                    placeholder="새 비밀번호 재입력"
+                    minLength={MIN_PASSWORD_LENGTH}
+                    required
+                  />
+                </div>
               </div>
-            </div>
 
-            {error && <p className={styles.error} role="alert">{error}</p>}
-            {success && (
-              <p className={styles.success} role="status">
-                <LuCheck size={16} aria-hidden="true" /> {success}
-              </p>
-            )}
-
-            <button className={styles.submitButton} type="submit" disabled={submitting}>
-              <LuShieldCheck size={17} aria-hidden="true" />
-              {submitting
-                ? "저장 중..."
-                : canManageWithoutPassword
-                  ? "비밀번호 설정"
-                  : "비밀번호 변경"}
-            </button>
-          </form>
-        </section>
+              <button className={styles.submitButton} type="submit" disabled={submitting}>
+                <LuShieldCheck size={17} aria-hidden="true" />
+                {submitting ? "저장 중..." : "비밀번호 변경"}
+              </button>
+            </form>
+          </section>
+        )}
 
         <section className={`${styles.panel} ${styles.sessionPanel}`} aria-labelledby="device-session-title">
           <div className={styles.sessionHeading}>

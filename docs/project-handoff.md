@@ -14,7 +14,7 @@ GitHub: `https://github.com/n4topbada/autocartoon`
 - 레퍼런스: `https://app.toonagent.co.kr`
 - 레퍼런스 ID·비밀번호: Git에서 제외된 `docs/access-credentials.private.md`
 - 운영 사용자 비밀번호, API 키, OAuth secret, DB URL은 문서나 Git에 기록하지 않는다.
-- 비밀번호는 평문 복구하지 않으며 이메일 임시 비밀번호 흐름을 사용한다.
+- 비밀번호는 평문 복구하지 않는다. 임시 비밀번호는 OAuth 미연결 기존 이메일 회원에게만 한시 제공한다.
 - 관리자 대상 계정은 DB 역할로 판별한다. 이메일 닉네임 추정으로 권한을 올리지 않는다.
 - 제품은 국내 전용 한국어 서비스다. 레퍼런스의 다국어 기능은 의도적으로 범위에서 제외한다.
 
@@ -23,7 +23,7 @@ GitHub: `https://github.com/n4topbada/autocartoon`
 | 항목 | 현재 값 |
 | --- | --- |
 | GCP project | `wonybananabot` |
-| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-18 검증 리비전 `wonybananabot-00028-wrc` |
+| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-18 검증 리비전 `wonybananabot-00035-scs` |
 | Cloud SQL | `wony-postgres`, PostgreSQL 16 |
 | Cloud Tasks | `wony-jobs`, `asia-northeast3`; 동시 10, 초당 5, 최대 5회 재시도 |
 | GCS | `wonybananabot-media`, private. 브라우저 직접 업로드 CORS는 `scripts/gcs-cors.json` 기준 |
@@ -62,9 +62,9 @@ flowchart LR
 
 ### 인증·개인화
 
-- 이메일 인증·복구, 로그인·로그아웃, 12자 영문/숫자 임시 비밀번호, 강제 변경
-- 카카오·Google OAuth와 카카오의 명시적 기존 계정 연결
-- OAuth로 본인 확인한 세션의 초기 이메일 로그인 비밀번호 설정
+- 카카오·Google 전용 신규 가입과 두 공급자의 명시적 기존 계정 연결
+- 기존 이메일 회원만 접힌 레거시 로그인·12자 임시 비밀번호·강제 변경 사용
+- OAuth 연결 즉시 기존 비밀번호·임시 비밀번호 폐기, 다른 세션 종료, OAuth 전용 전환
 - HttpOnly 세션, DB 기기 세션 최대 2대, 목록·철회·계정 삭제
 - 사용자별 캐릭터·생성물·배경·프로젝트·보관함·게시글·크레딧 소유권
 
@@ -117,7 +117,7 @@ flowchart LR
 - 국내 서비스용 약관·개인정보·환불 페이지와 로그인·설정·크레딧 공통 링크
 - SOLAPI 알림톡 어댑터의 HMAC-SHA256 인증 수정과 사업자 도입 절차 문서화
 - 공개 정책 페이지가 세션 때문에 로그인으로 이동하던 미들웨어 오류 수정
-- OAuth 신규 계정에 알 수 없는 임의 비밀번호를 요구하던 설정·탈퇴 흐름 수정
+- OAuth 신규 계정의 비밀번호 설정을 제거하고 세션 본인 확인으로 계정 관리·탈퇴 허용
 - 로컬 파일 경로 탈출과 임의 `public/`·MIME 업로드 차단
 - Cloud Run의 손상된 `APP_ORIGIN` 값을 운영 URL 하나로 교정
 - 정적 데드코드·중복 의존성·오래된 HTML/Markdown 정리와 Knip 경고 0건
@@ -130,7 +130,7 @@ flowchart LR
 - 비활성 제스처·배경·보관함 패널의 조회·폴링을 중단해 숨은 네트워크 비용 제거
 - 전체 화면을 톤다운된 밝은 파스텔 팔레트와 현대적인 도구형 버튼으로 전환하고 390px에서 5개 메뉴를 모두 검증
 
-운영 반영 상태: 기존 마이그레이션 실행 `wony-prisma-migrate-99klj`는 성공 상태다. AI 순간 제한 재시도, 배경 배치 직렬화, 콘텐츠 슬롯 집계와 불투명 흑백 마스크 보정을 포함하고 Google OAuth 운영 비밀값을 연결한 리비전 `wonybananabot-00033-9c5`에 트래픽 100%를 연결했다. Cloud SQL 연결, 서비스 계정, 최대 4 인스턴스, 동시성 80, 600초 제한을 그대로 유지했다. 기능 중심 운영 E2E와 Google 실제 로그인을 합쳐 앱 기능 `36/36` 항목을 통과했다. Google OAuth는 Secret Manager 참조와 기존 Bada 계정 세션 생성을 확인했으며, 카카오페이 사이트 도메인만 외부 설정 대기 상태다. 상세 결과는 [production-e2e-2026-07-18.md](./production-e2e-2026-07-18.md)에 있다. 이번 변경에는 DB 마이그레이션이 없다.
+운영 반영 상태: 기존 마이그레이션 실행 `wony-prisma-migrate-99klj`는 성공 상태다. AI 안정화와 Google OAuth 운영 설정에 더해 소셜 전용 신규 가입·레거시 이메일 계정 전환 정책을 담은 리비전 `wonybananabot-00035-scs`에 트래픽 100%를 연결했다. Cloud SQL 연결, 서비스 계정, 최대 4 인스턴스, 동시성 80, 600초 제한을 그대로 유지했다. 기능 중심 운영 E2E와 Google 실제 로그인을 합쳐 앱 기능 `36/36` 항목을 통과했고, 추가 인증 회귀 테스트를 포함한 로컬 테스트 `76/76`, ESLint, 프로덕션 빌드가 통과했다. 실제 Bada Google 세션에서 비밀번호 패널 부재와 공급자 연결 상태를 확인했으며 새 리비전 오류 로그는 0건이다. 카카오페이 사이트 도메인만 외부 설정 대기 상태다. 상세 결과는 [production-e2e-2026-07-18.md](./production-e2e-2026-07-18.md)에 있다. 이번 변경에는 DB 마이그레이션이 없다.
 
 ## 5. 레퍼런스 대비 기능상 남은 항목
 

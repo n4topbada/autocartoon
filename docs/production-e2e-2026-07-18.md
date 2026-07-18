@@ -3,10 +3,10 @@
 ## 1. 결론
 
 - 대상: `https://wonybananabot-272254743773.asia-northeast3.run.app`
-- 최종 리비전: `wonybananabot-00033-9c5`, 트래픽 100%
+- 최종 리비전: `wonybananabot-00035-scs`, 트래픽 100%
 - 기능 판정: 자동·수동 합산 앱 기능 `36/36` 통과
 - 외부 설정 대기: 카카오페이 사이트 도메인
-- 로컬 검증: 테스트 `71/71`, ESLint, Next.js 프로덕션 빌드 통과
+- 로컬 검증: 테스트 `76/76`, ESLint, Next.js 프로덕션 빌드 통과
 - DB 마이그레이션: 없음
 
 1차 실행에서 Vertex AI 순간 제한과 Veo 서비스 에이전트의 저장소 접근 문제를 재현했다. 수정 및 IAM 보정 후 2차 실행에서 기능 34건이 바로 통과했고, 러너의 게시판 상세 인증 가정을 고친 재검증까지 포함하면 35건이 통과했다. 마지막 리비전에서는 불투명 흑백 마스크 회귀 테스트를 별도로 실제 생성해 보호 영역의 변경 픽셀 `0`을 확인했다. 이후 Google OAuth 운영 클라이언트를 연결하고 실제 계정 선택, 콜백, 기존 Bada 계정 세션 생성을 브라우저에서 검증해 총 36건을 확인했다.
@@ -16,7 +16,7 @@
 | 영역 | 실제 검증 | 결과 |
 | --- | --- | --- |
 | 공개·보호 경로 | 로그인·약관·개인정보·환불 `200`, 보호 화면 로그인 이동 | 통과 |
-| 계정·권한 | 관리자/일반 사용자 로그인, 관리자 API 경계, IDOR 차단, 세션 최대 2개 | 통과 |
+| 계정·권한 | 소셜 전용 신규 가입, 레거시 이메일 로그인·전환, 관리자 API 경계, IDOR 차단, 세션 최대 2개 | 통과 |
 | 카카오 로그인 | OAuth 진입점과 운영 콜백 URL 생성 | 통과 |
 | Google 로그인 | 실제 계정 선택, 운영 콜백, 기존 이메일 계정 세션 생성 | 통과 |
 | 캐릭터 자산 | 그룹, 프리셋, 대표 이미지, 태그, 프롬프트 프리셋 CRUD | 통과 |
@@ -69,12 +69,13 @@
 3. 콘텐츠 목록의 슬롯 수가 항상 최대 1로 표시됐다. Prisma 목록 조회에 `_count.slots`를 포함해 실제 슬롯 수를 반환하도록 수정했다.
 4. 수동 편집 마스크가 알파 채널만 사용해, 알파가 255인 일반 흑백 PNG의 검정 영역도 편집될 수 있었다. `luminance × alpha`를 마스크 강도로 정규화해 투명 마스크와 불투명 흑백 마스크를 모두 지원한다.
 5. 게시판 상세 API를 비로그인 공개 API로 가정한 E2E 러너 오류가 있었다. 상세 데이터는 인증 사용자로, 게시된 미디어만 익명으로 확인하도록 수정했다.
+6. 신규 가입을 OAuth로 제한했지만 이메일 로그인이 첫 화면에 남고 OAuth 계정이 로컬 비밀번호를 설정할 수 있었다. 소셜 로그인을 첫 동선으로 바꾸고 이메일 로그인·복구·관리자 임시 비밀번호를 OAuth 미연결 레거시 계정에만 제한했다. 공급자 연결 시 기존 자격 증명과 다른 세션을 폐기하며 Google에도 명시적 연결 흐름을 추가했다.
 
 ## 5. 외부 설정 상태
 
 ### Google OAuth
 
-2026-07-18에 Web application 클라이언트와 다음 콜백을 등록했다. Client ID와 Client Secret은 각각 Secret Manager의 `google-oauth-client-id`, `google-oauth-client-secret`에 보관하고 Cloud Run의 `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`에서 `latest` 버전을 참조한다. 실제 Google 계정 선택부터 운영 콜백, 기존 Bada 계정 로그인과 인증 홈 진입까지 통과했다. 콜백 요청은 `307`로 완료됐고 리비전 `wonybananabot-00033-9c5`의 오류 로그는 없었다.
+2026-07-18에 Web application 클라이언트와 다음 콜백을 등록했다. Client ID와 Client Secret은 각각 Secret Manager의 `google-oauth-client-id`, `google-oauth-client-secret`에 보관하고 Cloud Run의 `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`에서 `latest` 버전을 참조한다. 실제 Google 계정 선택부터 운영 콜백, 기존 Bada 계정 로그인과 인증 홈 진입까지 통과했다. 소셜 전용 정책 배포 후에는 같은 세션에서 Google `연결됨`, 비밀번호 패널 부재, 기존 이메일 로그인 거부 `401`을 확인했다. 해당 이메일의 복구 요청은 내부 상태 `not_found`로 종료돼 임시 비밀번호 메일을 발송하지 않았다. 리비전 `wonybananabot-00035-scs`의 오류 로그는 0건이었다.
 
 ```text
 http://localhost:3000/api/auth/google/callback

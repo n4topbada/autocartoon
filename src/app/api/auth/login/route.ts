@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
+import { isLegacyPasswordAccount } from "@/lib/account-auth";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { createUserSession } from "@/lib/user-sessions";
@@ -32,6 +33,9 @@ export async function POST(req: NextRequest) {
       where: { email: { equals: email, mode: "insensitive" } },
     });
     if (!user) {
+      return NextResponse.json({ error: INVALID_CREDENTIALS }, { status: 401 });
+    }
+    if (!isLegacyPasswordAccount(user)) {
       return NextResponse.json({ error: INVALID_CREDENTIALS }, { status: 401 });
     }
 

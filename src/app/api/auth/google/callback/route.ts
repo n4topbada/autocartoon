@@ -3,9 +3,11 @@ import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { getAppUrl } from "@/lib/app-url";
 import { addReturnTo, normalizeReturnTo } from "@/lib/auth-navigation";
+import { AuthError, requireAuth } from "@/lib/auth";
 import { WELCOME_CREDITS } from "@/lib/credit-products";
 import {
   getGoogleUser,
+  GOOGLE_OAUTH_INTENT_COOKIE,
   GOOGLE_OAUTH_RETURN_TO_COOKIE,
   GOOGLE_OAUTH_STATE_COOKIE,
   GOOGLE_OAUTH_VERIFIER_COOKIE,
@@ -25,6 +27,7 @@ function redirectAndClearState(req: NextRequest, path: string) {
     GOOGLE_OAUTH_STATE_COOKIE,
     GOOGLE_OAUTH_VERIFIER_COOKIE,
     GOOGLE_OAUTH_RETURN_TO_COOKIE,
+    GOOGLE_OAUTH_INTENT_COOKIE,
   ]) {
     response.cookies.set(name, "", {
       httpOnly: true,
@@ -37,12 +40,59 @@ function redirectAndClearState(req: NextRequest, path: string) {
   return response;
 }
 
+async function linkGoogleToCurrentAccount(googleId: string) {
+  const session = await requireAuth();
+  const disabledPasswordHash = await bcrypt.hash(
+    randomBytes(32).toString("base64url"),
+    12,
+  );
+  const result = await prisma.$transaction(async (tx) => {
+    const [target, linked] = await Promise.all([
+      tx.user.findUnique({ where: { id: session.userId } }),
+      tx.user.findUnique({ where: { googleId } }),
+    ]);
+    if (!target) throw new AuthError("로그인 계정을 찾을 수 없습니다.", 401);
+    if (target.googleId && target.googleId !== googleId) {
+      return "different_google" as const;
+    }
+    if (linked && linked.id !== target.id) {
+      return "account_has_data" as const;
+    }
+
+    await tx.user.update({
+      where: { id: target.id },
+      data: {
+        googleId,
+        passwordHash: disabledPasswordHash,
+        temporaryPasswordHash: null,
+        temporaryPasswordExpiresAt: null,
+        temporaryPasswordIssuedAt: null,
+      },
+    });
+    if (session.sessionId) {
+      await tx.userSession.deleteMany({
+        where: { userId: target.id, id: { not: session.sessionId } },
+      });
+    }
+    return "linked" as const;
+  }, { isolationLevel: "Serializable" });
+
+  if (result === "linked") {
+    session.usedTemporaryPassword = false;
+    session.authMethod = "google";
+    await session.save();
+  }
+  return result;
+}
+
 export async function GET(req: NextRequest) {
   const expectedState = req.cookies.get(GOOGLE_OAUTH_STATE_COOKIE)?.value ?? null;
   const verifier = req.cookies.get(GOOGLE_OAUTH_VERIFIER_COOKIE)?.value ?? null;
   const returnTo = normalizeReturnTo(
     req.cookies.get(GOOGLE_OAUTH_RETURN_TO_COOKIE)?.value,
   );
+  const intent =
+    req.cookies.get(GOOGLE_OAUTH_INTENT_COOKIE)?.value === "link" ? "link" : "login";
   const returnedState = req.nextUrl.searchParams.get("state");
   if (!validateGoogleOAuthState(returnedState, expectedState) || !verifier) {
     return redirectAndClearState(
@@ -67,6 +117,24 @@ export async function GET(req: NextRequest) {
 
   try {
     const google = await getGoogleUser(code, req.nextUrl.origin, verifier);
+    if (intent === "link") {
+      try {
+        const result = await linkGoogleToCurrentAccount(google.id);
+        return redirectAndClearState(
+          req,
+          result === "linked"
+            ? "/?tab=settings&google=linked"
+            : `/?tab=settings&google=${result === "different_google" ? "different_google" : "link_conflict"}`,
+        );
+      } catch (error) {
+        if (error instanceof AuthError) {
+          return redirectAndClearState(req, "/login?google=link_login_required");
+        }
+        throw error;
+      }
+    }
+
+    let migratedFromPassword = false;
     let user = await prisma.user.findUnique({ where: { googleId: google.id } });
 
     if (!user) {
@@ -80,28 +148,22 @@ export async function GET(req: NextRequest) {
         );
       }
       if (matchingUser && !matchingUser.googleId) {
-        if (matchingUser.emailVerified) {
-          user = await prisma.user.update({
-            where: { id: matchingUser.id },
-            data: { googleId: google.id },
-          });
-        } else {
-          const rotatedPasswordHash = await bcrypt.hash(
-            randomBytes(32).toString("base64url"),
-            12,
-          );
-          user = await prisma.user.update({
-            where: { id: matchingUser.id },
-            data: {
-              googleId: google.id,
-              emailVerified: true,
-              passwordHash: rotatedPasswordHash,
-              temporaryPasswordHash: null,
-              temporaryPasswordExpiresAt: null,
-              temporaryPasswordIssuedAt: null,
-            },
-          });
-        }
+        migratedFromPassword = !matchingUser.kakaoId;
+        const rotatedPasswordHash = await bcrypt.hash(
+          randomBytes(32).toString("base64url"),
+          12,
+        );
+        user = await prisma.user.update({
+          where: { id: matchingUser.id },
+          data: {
+            googleId: google.id,
+            emailVerified: true,
+            passwordHash: rotatedPasswordHash,
+            temporaryPasswordHash: null,
+            temporaryPasswordExpiresAt: null,
+            temporaryPasswordIssuedAt: null,
+          },
+        });
       }
     }
 
@@ -136,7 +198,9 @@ export async function GET(req: NextRequest) {
     }
 
     const session = await getSession();
-    if (session.sessionId) {
+    if (migratedFromPassword) {
+      await prisma.userSession.deleteMany({ where: { userId: user.id } });
+    } else if (session.sessionId) {
       await prisma.userSession.deleteMany({ where: { id: session.sessionId } });
     }
     const registeredSession = await createUserSession(

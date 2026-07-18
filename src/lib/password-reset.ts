@@ -39,7 +39,11 @@ export async function issueTemporaryPassword(
   if (!apiKey) return "email_unavailable";
 
   const user = await prisma.user.findFirst({
-    where: { email: { equals: email, mode: "insensitive" } },
+    where: {
+      email: { equals: email, mode: "insensitive" },
+      kakaoId: null,
+      googleId: null,
+    },
     select: {
       id: true,
       email: true,
@@ -56,6 +60,8 @@ export async function issueTemporaryPassword(
   const claimed = await prisma.user.updateMany({
     where: {
       id: user.id,
+      kakaoId: null,
+      googleId: null,
       OR: [
         { temporaryPasswordIssuedAt: null },
         { temporaryPasswordIssuedAt: { lt: cooldownCutoff } },
@@ -71,10 +77,16 @@ export async function issueTemporaryPassword(
     issuedAt.getTime() + TEMPORARY_PASSWORD_TTL_MS
   );
 
-  await prisma.user.update({
-    where: { id: user.id },
+  const stored = await prisma.user.updateMany({
+    where: {
+      id: user.id,
+      kakaoId: null,
+      googleId: null,
+      temporaryPasswordIssuedAt: issuedAt,
+    },
     data: { temporaryPasswordHash, temporaryPasswordExpiresAt },
   });
+  if (stored.count === 0) return "not_found";
 
   try {
     const resend = new Resend(apiKey);
@@ -93,7 +105,7 @@ ${temporaryPassword}
 요청 번호: ${issueReference}
 이 비밀번호는 30분 동안 사용할 수 있습니다.
 여러 번 요청했다면 가장 최근에 받은 비밀번호만 유효합니다.
-로그인 후 설정에서 새 비밀번호로 변경해주세요.
+로그인 후 계정 설정에서 새 비밀번호로 변경하거나 카카오·Google 계정을 연결해주세요.
 
 로그인: ${appUrl}/login
 

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { canManageAccountWithoutPassword } from "@/lib/account-auth";
+import {
+  canManageAccountWithoutPassword,
+  hasOAuthIdentity,
+} from "@/lib/account-auth";
 import { AuthError, requireAuth } from "@/lib/auth";
-import { isKakaoPlaceholderEmail } from "@/lib/kakao-auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -40,8 +42,7 @@ export async function GET() {
     );
   }
 
-  const passwordlessKakaoAccount =
-    Boolean(user.kakaoId) && isKakaoPlaceholderEmail(user.email);
+  const oauthAccount = hasOAuthIdentity(user);
 
   return NextResponse.json({
     id: user.id,
@@ -51,10 +52,11 @@ export async function GET() {
     credits: user.credits,
     kakaoLinked: Boolean(user.kakaoId),
     googleLinked: Boolean(user.googleId),
-    mustChangePassword: session.usedTemporaryPassword === true,
+    mustChangePassword: !oauthAccount && session.usedTemporaryPassword === true,
+    passwordLoginAvailable: !oauthAccount,
     canManageAccountWithoutPassword: canManageAccountWithoutPassword(
       session.authMethod,
-      passwordlessKakaoAccount
+      oauthAccount
     ),
   });
 }

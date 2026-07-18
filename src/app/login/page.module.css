@@ -166,7 +166,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 .kakaoBtn,
@@ -201,57 +201,61 @@
 }
 
 .error {
+  margin: 12px 0 0;
   color: var(--danger);
   font-size: 13px;
   text-align: center;
 }
 
 .success {
+  margin: 12px 0 0;
   color: var(--success);
   font-size: 13px;
   text-align: center;
 }
 
-.divider {
-  height: 1px;
-  background: var(--border);
-  margin: 24px 0;
-}
-
-.registerBtn {
+.legacyToggle {
   width: 100%;
-  padding: 12px;
+  min-height: 40px;
+  margin-top: 20px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.registerBtn:hover {
-  background: var(--surface-hover);
-  border-color: var(--accent);
-}
-
-.cancelBtn {
-  width: 100%;
-  padding: 10px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: 0;
+  border-top: 1px solid var(--border);
   color: var(--text-dim);
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: color 0.15s;
 }
 
-.cancelBtn:hover {
-  background: var(--surface-hover);
+.legacyToggle:hover {
+  color: var(--text);
 }
 
-/* 회원가입 모달 */
+.legacyToggle svg {
+  transition: transform 0.15s ease;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.legacyPanel {
+  padding-top: 12px;
+}
+
+.legacyDescription {
+  margin: 0 0 14px;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: center;
+}
+
 .modalOverlay {
   position: fixed;
   inset: 0;
@@ -312,14 +316,6 @@
   color: var(--text);
   text-align: center;
   margin-bottom: 24px;
-}
-
-.notice {
-  font-size: 12px;
-  color: #f59e0b;
-  text-align: center;
-  line-height: 1.5;
-  margin: 0;
 }
 
 .modalDescription {

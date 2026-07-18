@@ -23,6 +23,7 @@ export interface AuthUser {
   kakaoLinked: boolean;
   googleLinked: boolean;
   mustChangePassword: boolean;
+  passwordLoginAvailable: boolean;
   canManageAccountWithoutPassword: boolean;
 }
 

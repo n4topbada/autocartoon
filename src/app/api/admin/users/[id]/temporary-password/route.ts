@@ -39,7 +39,7 @@ export async function POST(
 
     const target = await prisma.user.findUnique({
       where: { id },
-      select: { id: true, email: true },
+      select: { id: true, email: true, kakaoId: true, googleId: true },
     });
     if (!target) {
       return NextResponse.json(
@@ -47,7 +47,7 @@ export async function POST(
         { status: 404, headers: { "Cache-Control": "no-store" } }
       );
     }
-    if (!canAdminResetPassword(target.email)) {
+    if (!canAdminResetPassword(target)) {
       return NextResponse.json(
         { error: "카카오·구글 전용 계정은 해당 로그인 제공자에서 복구해야 합니다." },
         { status: 400, headers: { "Cache-Control": "no-store" } }
@@ -62,8 +62,12 @@ export async function POST(
     ]);
 
     const revokedSessions = await prisma.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: target.id },
+      const updated = await tx.user.updateMany({
+        where: {
+          id: target.id,
+          kakaoId: null,
+          googleId: null,
+        },
         data: {
           passwordHash: disabledPasswordHash,
           temporaryPasswordHash,
@@ -71,11 +75,18 @@ export async function POST(
           temporaryPasswordExpiresAt: expiresAt,
         },
       });
+      if (updated.count === 0) return null;
       const revoked = await tx.userSession.deleteMany({
         where: { userId: target.id },
       });
       return revoked.count;
     });
+    if (revokedSessions === null) {
+      return NextResponse.json(
+        { error: "이 계정은 이미 소셜 로그인 전용으로 전환되었습니다." },
+        { status: 409, headers: { "Cache-Control": "no-store" } }
+      );
+    }
 
     logEvent(
       "NOTICE",

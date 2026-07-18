@@ -116,45 +116,69 @@ async function canDetachEmptyKakaoAccount(
 
 async function linkKakaoToCurrentAccount(kakaoId: string) {
   const session = await requireAuth();
-  return prisma.$transaction(async (tx) => {
+  const disabledPasswordHash = await bcrypt.hash(
+    randomBytes(32).toString("base64url"),
+    12,
+  );
+  const result = await prisma.$transaction(async (tx) => {
     const [target, linked] = await Promise.all([
       tx.user.findUnique({ where: { id: session.userId } }),
       tx.user.findUnique({ where: { kakaoId } }),
     ]);
     if (!target) throw new AuthError("로그인 계정을 찾을 수 없습니다.", 401);
     if (target.kakaoId && target.kakaoId !== kakaoId) return "different_kakao" as const;
-    if (!linked || linked.id === target.id) {
-      await tx.user.update({ where: { id: target.id }, data: { kakaoId } });
-      return "linked" as const;
+
+    if (linked && linked.id !== target.id) {
+      if (!(await canDetachEmptyKakaoAccount(tx, linked.id, linked.email, linked.credits))) {
+        return "account_has_data" as const;
+      }
+
+      await tx.userSession.deleteMany({ where: { userId: linked.id } });
+      await tx.user.update({
+        where: { id: linked.id },
+        data: {
+          kakaoId: null,
+          email: `detached-${linked.id}@oauth.wonyframe.local`,
+          credits: 0,
+        },
+      });
+      await tx.creditLedger.create({
+        data: {
+          userId: linked.id,
+          referenceKey: `account-link:${linked.id}:deactivate`,
+          action: "adjustment",
+          source: "account-link",
+          units: linked.credits,
+          balanceAfter: 0,
+          note: "빈 카카오 계정을 기존 이메일 계정에 연결하며 비활성화",
+        },
+      });
     }
 
-    if (!(await canDetachEmptyKakaoAccount(tx, linked.id, linked.email, linked.credits))) {
-      return "account_has_data" as const;
-    }
-
-    await tx.userSession.deleteMany({ where: { userId: linked.id } });
     await tx.user.update({
-      where: { id: linked.id },
+      where: { id: target.id },
       data: {
-        kakaoId: null,
-        email: `detached-${linked.id}@oauth.wonyframe.local`,
-        credits: 0,
+        kakaoId,
+        passwordHash: disabledPasswordHash,
+        temporaryPasswordHash: null,
+        temporaryPasswordExpiresAt: null,
+        temporaryPasswordIssuedAt: null,
       },
     });
-    await tx.creditLedger.create({
-      data: {
-        userId: linked.id,
-        referenceKey: `account-link:${linked.id}:deactivate`,
-        action: "adjustment",
-        source: "account-link",
-        units: linked.credits,
-        balanceAfter: 0,
-        note: "빈 카카오 계정을 기존 이메일 계정에 연결하며 비활성화",
-      },
-    });
-    await tx.user.update({ where: { id: target.id }, data: { kakaoId } });
+    if (session.sessionId) {
+      await tx.userSession.deleteMany({
+        where: { userId: target.id, id: { not: session.sessionId } },
+      });
+    }
     return "linked" as const;
   }, { isolationLevel: "Serializable" });
+
+  if (result === "linked") {
+    session.usedTemporaryPassword = false;
+    session.authMethod = "kakao";
+    await session.save();
+  }
+  return result;
 }
 
 export async function GET(req: NextRequest) {
@@ -206,6 +230,7 @@ export async function GET(req: NextRequest) {
         throw error;
       }
     }
+    let migratedFromPassword = false;
     let user = await prisma.user.findUnique({ where: { kakaoId: kakao.id } });
 
     if (!user && kakao.verifiedEmail) {
@@ -219,32 +244,22 @@ export async function GET(req: NextRequest) {
         );
       }
       if (matchingUser && !matchingUser.kakaoId) {
-        if (matchingUser.emailVerified) {
-          // 기존 계정 주인이 이미 이메일 소유권을 증명한 경우에만 조용히 연결한다.
-          user = await prisma.user.update({
-            where: { id: matchingUser.id },
-            data: { kakaoId: kakao.id },
-          });
-        } else {
-          // 미인증(소유권 미증명) 계정은 사전 선점 공격의 대상일 수 있다.
-          // 카카오가 실제 이메일 소유권을 증명했으므로 진짜 주인이 계정을 회수한다:
-          // 카카오 연결 + 인증 처리 + 기존 비밀번호 무효화(선점된 비밀번호 차단).
-          const rotatedPasswordHash = await bcrypt.hash(
-            randomBytes(32).toString("base64url"),
-            12
-          );
-          user = await prisma.user.update({
-            where: { id: matchingUser.id },
-            data: {
-              kakaoId: kakao.id,
-              emailVerified: true,
-              passwordHash: rotatedPasswordHash,
-              temporaryPasswordHash: null,
-              temporaryPasswordExpiresAt: null,
-              temporaryPasswordIssuedAt: null,
-            },
-          });
-        }
+        migratedFromPassword = !matchingUser.googleId;
+        const rotatedPasswordHash = await bcrypt.hash(
+          randomBytes(32).toString("base64url"),
+          12,
+        );
+        user = await prisma.user.update({
+          where: { id: matchingUser.id },
+          data: {
+            kakaoId: kakao.id,
+            emailVerified: true,
+            passwordHash: rotatedPasswordHash,
+            temporaryPasswordHash: null,
+            temporaryPasswordExpiresAt: null,
+            temporaryPasswordIssuedAt: null,
+          },
+        });
       }
     }
 
@@ -279,7 +294,9 @@ export async function GET(req: NextRequest) {
     }
 
     const session = await getSession();
-    if (session.sessionId) {
+    if (migratedFromPassword) {
+      await prisma.userSession.deleteMany({ where: { userId: user.id } });
+    } else if (session.sessionId) {
       await prisma.userSession.deleteMany({ where: { id: session.sessionId } });
     }
     const registeredSession = await createUserSession(

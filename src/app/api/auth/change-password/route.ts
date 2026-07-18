@@ -1,10 +1,9 @@
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
-import { canManageAccountWithoutPassword } from "@/lib/account-auth";
+import { isLegacyPasswordAccount } from "@/lib/account-auth";
 import { validatePassword } from "@/lib/password-policy";
 import { prisma } from "@/lib/prisma";
 import { AuthError, requireAuth } from "@/lib/auth";
-import { isKakaoPlaceholderEmail } from "@/lib/kakao-auth";
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,17 +24,14 @@ export async function POST(req: NextRequest) {
       session.destroy();
       return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
     }
+    if (!isLegacyPasswordAccount(user)) {
+      return NextResponse.json(
+        { error: "소셜 로그인 계정은 별도 비밀번호를 사용하지 않습니다." },
+        { status: 403 }
+      );
+    }
 
-    // OAuth로 본인 확인된 세션이나 비밀번호 없는 카카오 계정은 현재 비밀번호를
-    // 알 수 없으므로 세션 인증만으로 초기 비밀번호를 설정할 수 있게 한다.
-    const isPlaceholderKakao =
-      Boolean(user.kakaoId) && isKakaoPlaceholderEmail(user.email);
-    const canSkipCurrentPassword = canManageAccountWithoutPassword(
-      session.authMethod,
-      isPlaceholderKakao
-    );
-
-    if ((!canSkipCurrentPassword && !currentPassword) || !newPassword) {
+    if (!currentPassword || !newPassword) {
       return NextResponse.json(
         { error: "현재 비밀번호와 새 비밀번호를 입력해주세요." },
         { status: 400 }
@@ -62,29 +58,27 @@ export async function POST(req: NextRequest) {
     }
 
     const now = new Date();
-    if (!canSkipCurrentPassword) {
-      const primaryMatches = await bcrypt.compare(currentPassword, user.passwordHash);
-      const temporaryMatches = Boolean(
-        !primaryMatches &&
-          user.temporaryPasswordHash &&
-          user.temporaryPasswordExpiresAt &&
-          user.temporaryPasswordExpiresAt > now &&
-          (await bcrypt.compare(currentPassword, user.temporaryPasswordHash))
+    const primaryMatches = await bcrypt.compare(currentPassword, user.passwordHash);
+    const temporaryMatches = Boolean(
+      !primaryMatches &&
+        user.temporaryPasswordHash &&
+        user.temporaryPasswordExpiresAt &&
+        user.temporaryPasswordExpiresAt > now &&
+        (await bcrypt.compare(currentPassword, user.temporaryPasswordHash))
+    );
+
+    if (!primaryMatches && !temporaryMatches) {
+      return NextResponse.json(
+        { error: "현재 비밀번호가 올바르지 않습니다." },
+        { status: 400 }
       );
+    }
 
-      if (!primaryMatches && !temporaryMatches) {
-        return NextResponse.json(
-          { error: "현재 비밀번호가 올바르지 않습니다." },
-          { status: 400 }
-        );
-      }
-
-      if (await bcrypt.compare(newPassword, user.passwordHash)) {
-        return NextResponse.json(
-          { error: "기존 비밀번호와 다른 비밀번호를 사용해주세요." },
-          { status: 400 }
-        );
-      }
+    if (await bcrypt.compare(newPassword, user.passwordHash)) {
+      return NextResponse.json(
+        { error: "기존 비밀번호와 다른 비밀번호를 사용해주세요." },
+        { status: 400 }
+      );
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 12);

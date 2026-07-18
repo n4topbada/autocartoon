@@ -7,7 +7,8 @@ This document records the current prototype posture, the changes already impleme
 ## Account Creation
 
 - New accounts can be created only by Kakao OAuth or Google OAuth.
-- Existing email/password members remain able to sign in, reset a password, and change a password.
+- Existing email/password members remain able to sign in, reset a password, and change a password only while no OAuth identity is linked.
+- Linking Kakao or Google converts a legacy account to OAuth-only: the known password and temporary password are invalidated and other device sessions are revoked.
 - POST /api/auth/register returns 403; it no longer creates password-only accounts.
 - A new OAuth account consumes one signup slot only after its User record and welcome-credit ledger entry are committed.
 - A source network can create at most two new OAuth accounts. Existing account sign-ins and email-matched provider linking do not consume a slot.
@@ -15,27 +16,22 @@ This document records the current prototype posture, the changes already impleme
 
 The cap is lifetime-based. It is deliberately simple anti-abuse protection for welcome credits, not an identity system: a home, office, school, or carrier NAT can share one public IP. A legitimate exception requires an administrator to adjust the HMAC-keyed counter in the database; no public bypass exists.
 
-## Google OAuth Setup Still Required
+## Google OAuth Production Status
 
-The application code is ready, but production Google sign-in stays unavailable until the Google Cloud OAuth client is configured. The current Cloud Run revision has no GOOGLE_OAUTH_CLIENT_ID or GOOGLE_OAUTH_CLIENT_SECRET environment variables.
+Production Google sign-in is configured and has passed an actual account chooser, callback, existing-account session, and authenticated settings-page check. The Web application client has these redirect URIs:
 
-1. In Google Cloud Console, configure the OAuth consent screen for the intended audience.
-2. Create an OAuth 2.0 Web application client.
-3. Add these authorized redirect URIs:
+    http://localhost:3000/api/auth/google/callback
+    https://wonybananabot-272254743773.asia-northeast3.run.app/api/auth/google/callback
 
-       http://localhost:3000/api/auth/google/callback
-       https://wonybananabot-272254743773.asia-northeast3.run.app/api/auth/google/callback
-
-4. Store the Client ID and Client Secret in Secret Manager, then attach them to Cloud Run under GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET.
-5. Add the custom-domain callback before changing APP_ORIGIN, and keep the Cloud Run callback during the transition.
+The Client ID and Client Secret are stored in Secret Manager as `google-oauth-client-id` and `google-oauth-client-secret`, then attached to Cloud Run under `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`. Add the custom-domain callback before changing `APP_ORIGIN`, and keep the Cloud Run callback during the transition.
 
 The implementation uses an OAuth state cookie for CSRF protection, PKCE S256 for authorization-code binding, and Google ID-token signature/audience verification. Only a Google-verified email address can create or link an account.
 
 ## OAuth Account Passwords
 
-OAuth-created users receive an unguessable server-only password hash because the schema requires one, but the user never knows that value. The session now records whether the current login was password, Google, or Kakao. A Google/Kakao-authenticated session can set an initial email-login password or confirm account deletion without being asked for the unknown random value. After a password is set, that session becomes a normal password session and subsequent changes require the new current password.
+OAuth-created users retain an unguessable server-only hash only because the current schema requires `passwordHash`; it is never exposed and cannot be replaced through the password-change API. Email login, email temporary-password issuance, and administrator temporary-password reset all require both `kakaoId` and `googleId` to be null.
 
-Existing cookies created before this change have no auth-method marker. They remain fail-closed and require the user to sign out and sign in with Google/Kakao once before using the passwordless setup flow.
+When a legacy member explicitly links Kakao or Google, or signs in with a provider that proves the same verified email, the callback rotates the stored hash, clears every temporary-password field, revokes other device sessions, and marks the current session with the provider method. OAuth users can confirm account deletion with their authenticated session and an email confirmation instead of a local password. Google now supports the same explicit `intent=link` settings flow as Kakao.
 
 ## Canonical Origin
 

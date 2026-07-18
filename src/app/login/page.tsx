@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { LuKeyRound, LuLogIn, LuX } from "react-icons/lu";
+import { LuChevronDown, LuKeyRound, LuLogIn, LuX } from "react-icons/lu";
 import { FcGoogle } from "react-icons/fc";
 import { RiKakaoTalkFill } from "react-icons/ri";
 import { useAuth } from "@/components/AuthProvider";
@@ -17,7 +17,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showSignup, setShowSignup] = useState(false);
+  const [showLegacyLogin, setShowLegacyLogin] = useState(false);
   const [returnTo, setReturnTo] = useState("/");
   const [loginNotice, setLoginNotice] = useState("");
 
@@ -52,23 +52,22 @@ export default function LoginPage() {
       missing_code: provider + " 인증 정보를 받지 못했습니다.",
       failed: provider + " 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.",
       already_linked: "이 이메일은 다른 " + provider + " 계정에 이미 연결되어 있습니다.",
-      link_login_required: "카카오 계정을 연결하려면 이메일 계정으로 먼저 로그인해주세요.",
+      link_login_required: provider + " 계정을 연결하려면 기존 계정으로 먼저 로그인해주세요.",
       signup_limit: "이 네트워크에서는 새 계정을 최대 2개까지만 만들 수 있습니다.",
     };
     setError(messages[status] || messages.failed);
   }, []);
 
   useEffect(() => {
-    if (!showSignup && !showForgot) return;
+    if (!showForgot) return;
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setShowSignup(false);
         setShowForgot(false);
       }
     };
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
-  }, [showForgot, showSignup]);
+  }, [showForgot]);
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -114,7 +113,7 @@ export default function LoginPage() {
         throw new Error(data.error || "임시 비밀번호 발급 요청에 실패했습니다.");
       }
       setForgotMessage(
-        data.message || "등록된 계정이면 새 임시 비밀번호를 보냈습니다.",
+        data.message || "복구 대상인 기존 이메일 계정이면 새 임시 비밀번호를 보냈습니다.",
       );
     } catch (forgotPasswordError) {
       setForgotError(
@@ -143,48 +142,6 @@ export default function LoginPage() {
           </p>
         )}
 
-        <form className={styles.form} onSubmit={handleLogin}>
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor="login-email">이메일</label>
-            <input
-              id="login-email"
-              className={styles.input}
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              autoComplete="username"
-              required
-            />
-          </div>
-          <div className={styles.field}>
-            <div className={styles.passwordLabelRow}>
-              <label className={styles.label} htmlFor="login-password">비밀번호</label>
-              <button
-                className={styles.forgotButton}
-                type="button"
-                onClick={openForgotPassword}
-              >
-                비밀번호를 잊으셨나요?
-              </button>
-            </div>
-            <input
-              id="login-password"
-              className={styles.input}
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="비밀번호"
-              autoComplete="current-password"
-              required
-            />
-          </div>
-          {error && <p className={styles.error} role="alert">{error}</p>}
-          <button className={styles.loginBtn} type="submit" disabled={loading}>
-            {loading ? "로그인 중..." : "로그인"}
-          </button>
-        </form>
-
         <div className={styles.socialActions}>
           <a className={styles.kakaoBtn} href={addReturnTo("/api/auth/kakao", returnTo)}>
             <RiKakaoTalkFill size={18} aria-hidden="true" />
@@ -196,57 +153,73 @@ export default function LoginPage() {
           </a>
         </div>
 
-        <div className={styles.divider} />
+        {error && <p className={styles.error} role="alert">{error}</p>}
 
         <button
-          className={styles.registerBtn}
+          className={styles.legacyToggle}
           type="button"
-          onClick={() => setShowSignup(true)}
+          aria-expanded={showLegacyLogin}
+          aria-controls="legacy-email-login"
+          onClick={() => setShowLegacyLogin((visible) => !visible)}
         >
-          신규 가입
+          기존 이메일 계정 로그인
+          <LuChevronDown
+            className={showLegacyLogin ? styles.chevronOpen : undefined}
+            size={17}
+            aria-hidden="true"
+          />
         </button>
+
+        {showLegacyLogin && (
+          <div id="legacy-email-login" className={styles.legacyPanel}>
+            <p className={styles.legacyDescription}>
+              카카오·Google 도입 전에 만든 이메일 계정만 이용할 수 있습니다.
+            </p>
+            <form className={styles.form} onSubmit={handleLogin}>
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="login-email">이메일</label>
+                <input
+                  id="login-email"
+                  className={styles.input}
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="username"
+                  required
+                />
+              </div>
+              <div className={styles.field}>
+                <div className={styles.passwordLabelRow}>
+                  <label className={styles.label} htmlFor="login-password">비밀번호</label>
+                  <button
+                    className={styles.forgotButton}
+                    type="button"
+                    onClick={openForgotPassword}
+                  >
+                    비밀번호 찾기
+                  </button>
+                </div>
+                <input
+                  id="login-password"
+                  className={styles.input}
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="비밀번호"
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+              <button className={styles.loginBtn} type="submit" disabled={loading}>
+                {loading ? "로그인 중..." : "이메일 로그인"}
+              </button>
+            </form>
+          </div>
+        )}
       </div>
 
       <LegalFooter />
-
-      {showSignup && (
-        <div className={styles.modalOverlay} onClick={() => setShowSignup(false)}>
-          <div
-            className={styles.modal}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="signup-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              className={styles.modalClose}
-              type="button"
-              onClick={() => setShowSignup(false)}
-              aria-label="회원가입 닫기"
-              title="닫기"
-            >
-              <LuX size={18} />
-            </button>
-            <h2 id="signup-title" className={styles.modalTitle}>신규 가입</h2>
-            <p className={styles.modalDescription}>
-              카카오 또는 Google 계정으로 가입할 수 있습니다.
-            </p>
-            <div className={styles.socialActions}>
-              <a className={styles.kakaoBtn} href={addReturnTo("/api/auth/kakao", returnTo)}>
-                <RiKakaoTalkFill size={18} aria-hidden="true" />
-                카카오로 가입하기
-              </a>
-              <a className={styles.googleBtn} href={addReturnTo("/api/auth/google", returnTo)}>
-                <FcGoogle size={18} aria-hidden="true" />
-                Google로 가입하기
-              </a>
-            </div>
-            <p className={styles.notice}>
-              같은 네트워크에서는 새 계정을 최대 2개까지 만들 수 있습니다.
-            </p>
-          </div>
-        </div>
-      )}
 
       {showForgot && (
         <div className={styles.modalOverlay} onClick={() => setShowForgot(false)}>
@@ -270,10 +243,10 @@ export default function LoginPage() {
               <LuKeyRound size={22} />
             </div>
             <h2 id="forgot-password-title" className={styles.modalTitle}>
-              임시 비밀번호 발급
+              기존 이메일 계정 복구
             </h2>
             <p className={styles.modalDescription}>
-              가입한 이메일로 30분 동안 사용할 수 있는 영문·숫자 12자리 비밀번호를 보냅니다.
+              소셜 로그인 도입 전에 만든 계정에만 30분 동안 사용할 수 있는 영문·숫자 12자리 임시 비밀번호를 보냅니다.
             </p>
             <form className={styles.form} onSubmit={handleForgotPassword}>
               <div className={styles.field}>

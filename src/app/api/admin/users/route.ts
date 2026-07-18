@@ -33,7 +33,7 @@ export async function GET() {
       kakaoLinked: Boolean(user.kakaoId),
       googleLinked: Boolean(user.googleId),
       emailVerified: user.emailVerified,
-      passwordResetEligible: canAdminResetPassword(user.email),
+      passwordResetEligible: canAdminResetPassword(user),
       temporaryPasswordExpiresAt: user.temporaryPasswordExpiresAt?.toISOString() ?? null,
       isCurrentUser: user.id === admin.userId,
       paidPayments: user._count.creditPayments,

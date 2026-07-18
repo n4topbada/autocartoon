@@ -1,3 +1,5 @@
+import { isLegacyPasswordAccount, type AccountProviders } from "./account-auth";
+
 export const ADMIN_TEMPORARY_PASSWORD_LENGTH = 12;
 export const ADMIN_TEMPORARY_PASSWORD_ALPHABET =
   "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
@@ -28,6 +30,13 @@ export function normalizeAdminPasswordExpiry(value: unknown): number | null {
     : null;
 }
 
-export function canAdminResetPassword(email: string): boolean {
-  return !email.toLowerCase().endsWith("@oauth.wonyframe.local");
+export function canAdminResetPassword(
+  account: AccountProviders & { email: string }
+): boolean {
+  const email = account.email.toLowerCase();
+  return (
+    isLegacyPasswordAccount(account) &&
+    !email.endsWith("@oauth.wonyframe.local") &&
+    !email.endsWith("@deleted.invalid")
+  );
 }

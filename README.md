@@ -31,7 +31,7 @@
 - 현재 컷 PNG, 전체 컷 ZIP, 자동 저장
 - Veo 3.1 Fast와 캐릭터별 Google TTS, ffmpeg.wasm 기반 세로 MP4
 - 공개 닉네임, 최신/인기 게시판, 이미지·링크, 댓글, 좋아요, 신고
-- 기존 이메일 로그인, 카카오·Google 신규 가입, OAuth 계정 초기 비밀번호 설정, 임시 비밀번호, 기기 세션 최대 2대
+- 카카오·Google 전용 신규 가입, 기존 이메일 회원의 한시적 로그인·복구, OAuth 연결 전환, 기기 세션 최대 2대
 - 게시판 옆 WonyBot과 우측 끝 계정 아이콘, `내 작업` 안의 작업 보관함·내 캐릭터·My Content
 - 이용약관, 개인정보처리방침, 크레딧·환불정책 초안과 공통 접근 링크
 - 관리자 사용자·크레딧·신고·지식 관리
@@ -160,14 +160,14 @@ https://wonybananabot-272254743773.asia-northeast3.run.app/api/auth/kakao/callba
 
 ## Google 로그인과 신규 가입
 
-새 계정은 카카오 또는 Google OAuth로만 생성합니다. 기존 이메일·비밀번호 계정은 그대로 로그인 및 비밀번호 재설정을 사용할 수 있습니다. 새 OAuth 계정은 동일한 외부 IP에서 평생 최대 2개까지 만들 수 있으며, DB에는 IP 원문이 아니라 서버 비밀값으로 만든 HMAC만 저장합니다.
+새 계정은 카카오 또는 Google OAuth로만 생성하며 별도 서비스 비밀번호를 만들지 않습니다. 로그인 화면은 두 소셜 로그인을 기본으로 보여주고, 기존 이메일·비밀번호 회원만 접힌 `기존 이메일 계정 로그인`에서 로그인과 임시 비밀번호 복구를 사용할 수 있습니다. 기존 회원이 계정 설정에서 카카오나 Google을 연결하면 기존 비밀번호와 임시 비밀번호를 즉시 폐기하고 다른 로그인 세션을 종료해 OAuth 전용 계정으로 전환합니다. 새 OAuth 계정은 동일한 외부 IP에서 평생 최대 2개까지 만들 수 있으며, DB에는 IP 원문이 아니라 서버 비밀값으로 만든 HMAC만 저장합니다.
 
 운영 Google OAuth 2.0 **Web application** 클라이언트에는 다음 리디렉션 URI가 등록돼 있습니다.
 
     http://localhost:3000/api/auth/google/callback
     https://wonybananabot-272254743773.asia-northeast3.run.app/api/auth/google/callback
 
-Client ID와 Client Secret은 Secret Manager의 `google-oauth-client-id`, `google-oauth-client-secret`에 저장하고 Cloud Run의 `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` 환경 변수에서 참조합니다. 리비전 `wonybananabot-00033-9c5`에서 실제 Google 로그인과 기존 계정 세션 생성을 확인했습니다. 자체 도메인을 붙이면 새 콜백을 먼저 추가한 뒤 `APP_ORIGIN`을 바꿉니다.
+Client ID와 Client Secret은 Secret Manager의 `google-oauth-client-id`, `google-oauth-client-secret`에 저장하고 Cloud Run의 `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` 환경 변수에서 참조합니다. 리비전 `wonybananabot-00035-scs`에서 실제 Google 로그인, 기존 계정 세션, OAuth 전용 설정 화면을 확인했습니다. 자체 도메인을 붙이면 새 콜백을 먼저 추가한 뒤 `APP_ORIGIN`을 바꿉니다.
 
 ## 데이터베이스와 배포
 
