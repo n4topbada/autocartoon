@@ -162,12 +162,12 @@ https://wonybananabot-272254743773.asia-northeast3.run.app/api/auth/kakao/callba
 
 새 계정은 카카오 또는 Google OAuth로만 생성합니다. 기존 이메일·비밀번호 계정은 그대로 로그인 및 비밀번호 재설정을 사용할 수 있습니다. 새 OAuth 계정은 동일한 외부 IP에서 평생 최대 2개까지 만들 수 있으며, DB에는 IP 원문이 아니라 서버 비밀값으로 만든 HMAC만 저장합니다.
 
-Google Cloud Console에서 OAuth 2.0 **Web application** 클라이언트를 만들고 다음 리디렉션 URI를 등록합니다.
+운영 Google OAuth 2.0 **Web application** 클라이언트에는 다음 리디렉션 URI가 등록돼 있습니다.
 
     http://localhost:3000/api/auth/google/callback
     https://wonybananabot-272254743773.asia-northeast3.run.app/api/auth/google/callback
 
-그 뒤 Client ID와 Client Secret을 Secret Manager로 저장해 Cloud Run의 GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET 환경 변수로 연결합니다. 자체 도메인을 붙이면 그 콜백도 추가하고 APP_ORIGIN을 바꿉니다.
+Client ID와 Client Secret은 Secret Manager의 `google-oauth-client-id`, `google-oauth-client-secret`에 저장하고 Cloud Run의 `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` 환경 변수에서 참조합니다. 리비전 `wonybananabot-00033-9c5`에서 실제 Google 로그인과 기존 계정 세션 생성을 확인했습니다. 자체 도메인을 붙이면 새 콜백을 먼저 추가한 뒤 `APP_ORIGIN`을 바꿉니다.
 
 ## 데이터베이스와 배포
 

@@ -3,13 +3,13 @@
 ## 1. 결론
 
 - 대상: `https://wonybananabot-272254743773.asia-northeast3.run.app`
-- 최종 리비전: `wonybananabot-00032-p8p`, 트래픽 100%
-- 기능 판정: 앱이 통제할 수 있는 항목 `35/35` 통과
-- 외부 설정 대기: Google OAuth 클라이언트, 카카오페이 사이트 도메인
+- 최종 리비전: `wonybananabot-00033-9c5`, 트래픽 100%
+- 기능 판정: 자동·수동 합산 앱 기능 `36/36` 통과
+- 외부 설정 대기: 카카오페이 사이트 도메인
 - 로컬 검증: 테스트 `71/71`, ESLint, Next.js 프로덕션 빌드 통과
 - DB 마이그레이션: 없음
 
-1차 실행에서 Vertex AI 순간 제한과 Veo 서비스 에이전트의 저장소 접근 문제를 재현했다. 수정 및 IAM 보정 후 2차 실행에서 기능 34건이 바로 통과했고, 러너의 게시판 상세 인증 가정을 고친 재검증까지 포함하면 35건이 통과했다. 마지막 리비전에서는 불투명 흑백 마스크 회귀 테스트를 별도로 실제 생성해 보호 영역의 변경 픽셀 `0`을 확인했다.
+1차 실행에서 Vertex AI 순간 제한과 Veo 서비스 에이전트의 저장소 접근 문제를 재현했다. 수정 및 IAM 보정 후 2차 실행에서 기능 34건이 바로 통과했고, 러너의 게시판 상세 인증 가정을 고친 재검증까지 포함하면 35건이 통과했다. 마지막 리비전에서는 불투명 흑백 마스크 회귀 테스트를 별도로 실제 생성해 보호 영역의 변경 픽셀 `0`을 확인했다. 이후 Google OAuth 운영 클라이언트를 연결하고 실제 계정 선택, 콜백, 기존 Bada 계정 세션 생성을 브라우저에서 검증해 총 36건을 확인했다.
 
 ## 2. 기능별 결과
 
@@ -18,7 +18,7 @@
 | 공개·보호 경로 | 로그인·약관·개인정보·환불 `200`, 보호 화면 로그인 이동 | 통과 |
 | 계정·권한 | 관리자/일반 사용자 로그인, 관리자 API 경계, IDOR 차단, 세션 최대 2개 | 통과 |
 | 카카오 로그인 | OAuth 진입점과 운영 콜백 URL 생성 | 통과 |
-| Google 로그인 | 클라이언트 환경 변수가 없어 `not_configured` 반환 | 외부 설정 대기 |
+| Google 로그인 | 실제 계정 선택, 운영 콜백, 기존 이메일 계정 세션 생성 | 통과 |
 | 캐릭터 자산 | 그룹, 프리셋, 대표 이미지, 태그, 프롬프트 프리셋 CRUD | 통과 |
 | 프로젝트·캔버스 | 프로젝트, 컷, 브리프, 직접 업로드, 저장, 2개 버전, 복원 | 통과 |
 | My Content | 콘텐츠 생성, 이미지 슬롯 2개, 목록 `slotCount=2`, 타 사용자 차단 | 통과 |
@@ -70,11 +70,11 @@
 4. 수동 편집 마스크가 알파 채널만 사용해, 알파가 255인 일반 흑백 PNG의 검정 영역도 편집될 수 있었다. `luminance × alpha`를 마스크 강도로 정규화해 투명 마스크와 불투명 흑백 마스크를 모두 지원한다.
 5. 게시판 상세 API를 비로그인 공개 API로 가정한 E2E 러너 오류가 있었다. 상세 데이터는 인증 사용자로, 게시된 미디어만 익명으로 확인하도록 수정했다.
 
-## 5. 남은 외부 설정
+## 5. 외부 설정 상태
 
 ### Google OAuth
 
-코드와 콜백 라우트는 준비됐지만 Cloud Run에 `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`이 없다. Google Auth Platform에서 Web application 클라이언트를 만들고 다음 URI를 등록한 뒤 두 값을 Secret Manager와 Cloud Run에 연결해야 한다.
+2026-07-18에 Web application 클라이언트와 다음 콜백을 등록했다. Client ID와 Client Secret은 각각 Secret Manager의 `google-oauth-client-id`, `google-oauth-client-secret`에 보관하고 Cloud Run의 `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`에서 `latest` 버전을 참조한다. 실제 Google 계정 선택부터 운영 콜백, 기존 Bada 계정 로그인과 인증 홈 진입까지 통과했다. 콜백 요청은 `307`로 완료됐고 리비전 `wonybananabot-00033-9c5`의 오류 로그는 없었다.
 
 ```text
 http://localhost:3000/api/auth/google/callback
