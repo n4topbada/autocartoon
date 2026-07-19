@@ -120,3 +120,29 @@ test("canvas parity UI exposes scoped presets, region OCR, and API-only cutout s
   assert.match(cutoutRoute, /X-Api-Key/);
   assert.ok(cutoutRoute.indexOf("if (!apiKey)") < cutoutRoute.indexOf("const output = await withCreditCharge"));
 });
+
+test("canvas parity UI keeps the audited reference tool states and staged actions", async () => {
+  const editor = await readFile("src/components/CanvasEditor.tsx", "utf8");
+  const styles = await readFile("src/components/CanvasEditor.module.css", "utf8");
+
+  for (const label of [
+    "선택툴", "브러쉬", "지우개", "텍스트", "말풍선", "도형", "스포이트", "텍스트 추출",
+    "텍스트 추가 (드래그)", "말풍선 추가 (드래그)", "도형 추가 (드래그)",
+    "지울 영역을 칠한 뒤 적용하세요.", "투명", "감쪽", "지우기 적용",
+    "모불모불", "구불구불", "선 투명도", "내부 투명도", "꼬리 폭",
+    "모서리 둥글기", "테두리", "그라데이션", "각도", "비율",
+    "직접 그리기", "자르기 적용", "자르기 취소",
+  ]) {
+    assert.ok(editor.includes(label), `missing audited canvas label: ${label}`);
+  }
+
+  assert.match(editor, /TEXT_QUICK_SIZES = \[16, 20, 24, 28, 32, 36, 40, 44, 48, 56, 64, 72, 80, 96, 120\]/);
+  assert.match(editor, /DIRECT_DRAW_COLORS = \["#111827", "#ef4444", "#2563eb", "#16a34a", "#f59e0b", "#ffffff"\]/);
+  assert.match(editor, /applyTransparentEraser/);
+  assert.match(editor, /applyStagedEraser/);
+  assert.match(editor, /wony-canvas-custom-bubble/);
+  assert.match(styles, /\.toolRail\s*\{/);
+  assert.match(styles, /\.toolOptionsPanel\s*\{/);
+  assert.match(styles, /\.directDrawBar/);
+  assert.match(styles, /\.utilityDock/);
+});

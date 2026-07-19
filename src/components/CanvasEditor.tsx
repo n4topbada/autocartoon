@@ -122,6 +122,37 @@ type CanvasTool = "move" | "crop" | "pipette" | "bubble" | "text" | "shape" | "b
 type RedrawRegionMode = "all" | "auto" | "rectangle" | "freehand";
 type OcrRegionMode = "all" | "rectangle" | "freehand";
 type PresetScope = "current" | "all" | "range";
+type EraserApplyMode = "transparent" | "heal";
+type ShapeToolType = "rectangle" | "circle" | "ellipse" | "line" | "arrow" | "star";
+
+interface TextToolDefaults {
+  fontSize: number;
+  fontFamily: string;
+  textColor: string;
+  fontWeight: 300 | 400 | 700 | 900;
+  textAlign: "left" | "center" | "right";
+  fontItalic: boolean;
+  underline: boolean;
+  outlineEnabled: boolean;
+  outlineColor: string;
+  outlineWidth: number;
+  lineHeightScale: number;
+  letterSpacing: number;
+}
+
+interface ShapeToolDefaults {
+  cornerRadius: number;
+  strokeEnabled: boolean;
+  strokeColor: string;
+  strokeWidth: number;
+  strokeStyle: NonNullable<SpeechBubble["strokeStyle"]>;
+  fillColor: string;
+  fillOpacity: number;
+  gradientEnabled: boolean;
+  gradientColor: string;
+  gradientAngle: number;
+  gradientStop: number;
+}
 
 export interface SavedCanvasImage {
   id: string;
@@ -176,6 +207,37 @@ const FILL_COLORS = [
 ];
 
 const BRUSH_COLORS = ["#000000", "#ffffff", "#0ea5a8", "#f04452", "#ffb400", "#3182f6", "#00c853", "#8b95a1"] as const;
+const DIRECT_DRAW_COLORS = ["#111827", "#ef4444", "#2563eb", "#16a34a", "#f59e0b", "#ffffff"] as const;
+const TEXT_QUICK_SIZES = [16, 20, 24, 28, 32, 36, 40, 44, 48, 56, 64, 72, 80, 96, 120] as const;
+
+const DEFAULT_TEXT_TOOL: TextToolDefaults = {
+  fontSize: 60,
+  fontFamily: BUBBLE_FONT_FAMILIES[0].id,
+  textColor: "#000000",
+  fontWeight: 400,
+  textAlign: "center",
+  fontItalic: false,
+  underline: false,
+  outlineEnabled: false,
+  outlineColor: "#ffffff",
+  outlineWidth: 2,
+  lineHeightScale: 1.16,
+  letterSpacing: 0,
+};
+
+const DEFAULT_SHAPE_TOOL: ShapeToolDefaults = {
+  cornerRadius: 0,
+  strokeEnabled: true,
+  strokeColor: "#000000",
+  strokeWidth: 3,
+  strokeStyle: "solid",
+  fillColor: "#ffffff",
+  fillOpacity: 0,
+  gradientEnabled: false,
+  gradientColor: "#c7c7c7",
+  gradientAngle: 0,
+  gradientStop: 50,
+};
 
 const IMAGE_FILTERS: Array<{ id: CanvasImageFilter; label: string }> = [
   { id: "original", label: "원본" },
@@ -379,6 +441,14 @@ function canvasToBlob(canvas: HTMLCanvasElement) {
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("레이어 이미지를 만들지 못했습니다.")), "image/png");
   });
+}
+
+function cloneCanvas(source: HTMLCanvasElement) {
+  const copy = document.createElement("canvas");
+  copy.width = source.width;
+  copy.height = source.height;
+  copy.getContext("2d")!.drawImage(source, 0, 0);
+  return copy;
 }
 
 function cloneLayers(source: Layer[]): Layer[] {
@@ -853,7 +923,9 @@ export default function CanvasEditor({
   const [activeLayerId, setActiveLayerId] = useState<string>("");
   const [tool, setTool] = useState<CanvasTool>("move");
   const [bubbleType, setBubbleType] = useState<BubbleType>("classic");
-  const [shapeType, setShapeType] = useState<Extract<BubbleType, "rectangle" | "roundedRectangle" | "ellipse" | "line" | "arrow" | "star">>("rectangle");
+  const [shapeType, setShapeType] = useState<ShapeToolType>("rectangle");
+  const [textToolDefaults, setTextToolDefaults] = useState<TextToolDefaults>({ ...DEFAULT_TEXT_TOOL });
+  const [shapeToolDefaults, setShapeToolDefaults] = useState<ShapeToolDefaults>({ ...DEFAULT_SHAPE_TOOL });
   const [selectedBubbleId, setSelectedBubbleId] = useState<string | null>(null);
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
   const bubbleDragMode = useRef<"none" | "move" | "resize" | "tail" | "rotate" | "create">("none");
@@ -870,12 +942,17 @@ export default function CanvasEditor({
   const [brushColor, setBrushColor] = useState("#111111");
   const [brushSize, setBrushSize] = useState(12);
   const [brushStyle, setBrushStyle] = useState<BrushStyle>("ballpoint");
+  const [eraserApplyMode, setEraserApplyMode] = useState<EraserApplyMode>("transparent");
+  const [eraserPending, setEraserPending] = useState(false);
   const [backgroundRemoved, setBackgroundRemoved] = useState(false);
   const [layoutPickerOpen, setLayoutPickerOpen] = useState(false);
   const [showGuides, setShowGuides] = useState(false);
   const [showTransparencyGrid, setShowTransparencyGrid] = useState(true);
   const [showOverflow, setShowOverflow] = useState(false);
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false);
+  const [toolPanelCollapsed, setToolPanelCollapsed] = useState(false);
+  const [directDrawOpen, setDirectDrawOpen] = useState(false);
+  const [textSizeMenuOpen, setTextSizeMenuOpen] = useState(false);
   const [zoom, setZoom] = useState(100);
   const [fitScale, setFitScale] = useState(1);
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -904,7 +981,7 @@ export default function CanvasEditor({
   const [characterView, setCharacterView] = useState("front");
   const [assetReloadVersion, setAssetReloadVersion] = useState(0);
   const [layerPanelCollapsed, setLayerPanelCollapsed] = useState(false);
-  const [assetPanelCollapsed, setAssetPanelCollapsed] = useState(false);
+  const [assetPanelCollapsed, setAssetPanelCollapsed] = useState(true);
   const [pagePanelCollapsed, setPagePanelCollapsed] = useState(false);
   const [renamingPageId, setRenamingPageId] = useState<string | null>(null);
   const [pageTitleDraft, setPageTitleDraft] = useState("");
@@ -936,6 +1013,10 @@ export default function CanvasEditor({
   const drawing = useRef(false);
   const drawingLayerRef = useRef<{ id: string; canvas: HTMLCanvasElement; layer: Layer } | null>(null);
   const brushLastPoint = useRef({ x: 0, y: 0, at: 0 });
+  const eraserMaskCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const eraserLayerIdRef = useRef<string | null>(null);
+  const eraserDrawingRef = useRef(false);
+  const eraserStrokesRef = useRef<Array<Array<{ x: number; y: number }>>>([]);
   const copiedLayerRef = useRef<Layer | null>(null);
   const initializedSourceRef = useRef<string | null>(null);
 
@@ -1270,6 +1351,21 @@ export default function CanvasEditor({
       ctx.drawImage(overlay, 0, 0);
     }
 
+    const eraserMask = eraserMaskCanvasRef.current;
+    if (eraserMask && tool === "eraser") {
+      const overlay = document.createElement("canvas");
+      overlay.width = canvasW;
+      overlay.height = canvasH;
+      const overlayContext = overlay.getContext("2d")!;
+      overlayContext.fillStyle = eraserApplyMode === "heal"
+        ? "rgba(49, 130, 246, 0.5)"
+        : "rgba(240, 68, 82, 0.5)";
+      overlayContext.fillRect(0, 0, canvasW, canvasH);
+      overlayContext.globalCompositeOperation = "destination-in";
+      overlayContext.drawImage(eraserMask, 0, 0);
+      ctx.drawImage(overlay, 0, 0);
+    }
+
     if (!selectedBubbleId && tool === "move") {
       const selectedLayer = layers.find((layer) => layer.id === activeLayerId && layer.visible);
       if (selectedLayer) {
@@ -1353,7 +1449,7 @@ export default function CanvasEditor({
       }
       ctx.restore();
     }
-  }, [activeLayerId, layers, cropRect, tool, canvasH, canvasW, selectedBubbleId, showGuides, showOverflow, redrawOpen, ocrOpen, maskRevision]);
+  }, [activeLayerId, layers, cropRect, tool, canvasH, canvasW, selectedBubbleId, showGuides, showOverflow, redrawOpen, ocrOpen, maskRevision, eraserApplyMode]);
 
   useEffect(() => {
     render();
@@ -1414,9 +1510,63 @@ export default function CanvasEditor({
         setBrushColor(`#${[pixel[0], pixel[1], pixel[2]].map((channel) => channel.toString(16).padStart(2, "0")).join("")}`);
       }
       setTool("brush");
-    } else if (tool === "brush" || tool === "eraser") {
+    } else if (tool === "eraser" && directDrawOpen) {
+      const activeLayer = layers.find((layer) => layer.id === activeLayerId);
+      if (!activeLayer?.canvas || activeLayer.locked) {
+        setEditorMessage("직접 지울 이미지 또는 브러시 레이어를 먼저 선택해주세요.");
+        return;
+      }
+      saveUndo();
+      const context = activeLayer.canvas.getContext("2d")!;
+      context.save();
+      context.globalCompositeOperation = "destination-out";
+      context.globalAlpha = 1;
+      context.lineWidth = brushSize;
+      context.lineCap = "round";
+      context.lineJoin = "round";
+      context.beginPath();
+      const point = canvasPointToLayer(activeLayer, canvasW, canvasH, mx, my);
+      context.moveTo(point.x, point.y);
+      brushLastPoint.current = { ...point, at: performance.now() };
+      drawingLayerRef.current = { id: activeLayer.id, canvas: activeLayer.canvas, layer: activeLayer };
+      drawing.current = true;
+      setLayers((current) => current.map((layer) => layer.id === activeLayer.id
+        ? { ...layer, pixelDirty: true, pixelRevision: layer.pixelRevision + 1 }
+        : layer));
+    } else if (tool === "eraser") {
+      const activeLayer = layers.find((layer) => layer.id === activeLayerId);
+      if (!activeLayer?.canvas || activeLayer.locked) {
+        setEditorMessage("지울 이미지 레이어를 먼저 선택해주세요.");
+        return;
+      }
+      if (eraserLayerIdRef.current !== activeLayer.id) {
+        eraserMaskCanvasRef.current = null;
+        eraserStrokesRef.current = [];
+        eraserLayerIdRef.current = activeLayer.id;
+      }
+      let mask = eraserMaskCanvasRef.current;
+      if (!mask || mask.width !== canvasW || mask.height !== canvasH) {
+        mask = document.createElement("canvas");
+        mask.width = canvasW;
+        mask.height = canvasH;
+        eraserMaskCanvasRef.current = mask;
+      }
+      const context = mask.getContext("2d")!;
+      context.globalCompositeOperation = "source-over";
+      context.globalAlpha = 1;
+      context.strokeStyle = "#ffffff";
+      context.lineWidth = brushSize;
+      context.lineCap = "round";
+      context.lineJoin = "round";
+      context.beginPath();
+      context.moveTo(mx, my);
+      const stroke = [{ x: mx, y: my }];
+      eraserStrokesRef.current.push(stroke);
+      eraserDrawingRef.current = true;
+      setEraserPending(true);
+      setMaskRevision((value) => value + 1);
+    } else if (tool === "brush") {
       let activeLayer = layers.find((layer) => layer.id === activeLayerId);
-      if ((!activeLayer || activeLayer.locked) && tool === "eraser") return;
       saveUndo();
       if (!activeLayer || activeLayer.locked) {
         const newCanvas = document.createElement("canvas");
@@ -1463,11 +1613,9 @@ export default function CanvasEditor({
       }
       const ctx = drawingCanvas.getContext("2d")!;
       ctx.save();
-      ctx.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over";
+      ctx.globalCompositeOperation = "source-over";
       ctx.strokeStyle = brushColor;
-      ctx.globalAlpha = tool === "eraser"
-        ? 1
-        : brushStyle === "pencil" ? 0.58
+      ctx.globalAlpha = brushStyle === "pencil" ? 0.58
           : brushStyle === "highlighter" ? 0.28
             : brushStyle === "marker" ? 0.82
               : 1;
@@ -1591,11 +1739,47 @@ export default function CanvasEditor({
 
       // 아무것도 안 맞으면 새 말풍선 또는 독립 텍스트 생성
       saveUndo();
-      const newBubble = createBubble(
-        tool === "text" ? "text" : tool === "shape" ? shapeType : bubbleType,
+      const requestedShapeType: BubbleType = shapeType === "circle"
+        ? "ellipse"
+        : shapeType === "rectangle" && shapeToolDefaults.cornerRadius > 0
+          ? "roundedRectangle"
+          : shapeType;
+      const baseBubble = createBubble(
+        tool === "text" ? "text" : tool === "shape" ? requestedShapeType : bubbleType,
         mx,
         my
       );
+      const newBubble: SpeechBubble = tool === "text"
+        ? {
+            ...baseBubble,
+            fontSize: textToolDefaults.fontSize,
+            fontFamily: textToolDefaults.fontFamily,
+            textColor: textToolDefaults.textColor,
+            fontWeight: textToolDefaults.fontWeight,
+            textAlign: textToolDefaults.textAlign,
+            fontItalic: textToolDefaults.fontItalic,
+            underline: textToolDefaults.underline,
+            outlineColor: textToolDefaults.outlineEnabled ? textToolDefaults.outlineColor : undefined,
+            outlineWidth: textToolDefaults.outlineEnabled ? textToolDefaults.outlineWidth : 0,
+            lineHeightScale: textToolDefaults.lineHeightScale,
+            letterSpacing: textToolDefaults.letterSpacing,
+          }
+        : tool === "shape"
+          ? {
+              ...baseBubble,
+              width: shapeType === "circle" ? 180 : baseBubble.width,
+              height: shapeType === "circle" ? 180 : baseBubble.height,
+              cornerRadius: shapeToolDefaults.cornerRadius,
+              strokeColor: shapeToolDefaults.strokeEnabled ? shapeToolDefaults.strokeColor : "transparent",
+              strokeWidth: shapeToolDefaults.strokeEnabled ? shapeToolDefaults.strokeWidth : 0,
+              strokeStyle: shapeToolDefaults.strokeStyle,
+              fillColor: shapeToolDefaults.fillColor,
+              fillOpacity: shapeToolDefaults.fillOpacity,
+              gradientColor: shapeToolDefaults.gradientEnabled ? shapeToolDefaults.gradientColor : undefined,
+              gradientAngle: shapeToolDefaults.gradientAngle,
+              gradientStop: shapeToolDefaults.gradientStop,
+            }
+          : { ...baseBubble, textColor: brushColor };
       pointerChangeCommitted.current = true;
       bubbleDragMode.current = "create";
       bubbleDragStart.current = { x: mx, y: my };
@@ -1628,7 +1812,16 @@ export default function CanvasEditor({
       return;
     }
 
-    if ((tool === "brush" || tool === "eraser") && drawing.current) {
+    if (tool === "eraser" && !directDrawOpen && eraserDrawingRef.current && eraserMaskCanvasRef.current) {
+      const context = eraserMaskCanvasRef.current.getContext("2d")!;
+      context.lineTo(mx, my);
+      context.stroke();
+      eraserStrokesRef.current.at(-1)?.push({ x: mx, y: my });
+      setMaskRevision((value) => value + 1);
+      return;
+    }
+
+    if ((tool === "brush" || (tool === "eraser" && directDrawOpen)) && drawing.current) {
       const drawingLayer = drawingLayerRef.current;
       const activeLayer = drawingLayer
         ? layersRef.current.find((layer) => layer.id === drawingLayer.id) ?? drawingLayer.layer
@@ -1694,8 +1887,13 @@ export default function CanvasEditor({
               if (width < 8 && height < 8) return bb;
               const centerX = (mx + bubbleDragStart.current.x) / 2;
               const centerY = (my + bubbleDragStart.current.y) / 2;
-              const nextWidth = Math.max(original.type === "line" || original.type === "arrow" ? 24 : 40, width);
-              const nextHeight = Math.max(original.type === "line" || original.type === "arrow" ? 8 : 30, height);
+              let nextWidth = Math.max(original.type === "line" || original.type === "arrow" ? 24 : 40, width);
+              let nextHeight = Math.max(original.type === "line" || original.type === "arrow" ? 8 : 30, height);
+              if (tool === "shape" && shapeType === "circle") {
+                const diameter = Math.max(nextWidth, nextHeight);
+                nextWidth = diameter;
+                nextHeight = diameter;
+              }
               return {
                 ...bb,
                 x: centerX,
@@ -1780,6 +1978,10 @@ export default function CanvasEditor({
       if (regionSelectionPurpose !== "ocr") setRedrawUseRegion(true);
       setMaskRevision((value) => value + 1);
     }
+    if (eraserDrawingRef.current) {
+      eraserDrawingRef.current = false;
+      setMaskRevision((value) => value + 1);
+    }
     if (drawing.current) {
       drawingLayerRef.current?.canvas.getContext("2d")?.restore();
       drawingLayerRef.current = null;
@@ -1809,8 +2011,6 @@ export default function CanvasEditor({
         setTool("move");
         setCropRect(null);
         setMaskRevision((value) => value + 1);
-      } else {
-        applyCrop();
       }
     }
     setCropping(false);
@@ -2051,6 +2251,115 @@ export default function CanvasEditor({
   const selectedBubble = selectedBubbleId
     ? layers.flatMap((l) => l.bubbles).find((b) => b.id === selectedBubbleId) ?? null
     : null;
+
+  const selectedShapeBubble = selectedBubble
+    && ["rectangle", "roundedRectangle", "ellipse", "line", "arrow", "star"].includes(selectedBubble.type)
+    && !(selectedBubble.type === "roundedRectangle" && selectedBubble.tailEnabled)
+    ? selectedBubble
+    : null;
+  const selectedTextBubble = selectedBubble?.type === "text" ? selectedBubble : null;
+  const selectedSpeechBubble = selectedBubble && !selectedTextBubble && !selectedShapeBubble ? selectedBubble : null;
+  const textToolValues: TextToolDefaults = selectedBubble?.type === "text"
+    ? {
+        fontSize: selectedBubble.fontSize ?? DEFAULT_TEXT_TOOL.fontSize,
+        fontFamily: selectedBubble.fontFamily ?? DEFAULT_TEXT_TOOL.fontFamily,
+        textColor: selectedBubble.textColor ?? DEFAULT_TEXT_TOOL.textColor,
+        fontWeight: typeof selectedBubble.fontWeight === "number" && [300, 400, 700, 900].includes(selectedBubble.fontWeight)
+          ? selectedBubble.fontWeight as TextToolDefaults["fontWeight"]
+          : selectedBubble.fontWeight === "bold" ? 700 : 400,
+        textAlign: selectedBubble.textAlign ?? DEFAULT_TEXT_TOOL.textAlign,
+        fontItalic: Boolean(selectedBubble.fontItalic),
+        underline: Boolean(selectedBubble.underline),
+        outlineEnabled: Boolean(selectedBubble.outlineWidth),
+        outlineColor: selectedBubble.outlineColor ?? DEFAULT_TEXT_TOOL.outlineColor,
+        outlineWidth: selectedBubble.outlineWidth ?? DEFAULT_TEXT_TOOL.outlineWidth,
+        lineHeightScale: selectedBubble.lineHeightScale ?? DEFAULT_TEXT_TOOL.lineHeightScale,
+        letterSpacing: selectedBubble.letterSpacing ?? DEFAULT_TEXT_TOOL.letterSpacing,
+      }
+    : textToolDefaults;
+  const shapeToolValues: ShapeToolDefaults = selectedShapeBubble
+    ? {
+        cornerRadius: selectedShapeBubble.cornerRadius ?? 0,
+        strokeEnabled: selectedShapeBubble.strokeColor !== "transparent" && selectedShapeBubble.strokeWidth > 0,
+        strokeColor: selectedShapeBubble.strokeColor === "transparent" ? shapeToolDefaults.strokeColor : selectedShapeBubble.strokeColor,
+        strokeWidth: selectedShapeBubble.strokeWidth || shapeToolDefaults.strokeWidth,
+        strokeStyle: selectedShapeBubble.strokeStyle ?? "solid",
+        fillColor: selectedShapeBubble.fillColor === "transparent" ? shapeToolDefaults.fillColor : selectedShapeBubble.fillColor,
+        fillOpacity: selectedShapeBubble.fillColor === "transparent" ? 0 : selectedShapeBubble.fillOpacity ?? 1,
+        gradientEnabled: Boolean(selectedShapeBubble.gradientColor),
+        gradientColor: selectedShapeBubble.gradientColor ?? shapeToolDefaults.gradientColor,
+        gradientAngle: selectedShapeBubble.gradientAngle ?? 0,
+        gradientStop: selectedShapeBubble.gradientStop ?? 50,
+      }
+    : shapeToolDefaults;
+
+  const clearStagedEraser = useCallback(() => {
+    eraserMaskCanvasRef.current = null;
+    eraserLayerIdRef.current = null;
+    eraserStrokesRef.current = [];
+    eraserDrawingRef.current = false;
+    setEraserPending(false);
+    setMaskRevision((value) => value + 1);
+  }, []);
+
+  const activateTool = (nextTool: CanvasTool) => {
+    if (nextTool !== "eraser") clearStagedEraser();
+    setOcrOpen(false);
+    setTool(nextTool);
+    if (nextTool !== "crop") setCropRect(null);
+    if (nextTool !== "text") setTextSizeMenuOpen(false);
+  };
+
+  const updateTextTool = (updates: Partial<TextToolDefaults>) => {
+    if (selectedBubble?.type !== "text") {
+      setTextToolDefaults((current) => ({ ...current, ...updates }));
+      return;
+    }
+    const bubbleUpdates: Partial<SpeechBubble> = {};
+    if (updates.fontSize !== undefined) bubbleUpdates.fontSize = updates.fontSize;
+    if (updates.fontFamily !== undefined) bubbleUpdates.fontFamily = updates.fontFamily;
+    if (updates.textColor !== undefined) bubbleUpdates.textColor = updates.textColor;
+    if (updates.fontWeight !== undefined) bubbleUpdates.fontWeight = updates.fontWeight;
+    if (updates.textAlign !== undefined) bubbleUpdates.textAlign = updates.textAlign;
+    if (updates.fontItalic !== undefined) bubbleUpdates.fontItalic = updates.fontItalic;
+    if (updates.underline !== undefined) bubbleUpdates.underline = updates.underline;
+    if (updates.outlineColor !== undefined) bubbleUpdates.outlineColor = updates.outlineColor;
+    if (updates.outlineWidth !== undefined) bubbleUpdates.outlineWidth = updates.outlineWidth;
+    if (updates.outlineEnabled !== undefined) {
+      bubbleUpdates.outlineWidth = updates.outlineEnabled ? Math.max(1, textToolValues.outlineWidth) : 0;
+    }
+    if (updates.lineHeightScale !== undefined) bubbleUpdates.lineHeightScale = updates.lineHeightScale;
+    if (updates.letterSpacing !== undefined) bubbleUpdates.letterSpacing = updates.letterSpacing;
+    updateBubble(selectedBubble.id, bubbleUpdates);
+  };
+
+  const updateShapeTool = (updates: Partial<ShapeToolDefaults>) => {
+    if (!selectedShapeBubble) {
+      setShapeToolDefaults((current) => ({ ...current, ...updates }));
+      return;
+    }
+    const bubbleUpdates: Partial<SpeechBubble> = {};
+    if (updates.cornerRadius !== undefined) {
+      bubbleUpdates.cornerRadius = updates.cornerRadius;
+      if (selectedShapeBubble.type === "rectangle" || selectedShapeBubble.type === "roundedRectangle") {
+        bubbleUpdates.type = updates.cornerRadius > 0 ? "roundedRectangle" : "rectangle";
+      }
+    }
+    if (updates.strokeEnabled !== undefined) {
+      bubbleUpdates.strokeColor = updates.strokeEnabled ? shapeToolValues.strokeColor : "transparent";
+      bubbleUpdates.strokeWidth = updates.strokeEnabled ? Math.max(1, shapeToolValues.strokeWidth) : 0;
+    }
+    if (updates.strokeColor !== undefined) bubbleUpdates.strokeColor = updates.strokeColor;
+    if (updates.strokeWidth !== undefined) bubbleUpdates.strokeWidth = updates.strokeWidth;
+    if (updates.strokeStyle !== undefined) bubbleUpdates.strokeStyle = updates.strokeStyle;
+    if (updates.fillColor !== undefined) bubbleUpdates.fillColor = updates.fillColor;
+    if (updates.fillOpacity !== undefined) bubbleUpdates.fillOpacity = updates.fillOpacity;
+    if (updates.gradientEnabled !== undefined) bubbleUpdates.gradientColor = updates.gradientEnabled ? shapeToolValues.gradientColor : undefined;
+    if (updates.gradientColor !== undefined) bubbleUpdates.gradientColor = updates.gradientColor;
+    if (updates.gradientAngle !== undefined) bubbleUpdates.gradientAngle = updates.gradientAngle;
+    if (updates.gradientStop !== undefined) bubbleUpdates.gradientStop = updates.gradientStop;
+    updateBubble(selectedShapeBubble.id, bubbleUpdates);
+  };
 
   // 레이어 추가
   const addLayer = (position: "above" | "below") => {
@@ -2839,6 +3148,30 @@ export default function CanvasEditor({
     selectOcrRegionMode("all");
   };
 
+  const selectRedrawRegionMode = (mode: RedrawRegionMode) => {
+    setRedrawRegionMode(mode);
+    setRegionSelectionPurpose("redraw");
+    if (mode === "all" || mode === "auto") {
+      aiMaskCanvasRef.current = null;
+      setMaskRevision((value) => value + 1);
+      setTool("move");
+      setAiRegionMode(false);
+      setRedrawUseRegion(mode === "auto");
+      return;
+    }
+    aiMaskCanvasRef.current = null;
+    setMaskRevision((value) => value + 1);
+    setRedrawUseRegion(true);
+    if (mode === "rectangle") {
+      setCropRect(null);
+      setTool("crop");
+      setAiRegionMode(true);
+      return;
+    }
+    setTool("mask");
+    setAiRegionMode(false);
+  };
+
   const extractCanvasText = async () => {
     setOcrLoading(true);
     setEditorMessage(null);
@@ -2885,24 +3218,32 @@ export default function CanvasEditor({
     setOcrOpen(false);
   };
 
-  const queueAiRedraw = async () => {
+  const queueAiRedraw = async (override?: {
+    prompt?: string;
+    regionMode?: RedrawRegionMode;
+    mask?: HTMLCanvasElement | null;
+  }) => {
+    const requestedPrompt = override?.prompt ?? redrawPrompt;
+    const requestedRegionMode = override?.regionMode ?? redrawRegionMode;
     if (!projectId || !cutId) {
       setEditorMessage("프로젝트 컷에서만 AI 다시 그리기를 사용할 수 있습니다.");
-      return;
+      return false;
     }
-    if (!redrawPrompt.trim()) {
+    if (!requestedPrompt.trim()) {
       setEditorMessage("다시 그릴 내용을 입력해주세요.");
-      return;
+      return false;
     }
     setRedrawLoading(true);
     setEditorMessage(null);
     try {
       const image = createCompositeCanvas().toDataURL("image/jpeg", 0.86);
       const generationAspect = aspect === "3:4" || aspect === "8:11" ? "4:5" : aspect;
-      const manualMask = redrawUseRegion && redrawRegionMode !== "auto" && redrawRegionMode !== "all"
-        ? aiMaskCanvasRef.current
-        : null;
-      if ((redrawRegionMode === "rectangle" || redrawRegionMode === "freehand") && !manualMask) {
+      const manualMask = override?.mask !== undefined
+        ? override.mask
+        : redrawUseRegion && requestedRegionMode !== "auto" && requestedRegionMode !== "all"
+          ? aiMaskCanvasRef.current
+          : null;
+      if ((requestedRegionMode === "rectangle" || requestedRegionMode === "freehand") && !manualMask) {
         throw new Error("수정할 영역을 먼저 지정해주세요.");
       }
       const editMask = manualMask?.toDataURL("image/png").split(",")[1];
@@ -2921,17 +3262,17 @@ export default function CanvasEditor({
           projectId,
           cutId,
           inputImage: { base64: image.split(",")[1], mimeType: "image/jpeg" },
-          editRegionMode: redrawRegionMode === "rectangle" || redrawRegionMode === "freehand" ? "manual" : redrawRegionMode,
-          preserveOutsideMask: redrawRegionMode !== "all",
+          editRegionMode: requestedRegionMode === "rectangle" || requestedRegionMode === "freehand" ? "manual" : requestedRegionMode,
+          preserveOutsideMask: requestedRegionMode !== "all",
           ...(editMask ? { editMask: { base64: editMask, mimeType: "image/png" } } : {}),
           prompt: [
             "현재 완성 컷을 참고해 같은 캐릭터 정체성, 그림체, 화면 비율을 유지하며 수정한다.",
-            ...(redrawRegionMode === "auto"
+            ...(requestedRegionMode === "auto"
               ? ["수정 요청과 직접 관련된 최소 영역만 찾아 수정한다."]
-              : redrawRegionMode !== "all"
+              : requestedRegionMode !== "all"
                 ? ["첨부된 흰색 마스크 영역 안쪽만 수정한다. 마스크 밖 픽셀은 서버에서 원본으로 복원된다."]
                 : []),
-            `수정 요청: ${redrawPrompt.trim()}`,
+            `수정 요청: ${requestedPrompt.trim()}`,
             "요청하지 않은 인물, 글자, 로고, 워터마크를 추가하지 않는다.",
           ].join("\n"),
         }),
@@ -2948,11 +3289,83 @@ export default function CanvasEditor({
       if ("Notification" in window && Notification.permission === "default") {
         void Notification.requestPermission();
       }
+      return true;
     } catch (error) {
       setEditorMessage(error instanceof Error ? error.message : "AI 다시 그리기를 시작하지 못했습니다.");
+      return false;
     } finally {
       setRedrawLoading(false);
     }
+  };
+
+  const applyTransparentEraser = () => {
+    const layerId = eraserLayerIdRef.current;
+    const strokes = eraserStrokesRef.current;
+    const layer = layers.find((item) => item.id === layerId);
+    if (!layer?.canvas || strokes.length === 0) {
+      setEditorMessage("지울 영역을 먼저 칠해주세요.");
+      return false;
+    }
+
+    saveUndo();
+    const nextCanvas = cloneCanvas(layer.canvas);
+    const context = nextCanvas.getContext("2d")!;
+    const averageScale = Math.max(0.01, (Math.abs(layer.scaleX) + Math.abs(layer.scaleY)) / 2);
+    context.save();
+    context.globalCompositeOperation = "destination-out";
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.lineWidth = Math.max(1, brushSize / averageScale);
+    for (const stroke of strokes) {
+      if (stroke.length === 0) continue;
+      const points = stroke.map((point) => canvasPointToLayer(layer, canvasW, canvasH, point.x, point.y));
+      context.beginPath();
+      context.moveTo(points[0].x, points[0].y);
+      if (points.length === 1) {
+        context.lineTo(points[0].x + 0.01, points[0].y + 0.01);
+      } else {
+        for (const point of points.slice(1)) context.lineTo(point.x, point.y);
+      }
+      context.stroke();
+    }
+    context.restore();
+    alphaBoundsCache.delete(nextCanvas);
+    setLayers((current) => current.map((item) => item.id === layer.id
+      ? {
+          ...item,
+          canvas: nextCanvas,
+          image: null,
+          imageUrl: null,
+          pixelDirty: true,
+          pixelRevision: item.pixelRevision + 1,
+        }
+      : item));
+    setDirty(true);
+    clearStagedEraser();
+    setEditorMessage("선택한 영역을 투명하게 지웠습니다.");
+    return true;
+  };
+
+  const applyStagedEraser = async () => {
+    if (!eraserPending) {
+      setEditorMessage("지울 영역을 먼저 칠해주세요.");
+      return;
+    }
+    if (eraserApplyMode === "transparent") {
+      applyTransparentEraser();
+      return;
+    }
+    const mask = eraserMaskCanvasRef.current;
+    if (!mask) {
+      setEditorMessage("지울 영역을 먼저 칠해주세요.");
+      return;
+    }
+    const queued = await queueAiRedraw({
+      prompt: "선택한 대상을 완전히 제거하고 주변 배경, 선, 색, 질감이 자연스럽게 이어지도록 복원한다. 새로운 인물, 글자, 로고를 추가하지 않는다.",
+      regionMode: "freehand",
+      mask,
+    });
+    if (queued) clearStagedEraser();
   };
 
   useEffect(() => {
@@ -3581,6 +3994,345 @@ export default function CanvasEditor({
           </aside>
         )}
 
+        <div className={styles.toolWorkspace}>
+          <nav className={styles.toolRail} aria-label="캔버스 도구">
+            {([
+              ["move", "선택툴", LuMove],
+              ["brush", "브러쉬", LuPencil],
+              ["eraser", "지우개", LuEraser],
+              ["text", "텍스트", LuType],
+              ["bubble", "말풍선", LuMessageCircle],
+              ["shape", "도형", LuShapes],
+              ["pipette", "스포이트", LuPipette],
+            ] as const).map(([id, label, Icon]) => (
+              <button
+                type="button"
+                key={id}
+                className={!ocrOpen && tool === id ? styles.toolRailActive : ""}
+                onClick={() => activateTool(id)}
+                title={label}
+                aria-label={label}
+              >
+                <Icon size={19} />
+                <span>{label}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className={ocrOpen ? styles.toolRailActive : ""}
+              onClick={toggleOcrPanel}
+              title="텍스트 추출"
+              aria-label="텍스트 추출"
+            >
+              <LuScanText size={19} />
+              <span>텍스트 추출</span>
+            </button>
+            <button
+              type="button"
+              className={styles.toolRailCollapse}
+              onClick={() => setToolPanelCollapsed((value) => !value)}
+              title={toolPanelCollapsed ? "옵션 패널 열기" : "옵션 패널 접기"}
+              aria-label={toolPanelCollapsed ? "옵션 패널 열기" : "옵션 패널 접기"}
+            >
+              {toolPanelCollapsed ? <LuPanelRightOpen size={18} /> : <LuPanelLeft size={18} />}
+            </button>
+          </nav>
+
+          {!toolPanelCollapsed && (
+            <aside className={styles.toolOptionsPanel} aria-label="도구 옵션">
+              <header className={styles.toolOptionsHeader}>
+                <strong>{ocrOpen
+                  ? "텍스트 추출"
+                  : tool === "move" && selectedTextBubble ? "텍스트 옵션"
+                    : tool === "move" && selectedSpeechBubble ? "말풍선 옵션"
+                      : tool === "move" && selectedShapeBubble ? "도형 옵션"
+                        : tool === "move" ? "선택 옵션"
+                    : tool === "brush" ? "브러쉬 옵션"
+                      : tool === "eraser" ? "지우개 옵션"
+                        : tool === "text" ? "텍스트 옵션"
+                          : tool === "bubble" ? "말풍선 옵션"
+                            : tool === "shape" ? "도형 옵션"
+                              : tool === "pipette" ? "스포이트 옵션"
+                                : "옵션"}</strong>
+                <button type="button" onClick={() => setToolPanelCollapsed(true)} title="옵션 패널 접기"><LuX size={15} /></button>
+              </header>
+
+              {ocrOpen ? (
+                <div className={styles.optionStack}>
+                  <section className={styles.optionSection}>
+                    <div className={styles.segmentedControl} aria-label="글자 추출 영역">
+                      {([['all', '전체'], ['rectangle', '사각형'], ['freehand', '자유형식']] as const).map(([mode, label]) => (
+                        <button type="button" key={mode} className={ocrRegionMode === mode ? styles.segmentActive : ""} onClick={() => selectOcrRegionMode(mode)}>{label}</button>
+                      ))}
+                    </div>
+                    {ocrRegionMode !== "all" && (
+                      <p className={styles.toolHint}>{aiMaskCanvasRef.current ? "영역 선택됨" : ocrRegionMode === "rectangle" ? "캔버스에서 사각형을 지정하세요." : "캔버스에 추출 영역을 칠하세요."}</p>
+                    )}
+                    <button className={styles.primaryOptionButton} onClick={() => void extractCanvasText()} disabled={ocrLoading || (ocrRegionMode !== "all" && !aiMaskCanvasRef.current)}>
+                      {ocrLoading ? <LuLoaderCircle className={styles.spin} /> : <LuScanText />} 글자 추출 <CreditCostBadge credits={AI_CREDIT_COSTS.ocr} />
+                    </button>
+                  </section>
+                  {ocrText && (
+                    <section className={styles.optionSection}>
+                      <label className={styles.optionLabel}>추출 결과</label>
+                      <textarea rows={9} value={ocrText} onChange={(event) => setOcrText(event.target.value)} />
+                      <button className={styles.primaryOptionButton} onClick={addExtractedText} disabled={!ocrText.trim()}><LuType /> 텍스트 객체로 추가</button>
+                    </section>
+                  )}
+                </div>
+              ) : tool === "brush" ? (
+                <div className={styles.optionStack}>
+                  <section className={styles.optionSection}>
+                    <label className={styles.optionLabel}>브러쉬 종류</label>
+                    <div className={styles.choiceGrid}>
+                      {BRUSH_STYLES.map((style) => (
+                        <button key={style.id} className={brushStyle === style.id ? styles.optionActive : ""} onClick={() => setBrushStyle(style.id)}>{style.label}</button>
+                      ))}
+                    </div>
+                  </section>
+                  <section className={styles.optionSection}>
+                    <label className={styles.optionLabel}>색상</label>
+                    <div className={styles.colorPalette}>
+                      {BRUSH_COLORS.map((color) => <button key={color} className={brushColor.toLowerCase() === color.toLowerCase() ? styles.colorActive : ""} style={{ backgroundColor: color }} onClick={() => setBrushColor(color)} title={color} />)}
+                    </div>
+                    <div className={styles.colorFieldRow}>
+                      <input type="color" value={brushColor} onChange={(event) => setBrushColor(event.target.value)} />
+                      <span>#</span>
+                      <input value={brushColor.slice(1).toUpperCase()} maxLength={6} aria-label="브러쉬 HEX 색상" onChange={(event) => {
+                        const value = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6);
+                        if (value.length === 6) setBrushColor(`#${value}`);
+                      }} />
+                    </div>
+                  </section>
+                  <section className={styles.optionSection}>
+                    <label className={styles.rangeLabel}><span>두께</span><b>{brushSize}px</b></label>
+                    <input type="range" min={2} max={60} value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} />
+                  </section>
+                </div>
+              ) : tool === "eraser" ? (
+                <div className={styles.optionStack}>
+                  <section className={styles.optionSection}>
+                    <p className={styles.toolHint}>지울 영역을 칠한 뒤 적용하세요.</p>
+                    <div className={styles.segmentedControl}>
+                      <button className={eraserApplyMode === "transparent" ? styles.segmentActive : ""} onClick={() => setEraserApplyMode("transparent")}>투명</button>
+                      <button className={eraserApplyMode === "heal" ? styles.segmentActive : ""} onClick={() => setEraserApplyMode("heal")}>감쪽</button>
+                    </div>
+                    <label className={styles.rangeLabel}><span>두께</span><b>{brushSize}px</b></label>
+                    <input type="range" min={4} max={120} value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} />
+                    <div className={styles.selectionStatus}>{eraserPending ? "지울 영역이 선택되었습니다." : "선택된 영역이 없습니다."}</div>
+                    <button className={styles.primaryOptionButton} onClick={() => void applyStagedEraser()} disabled={!eraserPending || redrawLoading || Boolean(redrawJobId)}>
+                      {redrawLoading ? <LuLoaderCircle className={styles.spin} /> : <LuEraser />} 지우기 적용
+                      {eraserApplyMode === "heal" && <CreditCostBadge credits={AI_CREDIT_COSTS.image1k} />}
+                    </button>
+                    <button className={styles.secondaryOptionButton} onClick={clearStagedEraser} disabled={!eraserPending}>선택 지우기</button>
+                  </section>
+                </div>
+              ) : tool === "text" || (tool === "move" && Boolean(selectedTextBubble)) ? (
+                <div className={styles.optionStack}>
+                  <section className={styles.optionSection}>
+                    <button className={styles.primaryOptionButton} onClick={() => { setSelectedBubbleId(null); activateTool("text"); }}><LuPlus /> 텍스트 추가 (드래그)</button>
+                    <p className={styles.toolHint}>캔버스에서 원하는 크기로 드래그하세요.</p>
+                    {selectedTextBubble && <textarea rows={4} value={selectedTextBubble.text || ""} onSelect={(event) => { textSelectionRef.current = { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd }; }} onChange={(event) => updateBubble(selectedTextBubble.id, { text: event.target.value, textRuns: [] })} />}
+                  </section>
+                  <section className={styles.optionSection}>
+                    <label className={styles.optionLabel}>글자 크기</label>
+                    <div className={styles.numberWithMenu}>
+                      <input type="number" min={8} max={240} value={textToolValues.fontSize} onChange={(event) => updateTextTool({ fontSize: Number(event.target.value) })} />
+                      <button type="button" onClick={() => setTextSizeMenuOpen((value) => !value)} title="빠른 글자 크기"><LuChevronDown /></button>
+                    </div>
+                    {textSizeMenuOpen && <div className={styles.quickSizeGrid}>{TEXT_QUICK_SIZES.map((size) => <button key={size} className={textToolValues.fontSize === size ? styles.optionActive : ""} onClick={() => { updateTextTool({ fontSize: size }); setTextSizeMenuOpen(false); }}>{size}</button>)}</div>}
+                    <label className={styles.optionLabel}>서체</label>
+                    <select value={textToolValues.fontFamily} onChange={(event) => updateTextTool({ fontFamily: event.target.value })}>{BUBBLE_FONT_FAMILIES.map((font) => <option key={font.id} value={font.id}>{font.label}</option>)}</select>
+                    <div className={styles.textPreview} style={{ fontFamily: textToolValues.fontFamily, fontSize: Math.min(28, textToolValues.fontSize) }}>가나다 ABC 123</div>
+                  </section>
+                  <section className={styles.optionSection}>
+                    <label className={styles.optionLabel}>글자색</label>
+                    <div className={styles.colorPalette}>{BRUSH_COLORS.map((color) => <button key={color} className={textToolValues.textColor.toLowerCase() === color.toLowerCase() ? styles.colorActive : ""} style={{ backgroundColor: color }} onClick={() => updateTextTool({ textColor: color })} title={color} />)}</div>
+                    <div className={styles.colorFieldRow}><input type="color" value={textToolValues.textColor} onChange={(event) => updateTextTool({ textColor: event.target.value })} /><span>#</span><input value={textToolValues.textColor.slice(1).toUpperCase()} onChange={(event) => { const value = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6); if (value.length === 6) updateTextTool({ textColor: `#${value}` }); }} /></div>
+                  </section>
+                  <section className={styles.optionSection}>
+                    <label className={styles.optionLabel}>외곽선</label>
+                    <div className={styles.segmentedControl}><button className={!textToolValues.outlineEnabled ? styles.segmentActive : ""} onClick={() => updateTextTool({ outlineEnabled: false })}>OFF</button><button className={textToolValues.outlineEnabled ? styles.segmentActive : ""} onClick={() => updateTextTool({ outlineEnabled: true })}>ON</button></div>
+                    {textToolValues.outlineEnabled && <><div className={styles.colorFieldRow}><input type="color" value={textToolValues.outlineColor} onChange={(event) => updateTextTool({ outlineColor: event.target.value })} /><span>#</span><input value={textToolValues.outlineColor.slice(1).toUpperCase()} maxLength={6} onChange={(event) => { const value = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6); if (value.length === 6) updateTextTool({ outlineColor: `#${value}` }); }} /></div><label className={styles.rangeLabel}><span>두께</span><b>{textToolValues.outlineWidth}px</b></label><div className={styles.rangeControlRow}><input type="number" min={1} max={12} value={textToolValues.outlineWidth} onChange={(event) => updateTextTool({ outlineWidth: Number(event.target.value) })} /><input type="range" min={1} max={12} value={textToolValues.outlineWidth} onChange={(event) => updateTextTool({ outlineWidth: Number(event.target.value) })} /></div></>}
+                  </section>
+                  <section className={styles.optionSection}>
+                    <label className={styles.optionLabel}>문자 서식</label>
+                    <div className={styles.inlineButtonRow}>
+                      {([300, 400, 700, 900] as const).map((weight) => <button key={weight} className={textToolValues.fontWeight === weight ? styles.optionActive : ""} onClick={() => updateTextTool({ fontWeight: weight })}>{weight}</button>)}
+                    </div>
+                    <div className={styles.inlineButtonRow}>
+                      {([['left', '좌'], ['center', '중'], ['right', '우']] as const).map(([align, label]) => <button key={align} className={textToolValues.textAlign === align ? styles.optionActive : ""} onClick={() => updateTextTool({ textAlign: align })}>{label}</button>)}
+                      <button className={textToolValues.fontItalic ? styles.optionActive : ""} onClick={() => updateTextTool({ fontItalic: !textToolValues.fontItalic })} title="기울임"><i>I</i></button>
+                      <button className={textToolValues.underline ? styles.optionActive : ""} onClick={() => updateTextTool({ underline: !textToolValues.underline })} title="밑줄"><u>U</u></button>
+                      <button onClick={() => applySelectedTextStyle({ baselineOffset: -Math.max(2, textToolValues.fontSize * 0.18) })} disabled={!selectedTextBubble} title="기준선 위로">↑</button>
+                      <button onClick={() => applySelectedTextStyle({ baselineOffset: Math.max(2, textToolValues.fontSize * 0.18) })} disabled={!selectedTextBubble} title="기준선 아래로">↓</button>
+                    </div>
+                    <label className={styles.rangeLabel}><span>행간</span><b>{textToolValues.lineHeightScale.toFixed(2)}</b></label><input type="range" min={1} max={2.5} step={0.01} value={textToolValues.lineHeightScale} onChange={(event) => updateTextTool({ lineHeightScale: Number(event.target.value) })} />
+                    <label className={styles.rangeLabel}><span>자간</span><b>{textToolValues.letterSpacing}px</b></label><input type="range" min={-2} max={20} step={0.5} value={textToolValues.letterSpacing} onChange={(event) => updateTextTool({ letterSpacing: Number(event.target.value) })} />
+                    {selectedTextBubble && <><label className={styles.rangeLabel}><span>투명도</span><b>{Math.round(selectedTextBubble.opacity * 100)}%</b></label><input type="range" min={0} max={100} value={Math.round(selectedTextBubble.opacity * 100)} onChange={(event) => updateBubble(selectedTextBubble.id, { opacity: Number(event.target.value) / 100 })} /><label className={styles.rangeLabel}><span>각도</span><b>{Math.round(selectedTextBubble.rotation || 0)}°</b></label><input type="range" min={-180} max={180} value={Math.round(selectedTextBubble.rotation || 0)} onChange={(event) => updateBubble(selectedTextBubble.id, { rotation: Number(event.target.value) })} /><button className={styles.secondaryOptionButton} onClick={() => updateBubble(selectedTextBubble.id, { textRuns: [], baselineOffset: 0 })}>선택 문자 서식 초기화</button><button className={styles.dangerOptionButton} onClick={() => deleteBubble(selectedTextBubble.id)}><LuTrash2 /> 텍스트 삭제</button></>}
+                  </section>
+                </div>
+              ) : tool === "bubble" || (tool === "move" && Boolean(selectedSpeechBubble)) ? (
+                <div className={styles.optionStack}>
+                  <section className={styles.optionSection}>
+                    <button className={styles.primaryOptionButton} onClick={() => { setSelectedBubbleId(null); activateTool("bubble"); }}><LuPlus /> 말풍선 추가 (드래그)</button>
+                    <p className={styles.toolHint}>캔버스에서 원하는 크기로 드래그하세요.</p>
+                    <button className={styles.secondaryOptionButton} onClick={addCustomBubble}><LuSlidersHorizontal /> 말풍선 생성기 열기 (모양 커스텀)</button>
+                    <div className={styles.bubblePresetRow}>
+                      {([['classic', '💬'], ['thought', '💭'], ['spiky', '💥']] as const).map(([type, label]) => <button key={type} className={bubbleType === type ? styles.optionActive : ""} onClick={() => { setBubbleType(type); setSelectedBubbleId(null); }}>{label}</button>)}
+                    </div>
+                  </section>
+                  {selectedSpeechBubble && (
+                    <>
+                      {customBubbleOpen && (
+                        <section className={styles.optionSection}>
+                          <label className={styles.optionLabel}>말풍선 생성기 미리보기</label>
+                          <canvas
+                            className={styles.customBubblePreview}
+                            width={220}
+                            height={140}
+                            ref={(canvas) => {
+                              if (!canvas) return;
+                              const context = canvas.getContext("2d");
+                              if (!context) return;
+                              context.clearRect(0, 0, canvas.width, canvas.height);
+                              const scale = Math.min(176 / Math.max(1, selectedSpeechBubble.width), 88 / Math.max(1, selectedSpeechBubble.height));
+                              const previewX = 110;
+                              const previewY = 58;
+                              drawBubble(context, {
+                                ...selectedSpeechBubble,
+                                x: previewX,
+                                y: previewY,
+                                width: selectedSpeechBubble.width * scale,
+                                height: selectedSpeechBubble.height * scale,
+                                tailTipX: previewX + (selectedSpeechBubble.tailTipX - selectedSpeechBubble.x) * scale,
+                                tailTipY: previewY + (selectedSpeechBubble.tailTipY - selectedSpeechBubble.y) * scale,
+                                text: "",
+                              });
+                            }}
+                          />
+                        </section>
+                      )}
+                      <section className={styles.optionSection}>
+                        <label className={styles.optionLabel}>대사</label>
+                        <textarea rows={4} value={selectedSpeechBubble.text || ""} onChange={(event) => updateBubble(selectedSpeechBubble.id, { text: event.target.value, textRuns: [] })} />
+                      </section>
+                      <section className={styles.optionSection}>
+                        <label className={styles.optionLabel}>말풍선 글자</label>
+                        <select value={selectedSpeechBubble.fontFamily || BUBBLE_FONT_FAMILIES[0].id} onChange={(event) => updateBubble(selectedSpeechBubble.id, { fontFamily: event.target.value })}>{BUBBLE_FONT_FAMILIES.map((font) => <option key={font.id} value={font.id}>{font.label}</option>)}</select>
+                        <div className={styles.twoColumnFields}><label>크기<input type="number" min={8} max={160} value={selectedSpeechBubble.fontSize || 24} onChange={(event) => updateBubble(selectedSpeechBubble.id, { fontSize: Number(event.target.value) })} /></label><label>외곽<input type="number" min={0} max={12} value={selectedSpeechBubble.outlineWidth || 0} onChange={(event) => updateBubble(selectedSpeechBubble.id, { outlineWidth: Number(event.target.value) })} /></label></div>
+                        <div className={styles.colorFieldRow}><input type="color" value={selectedSpeechBubble.textColor || "#111111"} onChange={(event) => updateBubble(selectedSpeechBubble.id, { textColor: event.target.value })} /><span>#</span><input value={(selectedSpeechBubble.textColor || "#111111").slice(1).toUpperCase()} maxLength={6} onChange={(event) => { const value = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6); if (value.length === 6) updateBubble(selectedSpeechBubble.id, { textColor: `#${value}` }); }} /></div>
+                        <div className={styles.inlineButtonRow}>
+                          {([300, 400, 700, 900] as const).map((weight) => <button key={weight} className={selectedSpeechBubble.fontWeight === weight ? styles.optionActive : ""} onClick={() => updateBubble(selectedSpeechBubble.id, { fontWeight: weight })}>{weight}</button>)}
+                        </div>
+                        <div className={styles.inlineButtonRow}>
+                          {([['left', '좌'], ['center', '중'], ['right', '우']] as const).map(([align, label]) => <button key={align} className={(selectedSpeechBubble.textAlign || "center") === align ? styles.optionActive : ""} onClick={() => updateBubble(selectedSpeechBubble.id, { textAlign: align })}>{label}</button>)}
+                          <button className={selectedSpeechBubble.fontItalic ? styles.optionActive : ""} onClick={() => updateBubble(selectedSpeechBubble.id, { fontItalic: !selectedSpeechBubble.fontItalic })}><i>I</i></button>
+                          <button className={selectedSpeechBubble.underline ? styles.optionActive : ""} onClick={() => updateBubble(selectedSpeechBubble.id, { underline: !selectedSpeechBubble.underline })}><u>U</u></button>
+                        </div>
+                        <label className={styles.rangeLabel}><span>행간</span><b>{(selectedSpeechBubble.lineHeightScale || 1.28).toFixed(2)}</b></label><input type="range" min={1} max={2.5} step={0.01} value={selectedSpeechBubble.lineHeightScale || 1.28} onChange={(event) => updateBubble(selectedSpeechBubble.id, { lineHeightScale: Number(event.target.value) })} />
+                        <label className={styles.rangeLabel}><span>자간</span><b>{selectedSpeechBubble.letterSpacing || 0}px</b></label><input type="range" min={-2} max={20} step={0.5} value={selectedSpeechBubble.letterSpacing || 0} onChange={(event) => updateBubble(selectedSpeechBubble.id, { letterSpacing: Number(event.target.value) })} />
+                      </section>
+                      <section className={styles.optionSection}>
+                        <label className={styles.optionLabel}>모양</label>
+                        <div className={styles.choiceGrid}>{([['classic', '타원'], ['roundedRectangle', '둥근 사각'], ['spiky', '뾰족'], ['cloud', '구름']] as const).map(([type, label]) => <button key={type} className={selectedSpeechBubble.type === type ? styles.optionActive : ""} onClick={() => updateBubble(selectedSpeechBubble.id, { type })}>{label}</button>)}</div>
+                        <div className={styles.twoColumnFields}><label>W<input type="number" min={40} value={Math.round(selectedSpeechBubble.width)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { width: Number(event.target.value) })} /></label><label>H<input type="number" min={30} value={Math.round(selectedSpeechBubble.height)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { height: Number(event.target.value) })} /></label></div>
+                        <label className={styles.rangeLabel}><span>모불모불</span><b>{Math.round((selectedSpeechBubble.roughness || 0) * 100)}</b></label><input type="range" min={0} max={100} value={Math.round((selectedSpeechBubble.roughness || 0) * 100)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { roughness: Number(event.target.value) / 100 })} />
+                        <label className={styles.rangeLabel}><span>구불구불</span><b>{Math.round((selectedSpeechBubble.wobble || 0) * 100)}</b></label><input type="range" min={0} max={100} value={Math.round((selectedSpeechBubble.wobble || 0) * 100)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { wobble: Number(event.target.value) / 100 })} />
+                      </section>
+                      <section className={styles.optionSection}>
+                        <label className={styles.optionLabel}>선</label>
+                        <div className={styles.colorFieldRow}><input type="color" value={selectedSpeechBubble.strokeColor === "transparent" ? "#000000" : selectedSpeechBubble.strokeColor} onChange={(event) => updateBubble(selectedSpeechBubble.id, { strokeColor: event.target.value })} /><span>#</span><input value={(selectedSpeechBubble.strokeColor === "transparent" ? "000000" : selectedSpeechBubble.strokeColor.slice(1)).toUpperCase()} maxLength={6} onChange={(event) => { const value = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6); if (value.length === 6) updateBubble(selectedSpeechBubble.id, { strokeColor: `#${value}` }); }} /></div>
+                        <label className={styles.rangeLabel}><span>두께</span><b>{selectedSpeechBubble.strokeWidth}px</b></label><input type="range" min={0} max={16} value={selectedSpeechBubble.strokeWidth} onChange={(event) => updateBubble(selectedSpeechBubble.id, { strokeWidth: Number(event.target.value) })} />
+                        <select value={selectedSpeechBubble.strokeStyle || "solid"} onChange={(event) => updateBubble(selectedSpeechBubble.id, { strokeStyle: event.target.value as SpeechBubble['strokeStyle'] })}><option value="solid">실선</option><option value="dashed">파선</option><option value="dotted">점선</option><option value="rough">손그림</option></select>
+                        <label className={styles.rangeLabel}><span>선 투명도</span><b>{Math.round((selectedSpeechBubble.strokeOpacity ?? 1) * 100)}%</b></label><input type="range" min={0} max={100} value={Math.round((selectedSpeechBubble.strokeOpacity ?? 1) * 100)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { strokeOpacity: Number(event.target.value) / 100 })} />
+                      </section>
+                      <section className={styles.optionSection}>
+                        <label className={styles.optionLabel}>채움</label>
+                        <div className={styles.colorFieldRow}><input type="color" value={selectedSpeechBubble.fillColor === "transparent" ? "#ffffff" : selectedSpeechBubble.fillColor} onChange={(event) => updateBubble(selectedSpeechBubble.id, { fillColor: event.target.value })} /><span>#</span><input value={(selectedSpeechBubble.fillColor === "transparent" ? "FFFFFF" : selectedSpeechBubble.fillColor.slice(1)).toUpperCase()} maxLength={6} onChange={(event) => { const value = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6); if (value.length === 6) updateBubble(selectedSpeechBubble.id, { fillColor: `#${value}` }); }} /></div>
+                        <label className={styles.rangeLabel}><span>내부 투명도</span><b>{Math.round((selectedSpeechBubble.fillOpacity ?? 1) * 100)}%</b></label><input type="range" min={0} max={100} value={Math.round((selectedSpeechBubble.fillOpacity ?? 1) * 100)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { fillOpacity: Number(event.target.value) / 100 })} />
+                        <label className={styles.checkboxLabel}><input type="checkbox" checked={selectedSpeechBubble.tailEnabled} onChange={(event) => updateBubble(selectedSpeechBubble.id, { tailEnabled: event.target.checked })} /> 꼬리</label>
+                        {selectedSpeechBubble.tailEnabled && <><label className={styles.rangeLabel}><span>꼬리 폭</span><b>{selectedSpeechBubble.tailWidth}px</b></label><input type="range" min={8} max={96} value={selectedSpeechBubble.tailWidth} onChange={(event) => updateBubble(selectedSpeechBubble.id, { tailWidth: Number(event.target.value) })} /></>}
+                        {customBubbleOpen ? (
+                          <div className={styles.customGeneratorActions}>
+                            <button onClick={() => {
+                              window.localStorage.setItem("wony-canvas-custom-bubble", JSON.stringify(selectedSpeechBubble));
+                              setEditorMessage("커스텀 말풍선 설정을 이 브라우저에 저장했습니다.");
+                            }}><LuSave /> 저장</button>
+                            <button onClick={() => void downloadBubblePng(selectedSpeechBubble)}><LuDownload /> PNG</button>
+                            <button onClick={() => { setCustomBubbleOpen(false); setEditorMessage("커스텀 말풍선을 캔버스에 추가했습니다."); }}><LuPlus /> 추가</button>
+                            <button onClick={() => { setCustomBubbleOpen(false); deleteBubble(selectedSpeechBubble.id); }}><LuX /> 닫기</button>
+                          </div>
+                        ) : <button className={styles.secondaryOptionButton} onClick={() => void downloadBubblePng(selectedSpeechBubble)}><LuDownload /> 투명 PNG로 저장</button>}
+                        <button className={styles.dangerOptionButton} onClick={() => deleteBubble(selectedSpeechBubble.id)}><LuTrash2 /> 말풍선 삭제</button>
+                      </section>
+                    </>
+                  )}
+                </div>
+              ) : tool === "shape" || (tool === "move" && Boolean(selectedShapeBubble)) ? (
+                <div className={styles.optionStack}>
+                  <section className={styles.optionSection}>
+                    <button className={styles.primaryOptionButton} onClick={() => { setSelectedBubbleId(null); activateTool("shape"); }}><LuPlus /> 도형 추가 (드래그)</button>
+                    <p className={styles.toolHint}>캔버스에서 원하는 크기로 드래그하세요.</p>
+                    <div className={styles.shapeChoiceGrid}>
+                      {([['rectangle', '사각형', LuSquare], ['circle', '원', LuCircle], ['ellipse', '타원', LuCircle], ['line', '선', LuMinus], ['arrow', '화살표', LuArrowRight]] as const).map(([type, label, Icon]) => <button key={type} className={shapeType === type ? styles.optionActive : ""} onClick={() => { setShapeType(type); setSelectedBubbleId(null); }} title={label}><Icon /><span>{label}</span></button>)}
+                    </div>
+                  </section>
+                  {(shapeType === "rectangle" || selectedShapeBubble?.type === "rectangle" || selectedShapeBubble?.type === "roundedRectangle") && <section className={styles.optionSection}><label className={styles.rangeLabel}><span>모서리 둥글기</span><b>{shapeToolValues.cornerRadius}px</b></label><div className={styles.rangeControlRow}><input type="number" min={0} max={100} value={shapeToolValues.cornerRadius} onChange={(event) => updateShapeTool({ cornerRadius: Number(event.target.value) })} /><input type="range" min={0} max={100} value={shapeToolValues.cornerRadius} onChange={(event) => updateShapeTool({ cornerRadius: Number(event.target.value) })} /></div></section>}
+                  <section className={styles.optionSection}>
+                    <label className={styles.optionLabel}>테두리</label>
+                    <div className={styles.segmentedControl}><button className={!shapeToolValues.strokeEnabled ? styles.segmentActive : ""} onClick={() => updateShapeTool({ strokeEnabled: false })}>없음</button><button className={shapeToolValues.strokeEnabled ? styles.segmentActive : ""} onClick={() => updateShapeTool({ strokeEnabled: true })}>색상</button></div>
+                    {shapeToolValues.strokeEnabled && <><div className={styles.colorFieldRow}><input type="color" value={shapeToolValues.strokeColor} onChange={(event) => updateShapeTool({ strokeColor: event.target.value })} /><span>#</span><input value={shapeToolValues.strokeColor.slice(1).toUpperCase()} maxLength={6} onChange={(event) => { const value = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6); if (value.length === 6) updateShapeTool({ strokeColor: `#${value}` }); }} /></div><label className={styles.rangeLabel}><span>두께</span><b>{shapeToolValues.strokeWidth}px</b></label><div className={styles.rangeControlRow}><input type="number" min={1} max={24} value={shapeToolValues.strokeWidth} onChange={(event) => updateShapeTool({ strokeWidth: Number(event.target.value) })} /><input type="range" min={1} max={24} value={shapeToolValues.strokeWidth} onChange={(event) => updateShapeTool({ strokeWidth: Number(event.target.value) })} /></div><select value={shapeToolValues.strokeStyle} onChange={(event) => updateShapeTool({ strokeStyle: event.target.value as ShapeToolDefaults['strokeStyle'] })}><option value="solid">실선</option><option value="dashed">파선</option><option value="dotted">점선</option><option value="rough">손그림</option></select></>}
+                  </section>
+                  <section className={styles.optionSection}>
+                    <label className={styles.optionLabel}>채움</label>
+                    <div className={styles.colorFieldRow}><input type="color" value={shapeToolValues.fillColor} onChange={(event) => updateShapeTool({ fillColor: event.target.value })} /><span>#</span><input value={shapeToolValues.fillColor.slice(1).toUpperCase()} maxLength={6} onChange={(event) => { const value = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6); if (value.length === 6) updateShapeTool({ fillColor: `#${value}` }); }} /></div>
+                    <label className={styles.rangeLabel}><span>투명도</span><b>{Math.round(shapeToolValues.fillOpacity * 100)}%</b></label><div className={styles.rangeControlRow}><input type="number" min={0} max={100} value={Math.round(shapeToolValues.fillOpacity * 100)} onChange={(event) => updateShapeTool({ fillOpacity: Number(event.target.value) / 100 })} /><input type="range" min={0} max={100} value={Math.round(shapeToolValues.fillOpacity * 100)} onChange={(event) => updateShapeTool({ fillOpacity: Number(event.target.value) / 100 })} /></div>
+                    <label className={styles.checkboxLabel}><input type="checkbox" checked={shapeToolValues.gradientEnabled} onChange={(event) => updateShapeTool({ gradientEnabled: event.target.checked })} /> 그라데이션</label>
+                    {shapeToolValues.gradientEnabled && <><label className={styles.optionLabel}>끝 색</label><div className={styles.colorFieldRow}><input type="color" value={shapeToolValues.gradientColor} onChange={(event) => updateShapeTool({ gradientColor: event.target.value })} /><span>#</span><input value={shapeToolValues.gradientColor.slice(1).toUpperCase()} maxLength={6} onChange={(event) => { const value = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6); if (value.length === 6) updateShapeTool({ gradientColor: `#${value}` }); }} /></div><label className={styles.rangeLabel}><span>각도</span><b>{shapeToolValues.gradientAngle}°</b></label><div className={styles.rangeControlRow}><input type="number" min={0} max={360} value={shapeToolValues.gradientAngle} onChange={(event) => updateShapeTool({ gradientAngle: Number(event.target.value) })} /><input type="range" min={0} max={360} value={shapeToolValues.gradientAngle} onChange={(event) => updateShapeTool({ gradientAngle: Number(event.target.value) })} /></div><label className={styles.rangeLabel}><span>비율</span><b>{shapeToolValues.gradientStop}%</b></label><div className={styles.rangeControlRow}><input type="number" min={5} max={95} value={shapeToolValues.gradientStop} onChange={(event) => updateShapeTool({ gradientStop: Number(event.target.value) })} /><input type="range" min={5} max={95} value={shapeToolValues.gradientStop} onChange={(event) => updateShapeTool({ gradientStop: Number(event.target.value) })} /></div></>}
+                    {selectedShapeBubble && <><label className={styles.rangeLabel}><span>전체 투명도</span><b>{Math.round(selectedShapeBubble.opacity * 100)}%</b></label><input type="range" min={0} max={100} value={Math.round(selectedShapeBubble.opacity * 100)} onChange={(event) => updateBubble(selectedShapeBubble.id, { opacity: Number(event.target.value) / 100 })} /><label className={styles.rangeLabel}><span>회전</span><b>{Math.round(selectedShapeBubble.rotation || 0)}°</b></label><input type="range" min={-180} max={180} value={Math.round(selectedShapeBubble.rotation || 0)} onChange={(event) => updateBubble(selectedShapeBubble.id, { rotation: Number(event.target.value) })} /><button className={styles.dangerOptionButton} onClick={() => deleteBubble(selectedShapeBubble.id)}><LuTrash2 /> 도형 삭제</button></>}
+                  </section>
+                </div>
+              ) : tool === "pipette" ? (
+                <div className={styles.optionStack}><section className={styles.optionSection}><p className={styles.toolHint}>캔버스의 색을 클릭하면 브러쉬 색으로 가져옵니다.</p><div className={styles.sampledColor}><span style={{ backgroundColor: brushColor }} /><b>{brushColor.toUpperCase()}</b></div></section></div>
+              ) : (
+                <div className={styles.optionStack}>
+                  <section className={styles.optionSection}>
+                    <label className={styles.rangeLabel}><span>투명도</span><b>{Math.round((activeLayer?.opacity ?? 1) * 100)}%</b></label>
+                    <input type="range" min={0} max={100} value={Math.round((activeLayer?.opacity ?? 1) * 100)} onChange={(event) => handleOpacityChange(Number(event.target.value) / 100)} disabled={!activeLayer} />
+                  </section>
+                  {activeLayer?.canvas && (
+                    <>
+                      <section className={styles.optionSection}>
+                        <label className={styles.optionLabel}>위치와 크기</label>
+                        <div className={styles.objectFieldGrid}>
+                          {([['X', Math.round(activeLayer.x), (value: number) => ({ x: value })], ['Y', Math.round(activeLayer.y), (value: number) => ({ y: value })], ['W', Math.round(canvasW * activeLayer.scaleX), (value: number) => ({ scaleX: Math.max(0.05, value / canvasW) })], ['H', Math.round(canvasH * activeLayer.scaleY), (value: number) => ({ scaleY: Math.max(0.05, value / canvasH) })], ['각도', Math.round(activeLayer.rotation), (value: number) => ({ rotation: Math.max(-180, Math.min(180, value)) })]] as const).map(([label, value, createUpdate]) => <label key={label}><span>{label}</span><input type="number" value={value} onFocus={saveUndo} onChange={(event) => { setDirty(true); setLayers((current) => current.map((layer) => layer.id === activeLayer.id ? { ...layer, ...createUpdate(Number(event.target.value) || 0) } : layer)); }} disabled={activeLayer.locked} /></label>)}
+                        </div>
+                        <div className={styles.inlineButtonRow}><button onClick={() => flipActiveLayer("h")} disabled={activeLayer.locked} title="좌우 뒤집기"><LuFlipHorizontal2 /> 좌우</button><button onClick={() => flipActiveLayer("v")} disabled={activeLayer.locked} title="상하 뒤집기"><LuFlipVertical2 /> 상하</button></div>
+                      </section>
+                      <section className={styles.optionSection}>
+                        <label className={styles.optionLabel}>레이어 순서</label>
+                        <div className={styles.inlineButtonRow}><button onClick={() => moveLayer(activeLayer.id, "top")} title="맨 앞으로"><LuArrowUpToLine /></button><button onClick={() => moveLayer(activeLayer.id, "up")} title="앞으로"><LuChevronUp /></button><button onClick={() => moveLayer(activeLayer.id, "down")} title="뒤로"><LuChevronDown /></button><button onClick={() => moveLayer(activeLayer.id, "bottom")} title="맨 뒤로"><LuArrowDownToLine /></button></div>
+                      </section>
+                      <section className={styles.optionSection}>
+                        <label className={styles.optionLabel}>필터</label>
+                        <div className={styles.filterGrid}>{IMAGE_FILTERS.map((filter) => <button key={filter.id} className={activeLayer.filter === filter.id ? styles.optionActive : ""} onClick={() => { saveUndo(); setLayers((current) => current.map((layer) => layer.id === activeLayer.id ? { ...layer, filter: filter.id } : layer)); }}>{filter.label}</button>)}</div>
+                        {activeLayer.filter !== "original" && <><label className={styles.rangeLabel}><span>강도</span><b>{Math.round(activeLayer.filterIntensity * 100)}%</b></label><input type="range" min={0} max={100} value={Math.round(activeLayer.filterIntensity * 100)} onPointerDown={saveUndo} onChange={(event) => setLayers((current) => current.map((layer) => layer.id === activeLayer.id ? { ...layer, filterIntensity: Number(event.target.value) / 100 } : layer))} /></>}
+                        <label className={styles.checkboxLabel}><input type="checkbox" checked={activeLayer.clipToBelow} disabled={activeLayer.locked || layers[0]?.id === activeLayer.id} onChange={(event) => { saveUndo(); setLayers((current) => current.map((layer) => layer.id === activeLayer.id ? { ...layer, clipToBelow: event.target.checked } : layer)); }} /> 아래 레이어에 클리핑</label>
+                      </section>
+                    </>
+                  )}
+                  <section className={styles.optionSection}>
+                    <label className={styles.optionLabel}>정렬과 분배</label>
+                    <div className={styles.iconButtonGrid}><button onClick={() => alignSelection("left")} title="왼쪽"><LuAlignHorizontalJustifyStart /></button><button onClick={() => alignSelection("centerX")} title="가로 가운데"><LuAlignHorizontalJustifyCenter /></button><button onClick={() => alignSelection("right")} title="오른쪽"><LuAlignHorizontalJustifyEnd /></button><button onClick={() => alignSelection("top")} title="위"><LuAlignVerticalJustifyStart /></button><button onClick={() => alignSelection("centerY")} title="세로 가운데"><LuAlignVerticalJustifyCenter /></button><button onClick={() => alignSelection("bottom")} title="아래"><LuAlignVerticalJustifyEnd /></button><button onClick={() => distributeSelection("horizontal")} disabled={selectedLayerIds.length < 3} title="가로 균등"><LuAlignHorizontalSpaceBetween /></button><button onClick={() => distributeSelection("vertical")} disabled={selectedLayerIds.length < 3} title="세로 균등"><LuAlignVerticalSpaceBetween /></button></div>
+                    <div className={styles.inlineButtonRow}><button onClick={groupSelectedLayers} disabled={selectedLayerIds.length < 2}><LuGroup /> 그룹</button><button onClick={ungroupSelectedLayers}><LuUngroup /> 해제</button><button onClick={toggleActiveLayerLock} disabled={!activeLayer}>{activeLayer?.locked ? <LuLockOpen /> : <LuLock />} 잠금</button></div>
+                  </section>
+                </div>
+              )}
+            </aside>
+          )}
+        </div>
+
         {/* 중앙: 캔버스 */}
         <div className={styles.canvasArea}>
           <div className={styles.canvasViewport} ref={canvasViewportRef}>
@@ -3601,8 +4353,98 @@ export default function CanvasEditor({
             </div>
           </div>
 
+          {directDrawOpen && (
+            <div className={styles.directDrawBar} role="toolbar" aria-label="직접 그리기">
+              <strong>직접 그리기</strong>
+              <div className={styles.directDrawModes}>
+                <button className={tool === "move" ? styles.directDrawActive : ""} onClick={() => activateTool("move")} title="선택·이동·크기·회전"><LuMove /> 선택</button>
+                <button className={tool === "brush" ? styles.directDrawActive : ""} onClick={() => activateTool("brush")}><LuPencil /> 펜</button>
+                <button className={tool === "eraser" ? styles.directDrawActive : ""} onClick={() => { clearStagedEraser(); setTool("eraser"); }}><LuEraser /> 지우개</button>
+              </div>
+              <select value={brushStyle} onChange={(event) => setBrushStyle(event.target.value as BrushStyle)} aria-label="직접 그리기 브러쉬 종류">{BRUSH_STYLES.map((style) => <option key={style.id} value={style.id}>{style.label}</option>)}</select>
+              <div className={styles.directDrawColors}>{DIRECT_DRAW_COLORS.map((color) => <button key={color} className={brushColor.toLowerCase() === color.toLowerCase() ? styles.directDrawColorActive : ""} style={{ backgroundColor: color }} onClick={() => setBrushColor(color)} title={color} />)}</div>
+              <label><span>두께</span><input type="range" min={2} max={60} value={brushSize} onChange={(event) => setBrushSize(Number(event.target.value))} /><b>{brushSize}px</b></label>
+              <button className={styles.directDrawClose} onClick={() => { setDirectDrawOpen(false); activateTool("move"); }} title="직접 그리기 닫기"><LuX /> 닫기</button>
+            </div>
+          )}
+
+          <div className={styles.utilityDock} role="toolbar" aria-label="캔버스 편집 명령">
+            <button onClick={handleUndo} disabled={undoStack.current.length === 0} title="되돌리기"><LuUndo2 /></button>
+            <button onClick={handleRedo} disabled={redoStack.current.length === 0} title="다시 실행"><LuRedo2 /></button>
+            <span className={styles.utilityDivider} />
+            <button onClick={() => imageInputRef.current?.click()} title="이미지 추가"><LuImagePlus /></button>
+            <button className={tool === "crop" && !aiRegionMode ? styles.utilityActive : ""} onClick={() => { setAiRegionMode(false); setRegionSelectionPurpose(null); activateTool("crop"); }} title="자르기"><LuCrop /></button>
+            {tool === "crop" && !aiRegionMode && (
+              <>
+                <button className={styles.utilityConfirm} onClick={() => { applyCrop(); setTool("move"); }} disabled={!cropRect || cropRect.w <= 5 || cropRect.h <= 5} title="자르기 적용"><LuCheck /> 적용</button>
+                <button onClick={() => { setCropRect(null); setTool("move"); }} title="자르기 취소"><LuX /> 취소</button>
+              </>
+            )}
+            <button onClick={() => void handleRemoveBackground()} disabled={cutoutLoading || !activeLayer?.canvas || activeLayer.locked} title="누끼 따기">
+              {cutoutLoading ? <LuLoaderCircle className={styles.spin} /> : <LuEraser />} 누끼 <CreditCostBadge credits={AI_CREDIT_COSTS.cutout} />
+            </button>
+            <button className={directDrawOpen ? styles.utilityActive : ""} onClick={() => { setDirectDrawOpen((value) => !value); activateTool("brush"); }} title="직접 그리기"><LuPencil /> 직접 그리기</button>
+            <span className={styles.utilityDivider} />
+            <div className={styles.utilityAnchor}>
+              <button className={layoutPickerOpen ? styles.utilityActive : ""} onClick={() => { setLayoutPickerOpen((value) => !value); setBackgroundOpen(false); setRedrawOpen(false); }} title="컷 레이아웃"><LuLayoutTemplate /> 레이아웃</button>
+              {layoutPickerOpen && <div className={styles.utilityPopover}><strong>컷 레이아웃</strong><div className={styles.layoutChoiceGrid}><button onClick={() => addPanelLayout("single")}><LuSquare />1칸</button><button onClick={() => addPanelLayout("columns")}><LuColumns2 />좌우</button><button onClick={() => addPanelLayout("rows")}><LuRows2 />상하</button><button onClick={() => addPanelLayout("three")}><LuPanelTop />1+2</button><button onClick={() => addPanelLayout("twoOne")}><LuPanelsTopLeft />2+1</button><button onClick={() => addPanelLayout("four")}><LuGrid2X2 />2×2</button><button onClick={() => addPanelLayout("threeColumns")}><LuColumns3 />세로 3칸</button></div></div>}
+            </div>
+            <div className={styles.utilityAnchor}>
+              <button className={backgroundOpen ? styles.utilityActive : ""} onClick={() => { setBackgroundOpen((value) => !value); setLayoutPickerOpen(false); setRedrawOpen(false); }} title="페이지 배경"><LuPanelBottom /> 배경</button>
+              {backgroundOpen && (
+                <div className={`${styles.utilityPopover} ${styles.backgroundUtilityPopover}`}>
+                  <strong>페이지 배경</strong>
+                  <div className={styles.segmentedControl}>{([['none', '없음'], ['solid', '단색'], ['linear', '그라데이션'], ['texture', '텍스처']] as const).map(([id, label]) => <button key={id} className={pageBackground.type === id ? styles.segmentActive : ""} onClick={() => updatePageBackground({ type: id })}>{label}</button>)}</div>
+                  {pageBackground.type !== "none" && <label className={styles.utilityField}><span>기본색</span><input type="color" value={pageBackgroundColor} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ color: event.target.value }, false)} /><input value={pageBackgroundColor.slice(1).toUpperCase()} readOnly /></label>}
+                  {pageBackground.type === "linear" && <><label className={styles.utilityField}><span>끝 색</span><input type="color" value={pageBackground.color2} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ color2: event.target.value }, false)} /><input value={pageBackground.color2.slice(1).toUpperCase()} readOnly /></label><label className={styles.utilityRange}><span>각도</span><input type="range" min={0} max={360} value={pageBackground.angle} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ angle: Number(event.target.value) }, false)} /><b>{pageBackground.angle}°</b></label><label className={styles.utilityRange}><span>비율</span><input type="range" min={5} max={95} value={pageBackground.stop} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ stop: Number(event.target.value) }, false)} /><b>{pageBackground.stop}%</b></label></>}
+                  {pageBackground.type === "texture" && <div className={styles.segmentedControl}>{(['paper', 'dot', 'canvas'] as const).map((texture) => <button key={texture} className={pageBackground.texture === texture ? styles.segmentActive : ""} onClick={() => updatePageBackground({ texture })}>{texture === 'paper' ? '종이' : texture === 'dot' ? '도트' : '캔버스'}</button>)}</div>}
+                </div>
+              )}
+            </div>
+            <button onClick={() => setWatermarkOpen(true)} title="워터마크"><LuStamp /> 워터마크</button>
+            <button onClick={() => setCaptionOpen(true)} title="캡션·내레이션"><LuCaptions /> 캡션</button>
+            <div className={styles.utilityAnchor}>
+              <button className={sfxOpen ? styles.utilityActive : ""} onClick={() => setSfxOpen((value) => !value)} title="효과음"><LuZap /> 효과음</button>
+              {sfxOpen && <div className={`${styles.utilityPopover} ${styles.sfxUtilityPopover}`}><strong>효과음</strong><div>{SFX_PRESETS.map((text) => <button key={text} onClick={() => { addBubblePreset("sfx", text); setSfxOpen(false); }}>{text}</button>)}</div></div>}
+            </div>
+            <div className={styles.utilityAnchor}>
+              <button className={redrawOpen || redrawJobId ? styles.utilityActive : ""} onClick={() => { setRedrawOpen((value) => !value); setRegionSelectionPurpose("redraw"); setBackgroundOpen(false); setLayoutPickerOpen(false); }} title="AI 다시 그리기">{redrawLoading || redrawJobId ? <LuLoaderCircle className={styles.spin} /> : <LuWandSparkles />} {redrawJobId ? `${redrawProgress}%` : "AI 다시 그리기"}</button>
+              {redrawOpen && (
+                <div className={`${styles.utilityPopover} ${styles.redrawUtilityPopover}`}>
+                  <strong>AI 다시 그리기</strong>
+                  <textarea rows={4} maxLength={2_000} value={redrawPrompt} onChange={(event) => setRedrawPrompt(event.target.value)} placeholder="수정할 내용을 입력하세요." />
+                  <button className={styles.promptPresetButton} onClick={() => setRedrawPrompt("모든 말풍선·자막·글자를 제거하고 그 자리를 주변 배경·그림체와 자연스럽게 이어지도록 채운다.")}>글자·말풍선 지우기</button>
+                  <div className={styles.segmentedControl}>{([['all', '전체'], ['auto', 'AI 자동'], ['rectangle', '사각형'], ['freehand', '직접 그리기']] as const).map(([mode, label]) => <button key={mode} className={redrawRegionMode === mode ? styles.segmentActive : ""} onClick={() => selectRedrawRegionMode(mode)}>{label}</button>)}</div>
+                  {(redrawRegionMode === "rectangle" || redrawRegionMode === "freehand") && <p className={styles.toolHint}>{aiMaskCanvasRef.current ? "수정 영역이 선택되었습니다." : redrawRegionMode === "rectangle" ? "캔버스에서 사각형을 지정하세요." : "캔버스에 수정할 영역을 칠하세요."}</p>}
+                  {redrawRegionMode === "freehand" && <label className={styles.utilityRange}><span>브러쉬</span><input type="range" min={12} max={180} value={maskBrushSize} onChange={(event) => setMaskBrushSize(Number(event.target.value))} /><b>{maskBrushSize}px</b></label>}
+                  {redrawJobId && <div className={styles.aiProgress}><span style={{ width: `${redrawProgress}%` }} /><b>{redrawProgress}%</b></div>}
+                  <button className={styles.utilityPrimary} onClick={() => void queueAiRedraw()} disabled={redrawLoading || Boolean(redrawJobId) || !redrawPrompt.trim()}>{redrawLoading ? <LuLoaderCircle className={styles.spin} /> : <LuWandSparkles />} 생성 <CreditCostBadge credits={AI_CREDIT_COSTS.image1k} /></button>
+                </div>
+              )}
+            </div>
+            <span className={styles.utilityDivider} />
+            <select value={aspect} onChange={(event) => handleAspectChange(event.target.value as AspectRatio)} aria-label="캔버스 비율"><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="3:4">3:4</option><option value="8:11">8:11</option><option value="9:16">9:16</option><option value="16:9">16:9</option></select>
+            <button className={showGuides ? styles.utilityActive : ""} onClick={() => setShowGuides((value) => !value)} title="안내선"><LuGrid3X3 /></button>
+            <button className={showTransparencyGrid ? styles.utilityActive : ""} onClick={() => setShowTransparencyGrid((value) => !value)} title="투명 영역"><LuSquare /></button>
+            <button className={showOverflow ? styles.utilityActive : ""} onClick={() => setShowOverflow((value) => !value)} title="캔버스 밖 객체"><LuScanLine /></button>
+            <button onClick={() => setZoom((value) => Math.max(25, value - 25))} title="축소"><LuZoomOut /></button>
+            <button onClick={() => setZoom(100)} title="화면 맞춤">{zoom}%</button>
+            <button onClick={() => setZoom((value) => Math.min(200, value + 25))} title="확대"><LuZoomIn /></button>
+          </div>
+          <input
+            ref={imageInputRef}
+            hidden
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            onChange={(event) => {
+              void handleImageFiles(Array.from(event.target.files || [])).catch(() => window.alert("이미지를 추가하지 못했습니다."));
+              event.target.value = "";
+            }}
+          />
+
           {/* 하단 툴바 */}
-          <div className={`${styles.toolbar} ${toolbarCollapsed ? styles.toolbarCollapsed : ""}`}>
+          {toolbarCollapsed && (
+          <div className={styles.legacyToolbar} aria-hidden="true">
             <button
               className={styles.toolbarCollapseButton}
               onClick={() => setToolbarCollapsed((value) => !value)}
@@ -3655,7 +4497,6 @@ export default function CanvasEditor({
                 <LuImagePlus size={16} />
               </button>
               <input
-                ref={imageInputRef}
                 hidden
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/gif"
@@ -4386,7 +5227,7 @@ export default function CanvasEditor({
                   <div className={styles.shapeGrid}>
                     {([
                       ["rectangle", "사각형", LuSquare],
-                      ["roundedRectangle", "둥근 사각형", LuSquare],
+                      ["circle", "원", LuCircle],
                       ["ellipse", "타원", LuCircle],
                       ["line", "선", LuMinus],
                       ["arrow", "화살표", LuArrowRight],
@@ -4488,6 +5329,7 @@ export default function CanvasEditor({
               )}
             </div>
           </div>
+          )}
         </div>
 
         {/* 우측: 레이어 패널 */}
