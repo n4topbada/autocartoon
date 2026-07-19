@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { normalizeVideoProvider } from "@/lib/video-providers";
 
 async function ownedCut(id: string, userId: string) {
   return prisma.projectCut.findFirst({
     where: { id, project: { userId } },
-    select: { id: true, projectId: true, order: true },
+    select: { id: true, projectId: true, order: true, videoUrl: true },
   });
 }
 
@@ -45,11 +46,53 @@ export async function PATCH(
     if (body.dialoguePlan !== undefined && !dialoguePlan) {
       return NextResponse.json({ error: "대사 구성은 배열이어야 합니다." }, { status: 400 });
     }
+    let sourceAsset: { blobUrl: string; thumbnailUrl: string | null } | null | undefined;
+    if (body.sourceAssetId === null) {
+      sourceAsset = null;
+    } else if (typeof body.sourceAssetId === "string") {
+      sourceAsset = await prisma.projectAsset.findFirst({
+        where: {
+          id: body.sourceAssetId,
+          projectId: cut.projectId,
+          kind: "image",
+          project: { userId: session.userId },
+        },
+        select: { blobUrl: true, thumbnailUrl: true },
+      });
+      if (!sourceAsset) {
+        return NextResponse.json({ error: "시작 이미지를 찾을 수 없습니다." }, { status: 404 });
+      }
+    }
+    const generationChanged = [
+      "prompt",
+      "videoPrompt",
+      "negativePrompt",
+      "videoProvider",
+      "videoResolution",
+      "videoGenerateAudio",
+      "durationMs",
+      "sourceAssetId",
+    ].some((key) => body[key] !== undefined);
+    if (body.videoApproved === true && !cut.videoUrl) {
+      return NextResponse.json({ error: "완성된 씬 영상이 없습니다." }, { status: 400 });
+    }
     const updated = await prisma.projectCut.update({
       where: { id },
       data: {
         ...(typeof body.title === "string" ? { title: body.title.trim().slice(0, 80) || "제목 없음" } : {}),
         ...(typeof body.prompt === "string" ? { prompt: body.prompt.slice(0, 10_000) } : {}),
+        ...(typeof body.videoPrompt === "string"
+          ? { videoPrompt: body.videoPrompt.trim().slice(0, 5_000) || null }
+          : {}),
+        ...(body.videoProvider !== undefined
+          ? { videoProvider: normalizeVideoProvider(body.videoProvider) }
+          : {}),
+        ...(body.videoResolution === "720p" || body.videoResolution === "1080p"
+          ? { videoResolution: body.videoResolution }
+          : {}),
+        ...(typeof body.videoGenerateAudio === "boolean"
+          ? { videoGenerateAudio: body.videoGenerateAudio }
+          : {}),
         ...(typeof body.negativePrompt === "string" ? { negativePrompt: body.negativePrompt.slice(0, 2_000) } : {}),
         ...(typeof body.dialogue === "string" ? { dialogue: body.dialogue.slice(0, 5_000) } : {}),
         ...(dialoguePlan !== undefined ? { dialoguePlan } : {}),
@@ -59,6 +102,16 @@ export async function PATCH(
         ...(duration ? { durationMs: duration } : {}),
         ...(body.canvas && typeof body.canvas === "object" ? { canvas: body.canvas } : {}),
         ...(body.scene && typeof body.scene === "object" ? { scene: body.scene } : {}),
+        ...(sourceAsset === null
+          ? { imageUrl: null, thumbnailUrl: null }
+          : sourceAsset
+            ? { imageUrl: sourceAsset.blobUrl, thumbnailUrl: sourceAsset.thumbnailUrl }
+            : {}),
+        ...(body.videoApproved === true
+          ? { videoApprovedAt: new Date() }
+          : body.videoApproved === false || generationChanged
+            ? { videoApprovedAt: null }
+            : {}),
       },
     });
     return NextResponse.json({ cut: updated });

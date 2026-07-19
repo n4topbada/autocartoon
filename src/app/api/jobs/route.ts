@@ -8,16 +8,20 @@ import {
   reapExpiredJobsForUser,
   type StoredVideoJobInput,
 } from "@/lib/generation-jobs";
-import {
-  getPlatformAIProvider,
-  getPublicPlatformAIError,
-  getVideoModel,
-} from "@/lib/platform-ai";
+import { getPublicPlatformAIError } from "@/lib/platform-ai";
 import { prisma } from "@/lib/prisma";
 import { logError, logEvent } from "@/lib/observability";
 import { Prisma } from "@prisma/client";
+import { statObject } from "@/lib/storage";
+import {
+  getStoredJobProvider,
+  getVideoProviderModel,
+  isAllowedVideoDuration,
+  isVideoProviderConfigured,
+  normalizeVideoProvider,
+  type VideoResolution,
+} from "@/lib/video-providers";
 
-const ALLOWED_DURATIONS = new Set([4, 6, 8]);
 const ALLOWED_ASPECT_RATIOS = new Set(["16:9", "9:16"]);
 const ALLOWED_RESOLUTIONS = new Set(["720p", "1080p"]);
 
@@ -83,11 +87,13 @@ export async function POST(req: NextRequest) {
       });
       if (!project) return NextResponse.json({ error: "프로젝트를 찾을 수 없습니다." }, { status: 404 });
     }
-    if (cutId) {
-      const cut = await prisma.projectCut.findFirst({
+    const cut = cutId
+      ? await prisma.projectCut.findFirst({
         where: { id: cutId, projectId, project: { userId: session.userId } },
-        select: { id: true },
-      });
+        select: { id: true, imageUrl: true },
+      })
+      : null;
+    if (cutId) {
       if (!cut) return NextResponse.json({ error: "프로젝트 컷을 찾을 수 없습니다." }, { status: 404 });
     }
 
@@ -106,14 +112,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "영상 시작 이미지를 찾을 수 없습니다." }, { status: 404 });
     }
 
+    let cutImage: { url: string; mimeType: string } | undefined;
+    if (!sourceAsset && cut?.imageUrl) {
+      const stat = await statObject(cut.imageUrl);
+      if (stat.exists) {
+        cutImage = {
+          url: cut.imageUrl,
+          mimeType: stat.contentType || "image/png",
+        };
+      }
+    }
+
+    const provider = normalizeVideoProvider(body.provider);
+    if (!isVideoProviderConfigured(provider)) {
+      return NextResponse.json(
+        {
+          error: provider === "seedance"
+            ? "Seedance 연결이 아직 설정되지 않았습니다."
+            : "Veo 연결이 아직 설정되지 않았습니다.",
+          code: "provider_not_configured",
+        },
+        { status: 503 }
+      );
+    }
     const aspectRatio = ALLOWED_ASPECT_RATIOS.has(String(body.aspectRatio))
       ? (body.aspectRatio as "16:9" | "9:16")
       : "9:16";
-    const durationSeconds = ALLOWED_DURATIONS.has(Number(body.durationSeconds))
-      ? (Number(body.durationSeconds) as 4 | 6 | 8)
-      : 8;
+    const requestedDuration = Number(body.durationSeconds);
+    const durationSeconds = Number.isFinite(requestedDuration)
+      ? requestedDuration
+      : provider === "seedance" ? 6 : 8;
+    if (!isAllowedVideoDuration(provider, durationSeconds)) {
+      return NextResponse.json(
+        { error: provider === "seedance" ? "Seedance 영상 길이는 4~15초입니다." : "Veo 영상 길이는 4, 6, 8초입니다." },
+        { status: 400 }
+      );
+    }
     const resolution = ALLOWED_RESOLUTIONS.has(String(body.resolution))
-      ? (body.resolution as "720p" | "1080p")
+      ? (body.resolution as VideoResolution)
       : "720p";
     const negativePrompt =
       typeof body.negativePrompt === "string" && body.negativePrompt.trim()
@@ -133,6 +169,7 @@ export async function POST(req: NextRequest) {
     }
 
     const input: StoredVideoJobInput = {
+      provider,
       prompt,
       aspectRatio,
       durationSeconds,
@@ -146,7 +183,9 @@ export async function POST(req: NextRequest) {
               mimeType: sourceAsset.mimeType,
             },
           }
-        : {}),
+        : cutImage
+          ? { sourceImage: cutImage }
+          : {}),
     };
     let job;
     try {
@@ -156,8 +195,8 @@ export async function POST(req: NextRequest) {
           projectId,
           cutId,
           kind: "video",
-          provider: getPlatformAIProvider(),
-          model: getVideoModel(),
+          provider: getStoredJobProvider(provider),
+          model: getVideoProviderModel(provider, resolution),
           idempotencyKey,
           prompt,
           input: input as unknown as Prisma.InputJsonValue,

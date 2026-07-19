@@ -31,10 +31,11 @@ export interface StoredImageJobInput {
 }
 
 export interface StoredVideoJobInput {
+  provider: "veo" | "seedance";
   prompt: string;
   negativePrompt?: string;
   aspectRatio: "16:9" | "9:16";
-  durationSeconds: 4 | 6 | 8;
+  durationSeconds: number;
   resolution: "720p" | "1080p";
   generateAudio: boolean;
   sourceImage?: StoredImageReference;

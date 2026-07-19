@@ -1,87 +1,70 @@
 .shell {
-  --short-bg: var(--bg);
-  --short-panel: var(--surface);
-  --short-raised: var(--surface-subtle);
-  --short-line: var(--border);
-  --short-text: var(--text);
-  --short-muted: var(--text-dim);
-  --short-teal: var(--accent);
-  --short-red: var(--danger);
-  /* 고정 높이 flex 셸: 에러 배너가 떠도 워크스페이스가 남은 높이를 정확히 채워
-     페이지 스크롤 + 내부 열 스크롤이 겹치는 이중 스크롤을 없앤다(모바일에서 아래 미디어쿼리로 해제). */
   height: 100dvh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: var(--short-bg);
-  color: var(--short-text);
+  background: #f3f5f2;
+  color: var(--text);
 }
 
-.loading {
+.loading,
+.emptyPage {
   min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  background: var(--bg);
+  background: #f3f5f2;
   color: var(--text-dim);
-  font-size: 13px;
+}
+
+.emptyPage {
+  flex-direction: column;
+}
+
+.emptyPage > svg {
+  width: 42px;
+  height: 42px;
+  color: var(--accent);
+}
+
+.emptyPage h1 {
+  margin: 4px 0 12px;
+  font-size: 20px;
+  letter-spacing: 0;
 }
 
 .header {
-  position: sticky;
-  z-index: 50;
-  top: 0;
   min-height: 58px;
   padding: 8px 12px;
   display: grid;
-  grid-template-columns: 36px auto minmax(180px, 520px) minmax(0, 1fr);
+  grid-template-columns: 36px auto minmax(180px, 520px) minmax(260px, 1fr);
   align-items: center;
   gap: 10px;
-  border-bottom: 1px solid var(--short-line);
-  background: rgba(255, 255, 255, 0.97);
-}
-
-.iconButton,
-.studioLink {
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid var(--short-line);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--short-muted);
-  text-decoration: none;
-}
-
-.iconButton {
-  width: 36px;
-}
-
-.iconButton:hover,
-.studioLink:hover {
-  border-color: var(--short-teal);
-  color: var(--short-text);
+  border-bottom: 1px solid var(--border);
+  background: rgba(252, 253, 251, 0.98);
 }
 
 .brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 7px;
+  color: var(--text);
+  text-decoration: none;
   white-space: nowrap;
 }
 
 .brand svg {
-  color: var(--short-teal);
+  color: var(--accent);
 }
 
 .brand strong {
   font-size: 14px;
 }
 
-.header > input {
+.header > input,
+.editorToolbar > input {
+  min-width: 0;
   width: 100%;
   min-height: 36px;
   padding: 7px 10px;
@@ -89,40 +72,143 @@
   border-radius: 5px;
   outline: 0;
   background: var(--surface);
-  color: var(--short-text);
+  color: var(--text);
+  font: inherit;
   font-size: 12px;
 }
 
-.header > input:focus {
-  border-color: var(--short-teal);
+.header > input:focus,
+.editorToolbar > input:focus {
+  border-color: var(--border-strong);
+}
+
+.headerActions,
+.editorToolbar > div,
+.reviewActions,
+.outputActions,
+.promptActionRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
 
 .headerActions {
-  display: flex;
-  align-items: center;
+  min-width: 0;
   justify-content: flex-end;
-  gap: 8px;
 }
 
-.studioLink {
+.headerMetric {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.iconButton,
+.iconButtonDanger,
+.textButton,
+.primaryButton,
+.secondaryButton,
+.approveButton,
+.generateButton,
+.composeButton,
+.addSceneButton {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.iconButton,
+.iconButtonDanger {
+  width: 36px;
+  flex: 0 0 36px;
+  padding: 0;
+}
+
+.iconButtonDanger {
+  color: var(--danger);
+}
+
+.textButton,
+.primaryButton,
+.secondaryButton,
+.approveButton {
   padding: 0 10px;
+}
+
+.primaryButton,
+.approveButton {
+  border-color: #253a34;
+  background: #253a34;
+  color: #fff;
+}
+
+.secondaryButton {
+  background: #f7f8f5;
+}
+
+.iconButton:hover:not(:disabled),
+.textButton:hover:not(:disabled),
+.secondaryButton:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-subtle);
+}
+
+.iconButtonDanger:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+
+.iconButton:disabled,
+.iconButtonDanger:disabled,
+.textButton:disabled,
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.approveButton:disabled,
+.generateButton:disabled,
+.composeButton:disabled,
+.addSceneButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.errorBanner,
+.noticeBanner {
+  min-height: 40px;
+  padding: 7px 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid;
   font-size: 11px;
 }
 
-.error {
-  min-height: 40px;
-  padding: 8px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid var(--danger-border);
+.errorBanner {
+  border-color: var(--danger-border);
   background: var(--danger-soft);
   color: var(--danger);
-  font-size: 11px;
 }
 
-.error button {
+.noticeBanner {
+  border-color: #b8d6c8;
+  background: #eaf4ee;
+  color: #245b45;
+}
+
+.errorBanner button,
+.noticeBanner button {
   width: 28px;
   height: 28px;
   display: grid;
@@ -134,776 +220,814 @@
 }
 
 .workspace {
-  /* 매직넘버(100dvh-58px) 대신 남은 공간을 채운다. 단일 행을 컨테이너 높이로 묶어 각 열이 자체 스크롤. */
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 260px minmax(500px, 1fr) 340px;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: 238px minmax(500px, 1fr) 360px;
 }
 
-.sourcePanel,
-.outputPanel {
+.scenePanel,
+.editorPanel,
+.reviewPanel {
   min-width: 0;
-  background: var(--short-panel);
-}
-
-.sourcePanel {
-  border-right: 1px solid var(--short-line);
-}
-
-.outputPanel {
-  border-left: 1px solid var(--short-line);
-}
-
-.sourceTabs {
-  padding: 8px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
-  border-bottom: 1px solid var(--short-line);
-}
-
-.sourceTabs button {
-  min-width: 0;
-  min-height: 38px;
-  padding: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--short-muted);
-  font-size: 10px;
-  cursor: pointer;
-}
-
-.sourceTabs .activeTab {
-  border-color: var(--border-strong);
-  background: var(--accent-soft);
-  color: #fff;
-}
-
-.projectList {
-  max-height: calc(100dvh - 116px);
-  padding: 7px;
-  display: grid;
-  align-content: start;
-  gap: 5px;
+  min-height: 0;
   overflow-y: auto;
 }
 
-.projectList > button {
+.scenePanel {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: #fafbf9;
+}
+
+.editorPanel {
+  padding: 0 20px 30px;
+  background: #f3f5f2;
+}
+
+.reviewPanel {
+  border-left: 1px solid var(--border);
+  background: #fafbf9;
+}
+
+.panelHeader {
+  padding: 9px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  gap: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panelHeader select,
+.optionGrid select {
   min-width: 0;
-  min-height: 62px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  outline: 0;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.sceneList {
+  flex: 1;
+  min-height: 0;
+  padding: 7px;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.sceneItem {
+  min-width: 0;
+  min-height: 66px;
   padding: 6px;
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: 52px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   border: 1px solid transparent;
   border-radius: 5px;
   background: transparent;
-  color: var(--short-muted);
+  color: var(--text);
   text-align: left;
   cursor: pointer;
 }
 
-.projectList > button:hover:not(:disabled) {
+.sceneItem:hover {
   background: var(--surface-subtle);
 }
 
-.projectList > button:disabled {
-  cursor: not-allowed;
-  opacity: 0.48;
+.sceneItemActive {
+  border-color: #aebeb7;
+  background: #e8efeb;
 }
 
-.projectList .projectActive {
-  border-color: var(--border-strong);
-  background: var(--accent-soft);
-}
-
-.projectList button > span {
-  width: 48px;
-  height: 48px;
+.sceneThumb {
+  position: relative;
+  width: 52px;
+  height: 52px;
   display: grid;
   place-items: center;
   overflow: hidden;
   border-radius: 4px;
-  background: var(--surface-subtle);
+  background: #e6eae6;
+  color: var(--text-dim);
 }
 
-.projectList img {
+.sceneThumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.projectList button > div {
-  min-width: 0;
+.sceneThumb b {
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
   display: grid;
-  gap: 4px;
+  place-items: center;
+  border-radius: 3px;
+  background: rgba(20, 28, 25, 0.82);
+  color: #fff;
+  font-size: 9px;
 }
 
-.projectList strong,
-.projectList small {
+.sceneMeta {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.sceneMeta strong {
   overflow: hidden;
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.projectList strong {
-  color: var(--short-text);
-  font-size: 11px;
-}
-
-.projectList small {
+.sceneMeta small {
+  color: var(--text-dim);
   font-size: 9px;
 }
 
-.emptySource {
-  padding: 28px 14px;
-  color: var(--short-muted);
-  font-size: 10px;
-  line-height: 1.6;
-  text-align: center;
+.sceneMeta .statusActive {
+  color: #2a6f91;
 }
 
-.dropZone {
-  margin: 12px;
-  min-height: 240px;
-  padding: 24px 14px;
+.sceneMeta .statusApproved {
+  color: #26704e;
+}
+
+.addSceneButton {
+  margin: 8px;
+  background: transparent;
+}
+
+.panelLoading {
+  min-height: 70vh;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px dashed var(--border-strong);
-  border-radius: 6px;
-  background: var(--accent-soft);
-  color: var(--short-muted);
-  text-align: center;
+  color: var(--text-dim);
+  font-size: 11px;
 }
 
-.dropZone > svg {
-  width: 28px;
-  height: 28px;
-  color: var(--short-teal);
+.editorToolbar {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  margin: 0 -20px;
+  padding: 9px 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(243, 245, 242, 0.97);
 }
 
-.dropZone strong {
-  color: var(--short-text);
-  font-size: 12px;
+.sourceSection,
+.promptSection,
+.generationSection,
+.reviewSection,
+.assemblySection,
+.outputSection {
+  border-bottom: 1px solid var(--border);
 }
 
-.dropZone span {
-  font-size: 9px;
+.sourceSection,
+.promptSection,
+.generationSection {
+  padding: 18px 0;
 }
 
-.dropZone button {
-  min-height: 34px;
-  margin-top: 6px;
-  padding: 6px 11px;
-  border: 1px solid var(--border-strong);
-  border-radius: 5px;
-  background: var(--accent-soft);
-  color: #fff;
-  font-size: 10px;
-  cursor: pointer;
+.reviewSection,
+.assemblySection,
+.outputSection {
+  padding: 14px;
 }
 
-.editor {
-  min-width: 0;
-  background: var(--surface-subtle);
-}
-
-.editorHeader {
-  min-height: 54px;
-  padding: 8px 12px;
+.sectionTitle {
+  min-height: 28px;
+  margin-bottom: 10px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid var(--short-line);
-}
-
-.editorHeader > div {
-  display: flex;
-  align-items: center;
   gap: 8px;
 }
 
-.editorHeader strong {
-  font-size: 12px;
-}
-
-.editorHeader span {
-  color: var(--short-muted);
-  font-size: 9px;
-}
-
-.editorHeader button {
-  min-height: 32px;
-  padding: 6px 9px;
+.sectionTitle > span {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  border: 1px solid var(--short-line);
-  border-radius: 5px;
-  background: var(--surface);
-  color: var(--short-muted);
-  font-size: 9px;
-  cursor: pointer;
-}
-
-.editorHeader button:hover:not(:disabled) {
-  border-color: var(--short-teal);
-  color: var(--short-text);
-}
-
-.editorHeader button:disabled {
-  cursor: wait;
-  opacity: 0.5;
-}
-
-.cutList {
-  max-height: calc(100dvh - 112px);
-  padding: 10px;
-  display: grid;
-  align-content: start;
-  gap: 8px;
-  overflow-y: auto;
-}
-
-.cutRow {
-  min-width: 0;
-  min-height: 142px;
-  display: grid;
-  grid-template-columns: 34px 108px minmax(0, 1fr);
-  overflow: hidden;
-  border: 1px solid var(--short-line);
-  border-radius: 6px;
-  background: var(--short-panel);
-}
-
-.orderControls {
-  padding: 7px 4px;
-  display: grid;
-  grid-template-rows: 1fr 28px 28px;
-  place-items: center;
-  border-right: 1px solid var(--short-line);
-}
-
-.orderControls span {
-  align-self: start;
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  border-radius: 4px;
-  background: var(--accent-soft);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.orderControls button,
-.cutTopline > button,
-.dialogueRow > button {
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  background: transparent;
-  color: var(--short-muted);
-  cursor: pointer;
-}
-
-.orderControls button:disabled {
-  cursor: default;
-  opacity: 0.25;
-}
-
-.cutRow > img {
-  width: 108px;
-  height: 100%;
-  min-height: 142px;
-  border-right: 1px solid var(--short-line);
-  background: var(--surface-subtle);
-  object-fit: cover;
-}
-
-.cutContent {
-  min-width: 0;
-  padding: 8px;
-}
-
-.cutTopline {
-  display: grid;
-  grid-template-columns: minmax(100px, 1fr) auto 28px;
-  align-items: center;
-  gap: 7px;
-}
-
-.cutTopline > input,
-.cutTopline label,
-.dialogueRow select,
-.dialogueRow textarea {
-  border: 1px solid var(--short-line);
-  border-radius: 4px;
-  outline: 0;
-  background: var(--bg);
-  color: var(--short-text);
-  font-size: 10px;
-}
-
-.cutTopline > input {
-  min-width: 0;
-  height: 30px;
-  padding: 5px 8px;
+  gap: 6px;
+  font-size: 12px;
   font-weight: 700;
 }
 
-.cutTopline label {
-  height: 30px;
-  padding: 3px 5px;
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  color: var(--short-muted);
+.sectionTitle > span svg {
+  color: var(--accent);
 }
 
-.cutTopline label input {
-  width: 38px;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--short-text);
-  text-align: right;
-}
-
-.cutTopline > button:hover,
-.dialogueRow > button:hover {
-  color: var(--short-red);
-}
-
-.dialogues {
-  margin-top: 7px;
-  display: grid;
-  gap: 5px;
-}
-
-.dialogueRow {
-  display: grid;
-  grid-template-columns: 112px minmax(0, 1fr) 28px;
-  align-items: stretch;
-  gap: 5px;
-}
-
-.dialogueRow select {
-  min-width: 0;
-  padding: 5px 7px;
-}
-
-.dialogueRow textarea {
-  min-width: 0;
-  min-height: 46px;
-  padding: 6px 7px;
-  resize: vertical;
-  line-height: 1.45;
-}
-
-.addDialogue {
-  justify-self: start;
-  min-height: 28px;
-  padding: 4px 7px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: 1px dashed var(--border-strong);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--short-muted);
-  font-size: 9px;
-  cursor: pointer;
-}
-
-.addDialogue:hover:not(:disabled) {
-  border-color: var(--short-teal);
-  color: var(--short-text);
-}
-
-.emptyEditor {
-  min-height: calc(100dvh - 112px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--short-muted);
+.sectionTitle > b {
+  color: var(--text-dim);
   font-size: 10px;
 }
 
-.emptyEditor > svg {
+.sourceArea {
+  display: grid;
+  grid-template-columns: minmax(170px, 240px) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.sourcePreview {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  max-height: 360px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #e7ebe7;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.sourcePreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #151918;
+}
+
+.sourcePreview > span {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+}
+
+.sourcePreview > span svg {
   width: 28px;
   height: 28px;
 }
 
-.emptyEditor strong {
-  color: var(--short-text);
-  font-size: 12px;
-}
-
-.outputPanel {
-  max-height: calc(100dvh - 58px);
-  padding-bottom: 150px;
-  overflow-y: auto;
-}
-
-.outputPanel > section {
-  padding: 13px;
-  border-bottom: 1px solid var(--short-line);
-}
-
-.outputPanel h2 {
-  margin: 0 0 10px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.sourcePreview > span b {
   font-size: 11px;
 }
 
-.outputPanel section > p {
-  margin: 9px 0 0;
-  color: var(--short-muted);
-  font-size: 9px;
+.assetRail {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  align-content: start;
+  gap: 6px;
+}
+
+.assetRail button {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.assetRail button.assetActive {
+  border: 2px solid #2e6952;
+}
+
+.assetRail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.assetRail button svg {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 18px;
+  height: 18px;
+  padding: 3px;
+  border-radius: 50%;
+  background: #2e6952;
+  color: #fff;
+}
+
+.emptyRail {
+  padding: 18px 4px;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.promptSection > label {
+  margin-top: 11px;
+  display: grid;
+  gap: 6px;
+}
+
+.promptSection > label > span,
+.optionGrid label > span,
+.optionGrid legend,
+.finalOptions > span {
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.promptSection textarea {
+  width: 100%;
+  padding: 10px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  outline: 0;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
   line-height: 1.55;
 }
 
-.voiceList {
+.promptSection textarea:focus {
+  border-color: #8da99e;
+  box-shadow: 0 0 0 2px rgba(65, 108, 91, 0.08);
+}
+
+.promptActionRow {
+  margin-top: 7px;
+  justify-content: flex-end;
+}
+
+.providerTabs {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.providerTabs button {
+  min-width: 0;
+  min-height: 58px;
+  padding: 8px 10px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.providerTabs button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.providerTabs button.providerActive {
+  border-color: #7f9d91;
+  background: #e8f0ec;
+}
+
+.providerTabs strong {
+  font-size: 12px;
+}
+
+.providerTabs small {
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionGrid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 120px 200px minmax(110px, 1fr);
+  align-items: end;
   gap: 9px;
 }
 
-.voiceList label {
-  display: grid;
-  gap: 5px;
-}
-
-.voiceList label > span {
-  color: var(--short-muted);
-  font-size: 9px;
-  font-weight: 700;
-}
-
-.voiceList label > div {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 56px;
-  gap: 5px;
-}
-
-.voiceList select {
+.optionGrid label,
+.optionGrid fieldset {
   min-width: 0;
-  height: 34px;
-  padding: 5px 7px;
-  border: 1px solid var(--short-line);
-  border-radius: 4px;
-  outline: 0;
-  background: var(--bg);
-  color: var(--short-text);
-  font-size: 9px;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  border: 0;
 }
 
-.voiceList button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  border: 1px solid var(--short-line);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--short-teal);
-  cursor: pointer;
-}
-
-.resolutionControl {
+.segmented {
   min-height: 36px;
   padding: 3px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  border: 1px solid var(--short-line);
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 3px;
+  border: 1px solid var(--border);
   border-radius: 5px;
-  background: var(--bg);
+  background: #edf0ec;
 }
 
-.resolutionControl button {
+.segmented button {
+  min-width: 0;
   border: 0;
   border-radius: 3px;
   background: transparent;
-  color: var(--short-muted);
-  font-size: 9px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 10px;
   cursor: pointer;
 }
 
-.resolutionControl .resolutionActive {
-  background: var(--accent);
-  color: #fff;
+.segmented button.segmentActive {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(24, 35, 30, 0.1);
 }
 
-.storageToggle {
-  min-height: 34px;
-  margin-top: 8px;
-  padding: 6px 8px;
-  display: flex;
+.audioToggle {
+  min-height: 36px;
+  padding: 0 10px;
+  grid-template-columns: auto auto minmax(0, 1fr);
   align-items: center;
-  gap: 7px;
-  border: 1px solid var(--short-line);
-  border-radius: 4px;
-  color: var(--short-text);
-  font-size: 9px;
-  cursor: pointer;
+  border: 1px solid var(--border) !important;
+  border-radius: 5px;
+  background: var(--surface);
 }
 
-.storageToggle input {
-  width: 14px;
-  height: 14px;
-  accent-color: var(--short-teal);
+.audioToggle input {
+  accent-color: #356c56;
 }
 
-.result video {
-  width: 100%;
-  max-height: 340px;
-  display: block;
-  background: #050505;
-}
-
-.result > div {
-  margin-top: 8px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.result button,
-.result a {
-  min-height: 34px;
-  padding: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  border: 1px solid var(--short-line);
-  border-radius: 4px;
-  background: var(--surface-subtle);
-  color: var(--short-text);
-  font-size: 9px;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.generateArea {
-  position: fixed;
-  z-index: 20;
-  right: 0;
-  bottom: 0;
-  width: 340px;
-  min-height: 118px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 7px;
-  border-top: 1px solid var(--short-line);
-  border-left: 1px solid var(--short-line);
-  background: rgba(255, 255, 255, 0.98);
-}
-
-.generateArea > span {
-  color: var(--short-muted);
-  font-size: 9px;
-  line-height: 1.45;
-}
-
-.progress {
-  height: 4px;
-  overflow: hidden;
-  border-radius: 2px;
-  background: var(--border);
-}
-
-.progress span {
-  height: 100%;
-  display: block;
-  background: var(--short-teal);
-  transition: width 180ms ease;
+.audioToggle svg {
+  color: var(--accent);
 }
 
 .generateButton,
-.cancelButton {
+.composeButton {
+  width: 100%;
+  margin-top: 12px;
   min-height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border-radius: 5px;
+  border-color: #253a34;
+  background: #253a34;
   color: #fff;
-  font-size: 11px;
-  font-weight: 800;
-  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.generateButton {
-  border: 1px solid var(--accent);
-  background: var(--accent);
+.jobError {
+  margin: 8px 0 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--danger);
+  font-size: 10px;
+  line-height: 1.45;
 }
 
-.generateButton:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
+.jobProgress,
+.composeProgress {
+  position: relative;
+  height: 5px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #dde3de;
 }
 
-.cancelButton {
-  border: 1px solid var(--danger-border);
-  background: var(--danger);
+.jobProgress span,
+.composeProgress > span {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: #4c8a71;
+  transition: width 240ms ease;
+}
+
+.modelLine {
+  margin-top: 7px;
+  display: block;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.videoFrame {
+  width: min(100%, 250px);
+  aspect-ratio: 9 / 16;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #171c1a;
+  color: #aab4af;
+}
+
+.videoFrame video,
+.outputSection video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #171c1a;
+}
+
+.videoFrame > span {
+  display: grid;
+  place-items: center;
+  gap: 7px;
+  text-align: center;
+}
+
+.videoFrame > span svg {
+  width: 26px;
+  height: 26px;
+}
+
+.videoFrame > span b {
+  font-size: 10px;
+}
+
+.videoFrame > span small {
+  font-size: 10px;
+}
+
+.approvedBadge {
+  padding: 3px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border-radius: 3px;
+  background: #e2f1e9;
+  color: #236347 !important;
+}
+
+.reviewActions {
+  margin-top: 10px;
+}
+
+.reviewActions > :first-child {
+  flex: 1;
+}
+
+.approvedList {
+  max-height: 180px;
+  display: grid;
+  gap: 3px;
+  overflow-y: auto;
+}
+
+.approvedList > div {
+  min-height: 30px;
+  padding: 5px 7px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 9px;
+}
+
+.approvedList > div.approvedRow {
+  background: #eaf3ee;
+  color: #275e47;
+}
+
+.approvedList strong {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approvedList svg {
+  color: #2f7957;
+}
+
+.finalOptions {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+}
+
+.composeButton {
+  background: #314a5a;
+  border-color: #314a5a;
+}
+
+.composeProgress {
+  height: 18px;
+}
+
+.composeProgress > span {
+  background: #6c8fa3;
+}
+
+.composeProgress small {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #24323a;
+  font-size: 9px;
+}
+
+.outputSection video {
+  max-height: 300px;
+  aspect-ratio: 9 / 16;
+  border-radius: 5px;
+}
+
+.outputActions {
+  margin-top: 9px;
+}
+
+.outputActions > * {
+  width: 100%;
+}
+
+.emptyOutput {
+  min-height: 110px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  border: 1px dashed var(--border);
+  border-radius: 5px;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.emptyOutput svg {
+  width: 24px;
+  height: 24px;
 }
 
 .spin {
-  animation: shortSpin 0.8s linear infinite;
+  animation: spin 900ms linear infinite;
 }
 
-@keyframes shortSpin {
+@keyframes spin {
   to { transform: rotate(360deg); }
 }
 
 @media (max-width: 1180px) {
   .workspace {
-    /* 가운데 열을 0까지 줄 수 있게 해 901~950px 사이 가로 스크롤(데드밴드)을 없앤다. */
-    grid-template-columns: 220px minmax(0, 1fr) 300px;
+    grid-template-columns: 210px minmax(430px, 1fr) 320px;
   }
 
-  .generateArea {
-    width: 300px;
+  .header {
+    grid-template-columns: 36px auto minmax(150px, 1fr) auto;
+  }
+
+  .headerMetric {
+    display: none;
+  }
+
+  .sourceArea {
+    grid-template-columns: 190px minmax(0, 1fr);
   }
 }
 
 @media (max-width: 900px) {
-  /* 좁은 폭: 고정 셸 해제 → 결과 패널이 아래로 접히며 페이지(window) 스크롤로 전환. */
   .shell {
     height: auto;
     min-height: 100dvh;
     overflow: visible;
   }
 
-  .workspace {
-    grid-template-columns: 210px minmax(0, 1fr);
-    grid-template-rows: auto;
-    min-height: 0;
-  }
-
-  .outputPanel {
-    grid-column: 1 / -1;
-    max-height: none;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding-bottom: 130px;
-    border-top: 1px solid var(--short-line);
-    border-left: 0;
-    overflow: visible;
-  }
-
-  .generateArea {
-    width: 100%;
-    min-height: 104px;
-    border-left: 0;
-  }
-
-  .cutList,
-  .projectList {
-    max-height: none;
-  }
-}
-
-@media (max-width: 640px) {
   .header {
+    position: sticky;
+    z-index: 20;
+    top: 0;
     grid-template-columns: 36px minmax(0, 1fr) auto;
   }
 
-  .brand,
-  .studioLink {
-    display: none;
+  .header > input {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
-  .header > input {
-    grid-column: 2;
+  .headerActions .textButton {
+    width: 36px;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .headerActions .textButton svg {
+    width: 16px;
+    height: 16px;
   }
 
   .workspace {
-    display: block;
+    display: flex;
+    flex-direction: column;
   }
 
-  .sourcePanel {
+  .scenePanel,
+  .editorPanel,
+  .reviewPanel {
+    overflow: visible;
+  }
+
+  .scenePanel {
     border-right: 0;
-    border-bottom: 1px solid var(--short-line);
+    border-bottom: 1px solid var(--border);
   }
 
-  .projectList {
+  .sceneList {
     display: flex;
     overflow-x: auto;
   }
 
-  .projectList > button {
-    width: 210px;
-    flex: 0 0 210px;
+  .sceneItem {
+    flex: 0 0 176px;
   }
 
-  .dropZone {
-    min-height: 170px;
+  .addSceneButton {
+    align-self: stretch;
   }
 
-  .editorHeader {
-    align-items: flex-start;
-    flex-direction: column;
+  .reviewPanel {
+    border-top: 1px solid var(--border);
+    border-left: 0;
   }
 
-  .editorHeader > div:last-child {
-    width: 100%;
+  .reviewSection,
+  .assemblySection,
+  .outputSection {
+    padding: 16px 20px;
   }
 
-  .editorHeader button {
-    flex: 1;
-    justify-content: center;
+  .videoFrame,
+  .outputSection video {
+    width: min(100%, 320px);
+    max-height: 520px;
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .header {
+    padding: 7px 8px;
   }
 
-  .cutRow {
-    grid-template-columns: 32px 86px minmax(0, 1fr);
+  .brand strong {
+    font-size: 12px;
   }
 
-  .cutRow > img {
-    width: 86px;
+  .editorPanel {
+    padding: 0 12px 24px;
   }
 
-  .cutTopline {
-    grid-template-columns: minmax(0, 1fr) 28px;
+  .editorToolbar {
+    margin: 0 -12px;
+    padding: 8px 12px;
   }
 
-  .cutTopline label {
-    grid-row: 2;
-    grid-column: 1 / -1;
-    justify-self: start;
+  .sourceArea {
+    grid-template-columns: 1fr;
   }
 
-  .dialogueRow {
-    grid-template-columns: minmax(0, 1fr) 28px;
+  .sourcePreview {
+    width: min(100%, 230px);
+    margin: 0 auto;
   }
 
-  .dialogueRow select {
-    grid-column: 1 / -1;
+  .assetRail {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .outputPanel {
-    display: block;
+  .optionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .providerTabs small {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 }

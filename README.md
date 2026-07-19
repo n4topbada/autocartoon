@@ -15,6 +15,7 @@
 - 카카오 알림톡 도입 절차: [docs/kakao-alimtalk-setup.md](./docs/kakao-alimtalk-setup.md)
 - Instagram 보류 범위: [docs/instagram-setup.md](./docs/instagram-setup.md)
 - GCS 브라우저 직접 업로드 CORS: [scripts/gcs-cors.json](./scripts/gcs-cors.json)
+- 숏폼 씬 제작 파이프라인: [docs/shortform-scene-workflow.md](./docs/shortform-scene-workflow.md)
 
 ## 주요 기능
 
@@ -29,7 +30,7 @@
 - 다중 페이지, 레이어·그룹·클리핑·가이드·정렬·필터·말풍선·도형·5종 그리기·OCR 캔버스
 - AI 자동·사각형·자유 마스크 편집, 바깥 픽셀 강제 보존, 버전 비교·복원
 - 현재 컷 PNG, 전체 컷 ZIP, 자동 저장
-- Veo 3.1 Fast와 캐릭터별 Google TTS, ffmpeg.wasm 기반 세로 MP4
+- 컷별 Veo/Seedance 영상 생성, Gemini Flash 프롬프트 확장, 승인·Retry, ffmpeg.wasm 기반 세로 MP4 병합
 - 공개 닉네임, 최신/인기 게시판, 이미지·링크, 댓글, 좋아요, 신고
 - 카카오·Google 전용 신규 가입, 기존 이메일 회원의 한시적 로그인·복구, OAuth 연결 전환, 기기 세션 최대 2대
 - 게시판 옆 WonyBot과 우측 끝 계정 아이콘, `내 작업` 안의 작업 보관함·내 캐릭터·My Content
@@ -44,11 +45,14 @@
 | --- | ---: |
 | AI 채팅, OCR, TTS | 1 |
 | 캐릭터 디렉터, AI 기획, 영상 플랜 | 2 |
+| 영상 프롬프트 확장 | 1 |
 | 1K 이미지 1장 | 10 |
 | 2K 이미지 1장 | 20 |
 | Veo 기본 영상 | 60 |
 | 6초 / 8초 | +20 / +40 |
 | 1080p / 오디오 | +40 / +10 |
+| Seedance 720p | 초당 18 |
+| Seedance 1080p | 초당 48 |
 
 | 상품 | 기본 | 보너스 | 보너스율 | 총 적립 | 금액 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -111,6 +115,10 @@ VERTEX_TEXT_MODEL=gemini-3.1-flash-lite
 VERTEX_IMAGE_MODEL=gemini-3.1-flash-image
 VERTEX_VIDEO_MODEL=veo-3.1-fast-generate-001
 VERTEX_VIDEO_OUTPUT_GCS_URI=gs://BUCKET/autocartoon/veo
+SEEDANCE_API_KEY=
+SEEDANCE_API_BASE_URL=https://ark.ap-southeast.bytepluses.com/api/v3
+SEEDANCE_FAST_MODEL=dreamina-seedance-2-0-fast-260128
+SEEDANCE_MODEL=dreamina-seedance-2-0-260128
 
 GCS_BUCKET=
 CLOUD_RUN_BASE_URL=

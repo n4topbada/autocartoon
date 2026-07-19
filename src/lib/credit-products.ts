@@ -53,6 +53,7 @@ export const AI_CREDIT_COSTS = {
   characterDesigner: 2,
   projectBrief: 2,
   videoPlan: 2,
+  videoPrompt: 1,
   ocr: 1,
   tts: 1,
   image1k: 10,
@@ -62,12 +63,15 @@ export const AI_CREDIT_COSTS = {
   videoEightSeconds: 40,
   video1080p: 40,
   videoAudio: 10,
+  seedance720pPerSecond: 18,
+  seedance1080pPerSecond: 48,
 } as const;
 
 export const CREDIT_COST_ROWS = [
   { label: "AI 채팅", credits: AI_CREDIT_COSTS.chat },
   { label: "캐릭터 설계", credits: AI_CREDIT_COSTS.characterDesigner },
   { label: "기획안·영상 플랜", credits: AI_CREDIT_COSTS.projectBrief },
+  { label: "영상 프롬프트 확장", credits: AI_CREDIT_COSTS.videoPrompt },
   { label: "OCR·음성 미리듣기", credits: AI_CREDIT_COSTS.ocr },
   { label: "이미지 1K 1장", credits: AI_CREDIT_COSTS.image1k },
   { label: "이미지 2K 1장", credits: AI_CREDIT_COSTS.image2k },
@@ -87,10 +91,19 @@ function isVideoKind(kind: string) {
 
 export function getGenerationCreditCost(kind: string, input: GenerationInput): number {
   const normalizedKind = kind.toLowerCase();
+  if (normalizedKind === "short") return 0;
   if (isVideoKind(normalizedKind)) {
-    const duration = positiveInteger(input.durationSeconds ?? input.duration, 5, 8);
+    const provider = String(input.provider ?? "veo").toLowerCase();
+    const duration = positiveInteger(input.durationSeconds ?? input.duration, 5, provider === "seedance" ? 15 : 8);
     const resolution = String(input.resolution ?? "720p").toLowerCase();
     const audio = input.generateAudio === true || input.audio === true;
+
+    if (provider === "seedance") {
+      const perSecond = resolution === "1080p"
+        ? AI_CREDIT_COSTS.seedance1080pPerSecond
+        : AI_CREDIT_COSTS.seedance720pPerSecond;
+      return duration * perSecond;
+    }
 
     let total = AI_CREDIT_COSTS.videoBase;
     if (duration >= 8) total += AI_CREDIT_COSTS.videoEightSeconds;

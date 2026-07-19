@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
           progress: 100,
           provider: "browser",
           model: "ffmpeg.wasm",
+          creditUnits: 0,
           idempotencyKey,
           prompt: `${cutCount}개 컷과 대사 음성으로 만든 숏폼`,
           input: { source: "browser-ffmpeg", cutCount } satisfies Prisma.InputJsonObject,

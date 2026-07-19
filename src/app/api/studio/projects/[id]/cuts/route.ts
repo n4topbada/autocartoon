@@ -40,6 +40,10 @@ export async function POST(
           ? {
               durationMs: source.durationMs,
               prompt: source.prompt,
+              videoPrompt: source.videoPrompt,
+              videoProvider: source.videoProvider,
+              videoResolution: source.videoResolution,
+              videoGenerateAudio: source.videoGenerateAudio,
               negativePrompt: source.negativePrompt,
               dialogue: source.dialogue,
               speakerPresetId: source.speakerPresetId,
@@ -48,6 +52,7 @@ export async function POST(
               imageUrl: source.imageUrl,
               thumbnailUrl: source.thumbnailUrl,
               videoUrl: source.videoUrl,
+              videoApprovedAt: source.videoApprovedAt,
             }
           : {}),
       },

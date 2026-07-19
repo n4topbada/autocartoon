@@ -76,4 +76,26 @@ test("video generation cost includes duration, resolution, and audio options", (
       AI_CREDIT_COSTS.video1080p +
       AI_CREDIT_COSTS.videoAudio
   );
+  assert.equal(
+    getGenerationCreditCost("video", {
+      provider: "seedance",
+      durationSeconds: 6,
+      resolution: "720p",
+      generateAudio: true,
+    }),
+    AI_CREDIT_COSTS.seedance720pPerSecond * 6
+  );
+  assert.equal(
+    getGenerationCreditCost("video", {
+      provider: "seedance",
+      durationSeconds: 15,
+      resolution: "1080p",
+      generateAudio: false,
+    }),
+    AI_CREDIT_COSTS.seedance1080pPerSecond * 15
+  );
+});
+
+test("browser MP4 assembly does not consume AI credits", () => {
+  assert.equal(getGenerationCreditCost("short", { source: "browser-ffmpeg" }), 0);
 });

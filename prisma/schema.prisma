@@ -365,6 +365,11 @@ model ProjectCut {
   title           String
   durationMs      Int      @default(5000)
   prompt          String   @default("") @db.Text
+  videoPrompt     String?  @db.Text
+  videoProvider   String   @default("veo")
+  videoResolution String   @default("720p")
+  videoGenerateAudio Boolean @default(true)
+  videoApprovedAt DateTime?
   negativePrompt  String?  @db.Text
   dialogue        String?  @db.Text
   dialoguePlan    Json?
@@ -387,6 +392,7 @@ model ProjectCut {
   @@index([imageUrl])
   @@index([thumbnailUrl])
   @@index([videoUrl])
+  @@index([videoApprovedAt])
 }
 
 model CanvasVersion {

@@ -2,41 +2,45 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { uploadViaTicket } from "@/lib/client-upload";
 import {
   LuArrowDown,
   LuArrowLeft,
   LuArrowUp,
   LuCheck,
+  LuCircleAlert,
+  LuCircleCheck,
   LuClapperboard,
   LuDownload,
+  LuExternalLink,
   LuFilm,
   LuFolderKanban,
-  LuImage,
+  LuImagePlus,
   LuLoaderCircle,
   LuPlus,
-  LuSave,
+  LuRefreshCw,
+  LuRotateCcw,
   LuSparkles,
   LuTrash2,
   LuUpload,
+  LuVideo,
   LuVolume2,
+  LuVolumeX,
   LuX,
 } from "react-icons/lu";
-import { CHARACTER_VOICES } from "@/lib/character-voices";
-import { AI_CREDIT_COSTS } from "@/lib/credit-products";
+import { uploadViaTicket } from "@/lib/client-upload";
+import { AI_CREDIT_COSTS, getGenerationCreditCost } from "@/lib/credit-products";
 import CreditCostBadge from "./CreditCostBadge";
 import GenerationNotifications from "./GenerationNotifications";
 import styles from "./ShortVideoBuilder.module.css";
 
-type SourceMode = "project" | "upload";
-type Resolution = "720p" | "1080p";
+type VideoProvider = "veo" | "seedance";
+type VideoResolution = "720p" | "1080p";
 
 interface ProjectSummary {
   id: string;
   title: string;
   usableCutCount: number;
-  coverCut: { imageUrl: string | null; thumbnailUrl: string | null } | null;
-  cuts: Array<{ imageUrl: string | null; thumbnailUrl: string | null }>;
+  _count: { cuts: number };
 }
 
 interface ProjectCut {
@@ -44,397 +48,534 @@ interface ProjectCut {
   order: number;
   title: string;
   durationMs: number;
-  dialogue: string | null;
-  dialoguePlan: unknown;
-  speakerPresetId: string | null;
+  prompt: string;
+  videoPrompt: string | null;
+  videoProvider: string;
+  videoResolution: string;
+  videoGenerateAudio: boolean;
+  videoApprovedAt: string | null;
+  negativePrompt: string | null;
   imageUrl: string | null;
   thumbnailUrl: string | null;
+  videoUrl: string | null;
+}
+
+interface ProjectAsset {
+  id: string;
+  kind: string;
+  name: string;
+  blobUrl: string;
+  thumbnailUrl: string | null;
+  metadata: unknown;
+  createdAt: string;
+}
+
+interface GenerationJob {
+  id: string;
+  kind: string;
+  status: string;
+  stage: string;
+  progress: number;
+  cutId: string | null;
+  provider: string;
+  model: string;
+  error: string | null;
+  creditUnits: number | null;
+  input: unknown;
+  createdAt: string;
+  completedAt: string | null;
 }
 
 interface StudioProject {
   id: string;
   title: string;
+  aspectRatio: string;
   cuts: ProjectCut[];
+  assets: ProjectAsset[];
+  jobs: GenerationJob[];
 }
 
-interface CharacterPreset {
-  id: string;
-  name: string;
-  voiceConfig?: Array<{ label: string; voiceId: string }> | null;
-}
-
-interface ShortDialogue {
-  id: string;
-  text: string;
-  speakerPresetId: string | null;
-}
-
-interface ShortCut {
-  id: string;
-  sourceCutId: string | null;
-  title: string;
-  imageUrl: string;
-  thumbnailUrl: string;
-  durationSeconds: number;
-  dialogues: ShortDialogue[];
+interface ProviderInfo {
+  id: VideoProvider;
+  label: string;
+  configured: boolean;
+  durations: number[];
+  resolutions: VideoResolution[];
+  models: Record<VideoResolution, string>;
+  creditExamples: Record<string, number>;
 }
 
 interface ActiveFFmpeg {
   terminate: () => void;
 }
 
-const NARRATOR_ID = "narrator";
-const MAX_CUTS = 30;
+const MAX_SCENES = 30;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const FFMPEG_CORE_BASE = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd";
 
 async function readJson<T>(response: Response): Promise<T> {
-  const body = await response.json().catch(() => ({}));
+  const body = await response.json().catch(() => ({})) as { error?: string };
+  if (response.status === 401 && typeof window !== "undefined") {
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+    window.location.assign(`/login?returnTo=${encodeURIComponent(returnTo)}&reason=session_expired`);
+    throw new Error("로그인이 필요합니다.");
+  }
   if (!response.ok) throw new Error(body.error || "요청을 처리하지 못했습니다.");
   return body as T;
 }
 
-function normalizeDialogues(cut: ProjectCut): ShortDialogue[] {
-  if (Array.isArray(cut.dialoguePlan)) {
-    const parsed = cut.dialoguePlan.flatMap((item, index): ShortDialogue[] => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) return [];
-      const record = item as Record<string, unknown>;
-      const text = typeof record.text === "string" ? record.text.trim() : "";
-      if (!text) return [];
-      return [{
-        id: typeof record.id === "string" ? record.id : `${cut.id}_${index}`,
-        text,
-        speakerPresetId: typeof record.speakerPresetId === "string" ? record.speakerPresetId : null,
-      }];
-    });
-    if (parsed.length > 0) return parsed;
-  }
-  return cut.dialogue?.trim()
-    ? [{ id: `${cut.id}_dialogue`, text: cut.dialogue.trim(), speakerPresetId: cut.speakerPresetId }]
-    : [];
+function asVideoProvider(value: string): VideoProvider {
+  return value === "seedance" ? "seedance" : "veo";
 }
 
-function splitForTts(text: string, maxLength = 220) {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  if (!normalized) return [];
-  const chunks: string[] = [];
-  let remaining = normalized;
-  while (remaining.length > maxLength) {
-    const window = remaining.slice(0, maxLength + 1);
-    const boundary = Math.max(
-      window.lastIndexOf(". "),
-      window.lastIndexOf("? "),
-      window.lastIndexOf("! "),
-      window.lastIndexOf(", "),
-      window.lastIndexOf(" ")
-    );
-    const end = boundary > maxLength * 0.5 ? boundary + 1 : maxLength;
-    chunks.push(remaining.slice(0, end).trim());
-    remaining = remaining.slice(end).trim();
-  }
-  if (remaining) chunks.push(remaining);
-  return chunks;
+function asVideoResolution(value: string): VideoResolution {
+  return value === "1080p" ? "1080p" : "720p";
+}
+
+function metadataSource(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const source = (value as Record<string, unknown>).source;
+  return typeof source === "string" ? source : "";
+}
+
+function jobInput(job: GenerationJob | undefined): Record<string, unknown> {
+  return job?.input && typeof job.input === "object" && !Array.isArray(job.input)
+    ? job.input as Record<string, unknown>
+    : {};
+}
+
+function sceneDurationSeconds(cut: ProjectCut, providerInfo: ProviderInfo | undefined) {
+  const provider = asVideoProvider(cut.videoProvider);
+  const durations = providerInfo?.durations || (provider === "seedance"
+    ? Array.from({ length: 12 }, (_, index) => index + 4)
+    : [4, 6, 8]);
+  const stored = Math.round(cut.durationMs / 1_000);
+  return durations.includes(stored) ? stored : durations[0];
+}
+
+function stageLabel(job: GenerationJob | undefined) {
+  if (!job) return "대기";
+  if (job.status === "succeeded") return "완료";
+  if (job.status === "failed") return "실패";
+  if (job.status === "canceled") return "취소";
+  const labels: Record<string, string> = {
+    queued: "대기열",
+    submitting_video: "모델 요청",
+    waiting_for_video: "영상 생성",
+    saving_video: "결과 저장",
+  };
+  return labels[job.stage] || "진행 중";
 }
 
 function safeFilePart(value: string) {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80) || "short";
+  return value.replace(/[^a-zA-Z0-9가-힣_-]/g, "-").slice(0, 80) || "short";
 }
 
 export default function ShortVideoBuilder() {
-  const [sourceMode, setSourceMode] = useState<SourceMode>("project");
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [characters, setCharacters] = useState<CharacterPreset[]>([]);
-  const [cuts, setCuts] = useState<ShortCut[]>([]);
-  const [title, setTitle] = useState("새 숏폼 영상");
-  const [voiceAssignments, setVoiceAssignments] = useState<Record<string, string>>({
-    [NARRATOR_ID]: CHARACTER_VOICES[0].voiceId,
-  });
-  const [resolution, setResolution] = useState<Resolution>("720p");
-  const [saveOnline, setSaveOnline] = useState(true);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [project, setProject] = useState<StudioProject | null>(null);
+  const [selectedCutId, setSelectedCutId] = useState("");
   const [loading, setLoading] = useState(true);
   const [projectLoading, setProjectLoading] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [savingDialogues, setSavingDialogues] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [status, setStatus] = useState("");
-  const [progress, setProgress] = useState(0);
+  const [busy, setBusy] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [uploadTargetCutId, setUploadTargetCutId] = useState("");
+  const [composing, setComposing] = useState(false);
+  const [composeProgress, setComposeProgress] = useState(0);
+  const [composeStatus, setComposeStatus] = useState("");
+  const [finalResolution, setFinalResolution] = useState<VideoResolution>("720p");
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const [outputBlob, setOutputBlob] = useState<Blob | null>(null);
-  const [savedProjectId, setSavedProjectId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeFfmpegRef = useRef<ActiveFFmpeg | null>(null);
-  const cancelRequestedRef = useRef(false);
-  const localInputUrlsRef = useRef(new Set<string>());
   const localOutputUrlRef = useRef<string | null>(null);
 
-  const loadProject = useCallback(async (projectId: string) => {
-    setProjectLoading(true);
-    setError(null);
+  const setCutBusy = (cutId: string, label: string | null) => {
+    setBusy((current) => {
+      const next = { ...current };
+      if (label) next[cutId] = label;
+      else delete next[cutId];
+      return next;
+    });
+  };
+
+  const loadProjects = useCallback(async () => {
+    const data = await readJson<{ projects: ProjectSummary[] }>(
+      await fetch("/api/studio/projects", { cache: "no-store" })
+    );
+    setProjects(data.projects);
+    return data.projects;
+  }, []);
+
+  const loadProject = useCallback(async (projectId: string, quiet = false) => {
+    if (!quiet) setProjectLoading(true);
     try {
       const data = await readJson<{ project: StudioProject }>(
         await fetch(`/api/studio/projects/${projectId}`, { cache: "no-store" })
       );
-      setTitle(`${data.project.title} 숏폼`);
-      setCuts(data.project.cuts
-        .filter((cut) => Boolean(cut.imageUrl))
-        .slice(0, MAX_CUTS)
-        .map((cut) => ({
-          id: cut.id,
-          sourceCutId: cut.id,
-          title: cut.title,
-          imageUrl: cut.imageUrl!,
-          thumbnailUrl: cut.thumbnailUrl || cut.imageUrl!,
-          durationSeconds: Math.max(2, Math.min(30, Math.round(cut.durationMs / 1000) || 5)),
-          dialogues: normalizeDialogues(cut),
-        }))
-      );
-      setSavedProjectId(data.project.id);
-    } catch (cause) {
-      setCuts([]);
-      setError(cause instanceof Error ? cause.message : "프로젝트를 불러오지 못했습니다.");
+      setProject(data.project);
+      setSelectedCutId((current) => (
+        data.project.cuts.some((cut) => cut.id === current)
+          ? current
+          : data.project.cuts[0]?.id || ""
+      ));
     } finally {
-      setProjectLoading(false);
+      if (!quiet) setProjectLoading(false);
     }
   }, []);
 
   useEffect(() => {
     let active = true;
     void (async () => {
-      const [projectData, characterData] = await Promise.all([
-        readJson<{ projects: ProjectSummary[] }>(await fetch("/api/studio/projects", { cache: "no-store" })),
-        readJson<{ groups: Array<{ presets: CharacterPreset[] }>; ungrouped: CharacterPreset[] }>(
-          await fetch("/api/presets", { cache: "no-store" })
-        ),
-      ]);
-      if (!active) return;
-      setProjects(projectData.projects);
-      setCharacters(Array.from(new Map<string, CharacterPreset>(
-        [...characterData.ungrouped, ...characterData.groups.flatMap((group) => group.presets)]
-          .map((character) => [character.id, character])
-      ).values()));
-      const firstProject = projectData.projects.find((item) => item.usableCutCount > 0);
-      if (firstProject) {
-        setSelectedProjectId(firstProject.id);
-        void loadProject(firstProject.id);
+      try {
+        const [projectItems, providerData] = await Promise.all([
+          loadProjects(),
+          readJson<{ providers: ProviderInfo[] }>(
+            await fetch("/api/shorts/providers", { cache: "no-store" })
+          ),
+        ]);
+        if (!active) return;
+        setProviders(providerData.providers);
+        const queryProjectId = new URLSearchParams(window.location.search).get("projectId");
+        const initial = projectItems.find((item) => item.id === queryProjectId) || projectItems[0];
+        if (initial) await loadProject(initial.id);
+      } catch (cause) {
+        if (active) setError(cause instanceof Error ? cause.message : "숏폼 작업을 불러오지 못했습니다.");
+      } finally {
+        if (active) setLoading(false);
       }
-    })().catch((cause) => {
-      if (active) setError(cause instanceof Error ? cause.message : "숏폼 제작 화면을 준비하지 못했습니다.");
-    }).finally(() => {
-      if (active) setLoading(false);
-    });
+    })();
     return () => { active = false; };
-  }, [loadProject]);
+  }, [loadProject, loadProjects]);
 
-  useEffect(() => () => {
-    localInputUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-    if (localOutputUrlRef.current) URL.revokeObjectURL(localOutputUrlRef.current);
-    activeFfmpegRef.current?.terminate();
-  }, []);
-
-  const speakerIds = useMemo(() => Array.from(new Set(
-    cuts.flatMap((cut) => cut.dialogues.map((dialogue) => dialogue.speakerPresetId || NARRATOR_ID))
-  )), [cuts]);
-
-  const ttsCreditCost = useMemo(() => {
-    const requests = new Set<string>();
-    for (const cut of cuts) {
-      for (const dialogue of cut.dialogues) {
-        const speakerId = dialogue.speakerPresetId || NARRATOR_ID;
-        const voiceId = voiceAssignments[speakerId] || CHARACTER_VOICES[0].voiceId;
-        for (const text of splitForTts(dialogue.text)) requests.add(`${voiceId}:${text}`);
-      }
-    }
-    return requests.size * AI_CREDIT_COSTS.tts;
-  }, [cuts, voiceAssignments]);
+  const activeJobCount = useMemo(
+    () => project?.jobs.filter((job) => job.kind === "video" && ["queued", "running"].includes(job.status)).length || 0,
+    [project?.jobs]
+  );
 
   useEffect(() => {
-    setVoiceAssignments((current) => {
-      const next = { ...current };
-      for (const speakerId of speakerIds) {
-        if (next[speakerId]) continue;
-        const character = characters.find((item) => item.id === speakerId);
-        next[speakerId] = character?.voiceConfig?.[0]?.voiceId || CHARACTER_VOICES[0].voiceId;
-      }
-      return next;
-    });
-  }, [characters, speakerIds]);
+    if (!project?.id || activeJobCount === 0) return;
+    const timer = window.setInterval(() => void loadProject(project.id, true), 4_000);
+    return () => window.clearInterval(timer);
+  }, [activeJobCount, loadProject, project?.id]);
 
-  const switchSource = (mode: SourceMode) => {
-    if (mode === sourceMode) return;
-    setSourceMode(mode);
-    setError(null);
-    setOutputUrl(null);
-    setOutputBlob(null);
-    setSavedProjectId(mode === "project" ? selectedProjectId || null : null);
-    if (mode === "project" && selectedProjectId) void loadProject(selectedProjectId);
-    if (mode === "upload") {
-      setCuts([]);
-      setTitle("업로드 이미지 숏폼");
+  useEffect(() => () => {
+    activeFfmpegRef.current?.terminate();
+    if (localOutputUrlRef.current) URL.revokeObjectURL(localOutputUrlRef.current);
+  }, []);
+
+  const selectedCut = project?.cuts.find((cut) => cut.id === selectedCutId) || null;
+  const imageAssets = useMemo(
+    () => project?.assets.filter((asset) => asset.kind === "image").slice(0, 24) || [],
+    [project?.assets]
+  );
+  const latestJobByCut = useMemo(() => {
+    const map = new Map<string, GenerationJob>();
+    for (const job of project?.jobs || []) {
+      if (job.kind === "video" && job.cutId && !map.has(job.cutId)) map.set(job.cutId, job);
     }
-  };
+    return map;
+  }, [project?.jobs]);
+  const approvedCuts = useMemo(
+    () => project?.cuts.filter((cut) => Boolean(cut.videoUrl && cut.videoApprovedAt)) || [],
+    [project?.cuts]
+  );
+  const latestFinalAsset = useMemo(
+    () => project?.assets.find((asset) => asset.kind === "video" && metadataSource(asset.metadata) === "short-builder") || null,
+    [project?.assets]
+  );
+  const displayedOutputUrl = outputUrl || latestFinalAsset?.blobUrl || null;
 
-  const addUploadFiles = (files: File[]) => {
-    const imageFiles = files.filter((file) => file.type.startsWith("image/") && file.size <= MAX_IMAGE_BYTES);
-    if (imageFiles.length !== files.length) {
-      setError("20MB 이하 이미지 파일만 사용할 수 있습니다.");
-    }
-    setCuts((current) => {
-      const remaining = Math.max(0, MAX_CUTS - current.length);
-      return [...current, ...imageFiles.slice(0, remaining).map((file, index) => {
-        const url = URL.createObjectURL(file);
-        localInputUrlsRef.current.add(url);
-        return {
-          id: `upload_${crypto.randomUUID()}`,
-          sourceCutId: null,
-          title: file.name.replace(/\.[^.]+$/, "") || `컷 ${current.length + index + 1}`,
-          imageUrl: url,
-          thumbnailUrl: url,
-          durationSeconds: 5,
-          dialogues: [],
-        } satisfies ShortCut;
-      })];
-    });
-  };
+  const replaceCut = useCallback((cutId: string, patch: Partial<ProjectCut>) => {
+    setProject((current) => current
+      ? { ...current, cuts: current.cuts.map((cut) => cut.id === cutId ? { ...cut, ...patch } : cut) }
+      : current
+    );
+  }, []);
 
-  const removeCut = (cutId: string) => {
-    setCuts((current) => {
-      const target = current.find((cut) => cut.id === cutId);
-      if (target?.imageUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(target.imageUrl);
-        localInputUrlsRef.current.delete(target.imageUrl);
-      }
-      return current.filter((cut) => cut.id !== cutId);
-    });
-  };
+  const patchCut = useCallback(async (cutId: string, patch: Record<string, unknown>) => {
+    const data = await readJson<{ cut: ProjectCut }>(await fetch(`/api/studio/cuts/${cutId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    }));
+    replaceCut(cutId, data.cut);
+    return data.cut;
+  }, [replaceCut]);
 
-  const moveCut = (index: number, direction: -1 | 1) => {
-    setCuts((current) => {
-      const target = index + direction;
-      if (target < 0 || target >= current.length) return current;
-      const next = [...current];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-  };
-
-  const updateCut = (cutId: string, updates: Partial<ShortCut>) => {
-    setCuts((current) => current.map((cut) => cut.id === cutId ? { ...cut, ...updates } : cut));
-  };
-
-  const addDialogue = (cutId: string) => {
-    setCuts((current) => current.map((cut) => cut.id === cutId && cut.dialogues.length < 12
-      ? {
-          ...cut,
-          dialogues: [...cut.dialogues, {
-            id: `dialogue_${crypto.randomUUID()}`,
-            text: "",
-            speakerPresetId: null,
-          }],
-        }
-      : cut
-    ));
-  };
-
-  const updateDialogue = (cutId: string, dialogueId: string, updates: Partial<ShortDialogue>) => {
-    setCuts((current) => current.map((cut) => cut.id === cutId
-      ? {
-          ...cut,
-          dialogues: cut.dialogues.map((dialogue) => dialogue.id === dialogueId ? { ...dialogue, ...updates } : dialogue),
-        }
-      : cut
-    ));
-  };
-
-  const removeDialogue = (cutId: string, dialogueId: string) => {
-    setCuts((current) => current.map((cut) => cut.id === cutId
-      ? { ...cut, dialogues: cut.dialogues.filter((dialogue) => dialogue.id !== dialogueId) }
-      : cut
-    ));
-  };
-
-  const analyzeProject = async () => {
-    if (!selectedProjectId) return;
-    setAnalyzing(true);
+  const createProject = async () => {
     setError(null);
     try {
-      await readJson(await fetch(`/api/studio/projects/${selectedProjectId}/video-plan`, { method: "POST" }));
-      await loadProject(selectedProjectId);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "대사를 분석하지 못했습니다.");
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
-  const saveDialogues = async () => {
-    const projectCuts = cuts.filter((cut) => cut.sourceCutId);
-    if (projectCuts.length === 0) return;
-    setSavingDialogues(true);
-    setError(null);
-    try {
-      await Promise.all(projectCuts.map(async (cut) => {
-        const dialogues = cut.dialogues.filter((dialogue) => dialogue.text.trim());
-        return readJson(await fetch(`/api/studio/cuts/${cut.sourceCutId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            dialoguePlan: dialogues,
-            dialogue: dialogues.map((dialogue) => dialogue.text.trim()).join("\n"),
-            speakerPresetId: dialogues[0]?.speakerPresetId || "",
-            durationMs: Math.round(cut.durationSeconds * 1000),
-          }),
-        }));
-      }));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "대사를 저장하지 못했습니다.");
-    } finally {
-      setSavingDialogues(false);
-    }
-  };
-
-  const previewVoice = async (speakerId: string) => {
-    const character = characters.find((item) => item.id === speakerId);
-    const voiceId = voiceAssignments[speakerId] || CHARACTER_VOICES[0].voiceId;
-    try {
-      const response = await fetch("/api/tts/preview", {
+      const data = await readJson<{ project: StudioProject }>(await fetch("/api/studio/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          voiceId,
-          text: character ? `${character.name}의 목소리입니다.` : "숏폼 내레이션 목소리입니다.",
-        }),
-      });
-      if (!response.ok) throw new Error((await response.json()).error || "음성을 만들지 못했습니다.");
-      const url = URL.createObjectURL(await response.blob());
-      const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      await audio.play();
+        body: JSON.stringify({ title: "새 숏폼 프로젝트", aspectRatio: "9:16" }),
+      }));
+      await loadProjects();
+      await loadProject(data.project.id);
+      setNotice("새 숏폼 프로젝트를 만들었습니다.");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "음성을 미리듣지 못했습니다.");
+      setError(cause instanceof Error ? cause.message : "프로젝트를 만들지 못했습니다.");
     }
   };
 
-  const createShortVideo = async () => {
-    if (cuts.length === 0) {
-      setError("영상으로 만들 컷 이미지를 선택해주세요.");
+  const saveProjectTitle = async () => {
+    if (!project?.title.trim()) return;
+    try {
+      await readJson(await fetch(`/api/studio/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: project.title }),
+      }));
+      await loadProjects();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "프로젝트 제목을 저장하지 못했습니다.");
+    }
+  };
+
+  const addScene = async () => {
+    if (!project || project.cuts.length >= MAX_SCENES) return;
+    setError(null);
+    try {
+      const data = await readJson<{ cut: ProjectCut }>(await fetch(`/api/studio/projects/${project.id}/cuts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: `씬 ${project.cuts.length + 1}` }),
+      }));
+      setProject({ ...project, cuts: [...project.cuts, data.cut] });
+      setSelectedCutId(data.cut.id);
+      await loadProjects();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "씬을 추가하지 못했습니다.");
+    }
+  };
+
+  const removeScene = async (cutId: string) => {
+    if (!project || !window.confirm("이 씬과 연결된 편집 내용을 삭제할까요?")) return;
+    setCutBusy(cutId, "삭제 중");
+    try {
+      await readJson(await fetch(`/api/studio/cuts/${cutId}`, { method: "DELETE" }));
+      await loadProject(project.id);
+      await loadProjects();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "씬을 삭제하지 못했습니다.");
+    } finally {
+      setCutBusy(cutId, null);
+    }
+  };
+
+  const moveScene = async (cutId: string, direction: -1 | 1) => {
+    if (!project) return;
+    const index = project.cuts.findIndex((cut) => cut.id === cutId);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= project.cuts.length) return;
+    const reordered = [...project.cuts];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    setProject({ ...project, cuts: reordered.map((cut, order) => ({ ...cut, order })) });
+    try {
+      await readJson(await fetch(`/api/studio/projects/${project.id}/cuts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderedIds: reordered.map((cut) => cut.id) }),
+      }));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "씬 순서를 저장하지 못했습니다.");
+      await loadProject(project.id, true);
+    }
+  };
+
+  const openUpload = (cutId: string) => {
+    setUploadTargetCutId(cutId);
+    fileInputRef.current?.click();
+  };
+
+  const uploadSourceImage = async (file: File | undefined) => {
+    if (!file || !project || !uploadTargetCutId) return;
+    if (!file.type.startsWith("image/") || file.size > MAX_IMAGE_BYTES) {
+      setError("20MB 이하 PNG, JPG, WebP 이미지를 선택하세요.");
       return;
     }
-    cancelRequestedRef.current = false;
-    setGenerating(true);
+    setCutBusy(uploadTargetCutId, "이미지 업로드");
     setError(null);
-    setOutputUrl(null);
+    try {
+      const ref = await uploadViaTicket({
+        signEndpoint: "/api/studio/assets/upload",
+        file,
+        filename: file.name,
+        contentType: file.type,
+        meta: { projectId: project.id },
+      });
+      const data = await readJson<{ asset: ProjectAsset }>(await fetch("/api/studio/assets/upload/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ref, projectId: project.id, name: file.name }),
+      }));
+      await patchCut(uploadTargetCutId, { sourceAssetId: data.asset.id });
+      await loadProject(project.id, true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "시작 이미지를 업로드하지 못했습니다.");
+    } finally {
+      setCutBusy(uploadTargetCutId, null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const selectSourceAsset = async (assetId: string) => {
+    if (!selectedCut) return;
+    setCutBusy(selectedCut.id, "이미지 적용");
+    try {
+      await patchCut(selectedCut.id, { sourceAssetId: assetId });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "시작 이미지를 적용하지 못했습니다.");
+    } finally {
+      setCutBusy(selectedCut.id, null);
+    }
+  };
+
+  const changeProvider = async (providerId: VideoProvider) => {
+    if (!selectedCut) return;
+    const info = providers.find((item) => item.id === providerId);
+    if (!info?.configured) return;
+    const currentDuration = Math.round(selectedCut.durationMs / 1_000);
+    const duration = info.durations.includes(currentDuration)
+      ? currentDuration
+      : info.durations.includes(6) ? 6 : info.durations[0];
+    replaceCut(selectedCut.id, { videoProvider: providerId, durationMs: duration * 1_000, videoApprovedAt: null });
+    try {
+      await patchCut(selectedCut.id, { videoProvider: providerId, durationMs: duration * 1_000 });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "영상 모델을 저장하지 못했습니다.");
+    }
+  };
+
+  const expandPrompt = async () => {
+    if (!selectedCut?.prompt.trim()) {
+      setError("간단 프롬프트를 먼저 입력하세요.");
+      return;
+    }
+    const provider = asVideoProvider(selectedCut.videoProvider);
+    const providerInfo = providers.find((item) => item.id === provider);
+    const durationSeconds = sceneDurationSeconds(selectedCut, providerInfo);
+    setCutBusy(selectedCut.id, "프롬프트 확장");
+    setError(null);
+    setNotice(null);
+    try {
+      const data = await readJson<{ prompt: string; negativePrompt: string; creditCost: number }>(
+        await fetch("/api/shorts/prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            cutId: selectedCut.id,
+            brief: selectedCut.prompt,
+            provider,
+            durationSeconds,
+            resolution: asVideoResolution(selectedCut.videoResolution),
+            generateAudio: selectedCut.videoGenerateAudio,
+          }),
+        })
+      );
+      replaceCut(selectedCut.id, {
+        videoPrompt: data.prompt,
+        negativePrompt: data.negativePrompt,
+        videoApprovedAt: null,
+      });
+      setNotice(`프롬프트를 확장했습니다. ${data.creditCost}크레딧을 사용했습니다.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "프롬프트를 확장하지 못했습니다.");
+    } finally {
+      setCutBusy(selectedCut.id, null);
+    }
+  };
+
+  const generateScene = async () => {
+    if (!project || !selectedCut) return;
+    const provider = asVideoProvider(selectedCut.videoProvider);
+    const providerInfo = providers.find((item) => item.id === provider);
+    const prompt = selectedCut.videoPrompt?.trim() || selectedCut.prompt.trim();
+    if (!providerInfo?.configured) {
+      setError(`${providerInfo?.label || provider} 연결이 설정되지 않았습니다.`);
+      return;
+    }
+    if (!selectedCut.imageUrl) {
+      setError("씬의 시작 이미지를 먼저 선택하세요.");
+      return;
+    }
+    if (!prompt) {
+      setError("영상 프롬프트를 입력하세요.");
+      return;
+    }
+    const durationSeconds = sceneDurationSeconds(selectedCut, providerInfo);
+    setCutBusy(selectedCut.id, selectedCut.videoUrl ? "재생성 요청" : "생성 요청");
+    setError(null);
+    setNotice(null);
+    try {
+      await patchCut(selectedCut.id, {
+        prompt: selectedCut.prompt,
+        videoPrompt: selectedCut.videoPrompt || "",
+        negativePrompt: selectedCut.negativePrompt || "",
+        videoProvider: provider,
+        videoResolution: asVideoResolution(selectedCut.videoResolution),
+        videoGenerateAudio: selectedCut.videoGenerateAudio,
+        durationMs: durationSeconds * 1_000,
+      });
+      const data = await readJson<{ job: GenerationJob }>(await fetch("/api/jobs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": `short-${selectedCut.id}-${crypto.randomUUID()}`,
+        },
+        body: JSON.stringify({
+          kind: "video",
+          projectId: project.id,
+          cutId: selectedCut.id,
+          provider,
+          prompt,
+          negativePrompt: selectedCut.negativePrompt,
+          aspectRatio: "9:16",
+          durationSeconds,
+          resolution: asVideoResolution(selectedCut.videoResolution),
+          generateAudio: selectedCut.videoGenerateAudio,
+        }),
+      }));
+      setNotice(`${providerInfo.label} 씬 생성을 시작했습니다. 완료되면 알림으로 알려드립니다.`);
+      setProject((current) => current ? { ...current, jobs: [data.job, ...current.jobs] } : current);
+      await loadProject(project.id, true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "씬 생성을 시작하지 못했습니다.");
+    } finally {
+      setCutBusy(selectedCut.id, null);
+    }
+  };
+
+  const setApproved = async (cut: ProjectCut, approved: boolean) => {
+    setCutBusy(cut.id, approved ? "승인 저장" : "승인 취소");
+    try {
+      await patchCut(cut.id, { videoApproved: approved });
+      setNotice(approved ? "씬을 최종 이어 붙이기 대상으로 승인했습니다." : "씬 승인을 취소했습니다.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "씬 승인 상태를 저장하지 못했습니다.");
+    } finally {
+      setCutBusy(cut.id, null);
+    }
+  };
+
+  const composeFinalVideo = async () => {
+    if (!project || approvedCuts.length === 0 || activeJobCount > 0) return;
+    setComposing(true);
+    setError(null);
+    setNotice(null);
+    setComposeProgress(1);
     setOutputBlob(null);
-    setProgress(1);
+    setOutputUrl(null);
     if (localOutputUrlRef.current) {
       URL.revokeObjectURL(localOutputUrlRef.current);
       localOutputUrlRef.current = null;
     }
 
-    let audioContext: AudioContext | null = null;
     try {
-      setStatus("영상 엔진을 불러오고 있습니다.");
+      setComposeStatus("MP4 엔진 준비");
       const [{ FFmpeg }, { fetchFile, toBlobURL }] = await Promise.all([
         import("@ffmpeg/ffmpeg"),
         import("@ffmpeg/util"),
@@ -448,96 +589,60 @@ export default function ShortVideoBuilder() {
         coreURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.js`, "text/javascript"),
         wasmURL: await toBlobURL(`${FFMPEG_CORE_BASE}/ffmpeg-core.wasm`, "application/wasm"),
       });
-      setProgress(8);
 
-      audioContext = new AudioContext();
-      const ttsCache = new Map<string, { bytes: Uint8Array; duration: number }>();
-      const clipNames: string[] = [];
-      const { width, height } = resolution === "1080p"
+      const dimensions = finalResolution === "1080p"
         ? { width: 1080, height: 1920 }
         : { width: 720, height: 1280 };
-      const videoFilter = `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1`;
+      const filter = `scale=${dimensions.width}:${dimensions.height}:force_original_aspect_ratio=decrease,pad=${dimensions.width}:${dimensions.height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30`;
+      const normalizedNames: string[] = [];
 
-      for (const [cutIndex, cut] of cuts.entries()) {
-        if (cancelRequestedRef.current) throw new Error("CANCELED");
-        setStatus(`${cutIndex + 1}/${cuts.length}컷 이미지와 음성을 준비하고 있습니다.`);
-        const imageName = `image_${cutIndex}.png`;
-        await ffmpeg.writeFile(imageName, await fetchFile(cut.imageUrl));
-
-        const dialogueAudioNames: string[] = [];
-        let dialogueDuration = 0;
-        let audioIndex = 0;
-        for (const dialogue of cut.dialogues.filter((item) => item.text.trim())) {
-          const speakerId = dialogue.speakerPresetId || NARRATOR_ID;
-          const voiceId = voiceAssignments[speakerId] || CHARACTER_VOICES[0].voiceId;
-          for (const text of splitForTts(dialogue.text)) {
-            const cacheKey = `${voiceId}:${text}`;
-            let audio = ttsCache.get(cacheKey);
-            if (!audio) {
-              const response = await fetch("/api/tts/preview", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ voiceId, text }),
-              });
-              if (!response.ok) {
-                const body = await response.json().catch(() => ({}));
-                throw new Error(body.error || "대사 음성을 만들지 못했습니다.");
-              }
-              const bytes = new Uint8Array(await (await response.blob()).arrayBuffer());
-              const decoded = await audioContext.decodeAudioData(bytes.buffer.slice(0));
-              audio = { bytes, duration: decoded.duration };
-              ttsCache.set(cacheKey, audio);
-            }
-            const name = `audio_${cutIndex}_${audioIndex++}.mp3`;
-            await ffmpeg.writeFile(name, audio.bytes);
-            dialogueAudioNames.push(name);
-            dialogueDuration += audio.duration;
-          }
-        }
-
-        let audioName: string | null = null;
-        if (dialogueAudioNames.length === 1) {
-          audioName = dialogueAudioNames[0];
-        } else if (dialogueAudioNames.length > 1) {
-          audioName = `audio_${cutIndex}_merged.m4a`;
-          const code = await ffmpeg.exec([
-            ...dialogueAudioNames.flatMap((name) => ["-i", name]),
-            "-filter_complex",
-            `${dialogueAudioNames.map((_, index) => `[${index}:a]`).join("")}concat=n=${dialogueAudioNames.length}:v=0:a=1[a]`,
-            "-map", "[a]",
-            "-c:a", "aac",
-            "-b:a", "128k",
-            audioName,
-          ]);
-          if (code !== 0) throw new Error(`${cutIndex + 1}컷 음성을 합치지 못했습니다.`);
-        }
-
-        const duration = Math.max(2, Math.min(30, Math.max(cut.durationSeconds, dialogueDuration + 0.45)));
-        const clipName = `clip_${cutIndex}.mp4`;
-        const inputs = audioName
-          ? ["-loop", "1", "-i", imageName, "-i", audioName]
-          : ["-loop", "1", "-i", imageName, "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"];
+      for (const [index, cut] of approvedCuts.entries()) {
+        setComposeStatus(`씬 ${index + 1}/${approvedCuts.length} 규격 통일`);
+        const inputName = `scene_${index}.mp4`;
+        const probeName = `probe_${index}.txt`;
+        const outputName = `normalized_${index}.mp4`;
+        await ffmpeg.writeFile(inputName, await fetchFile(cut.videoUrl!));
+        await ffmpeg.ffprobe([
+          "-v", "error",
+          "-select_streams", "a",
+          "-show_entries", "stream=index",
+          "-of", "csv=p=0",
+          inputName,
+          "-o", probeName,
+        ]);
+        const probe = await ffmpeg.readFile(probeName, "utf8").catch(() => "");
+        const hasAudio = String(probe).trim().length > 0;
+        const inputs = hasAudio
+          ? ["-i", inputName]
+          : ["-i", inputName, "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"];
         const code = await ffmpeg.exec([
           ...inputs,
-          "-vf", videoFilter,
-          "-r", "30",
-          "-t", duration.toFixed(3),
-          "-af", "apad",
+          "-map", "0:v:0",
+          "-map", hasAudio ? "0:a:0" : "1:a:0",
+          "-vf", filter,
           "-c:v", "libx264",
           "-preset", "ultrafast",
-          "-crf", resolution === "1080p" ? "25" : "26",
+          "-crf", finalResolution === "1080p" ? "24" : "25",
           "-pix_fmt", "yuv420p",
+          "-r", "30",
           "-c:a", "aac",
           "-b:a", "128k",
+          "-ar", "48000",
+          "-ac", "2",
+          "-shortest",
           "-movflags", "+faststart",
-          clipName,
+          outputName,
         ]);
-        if (code !== 0) throw new Error(`${cutIndex + 1}컷 영상을 만들지 못했습니다.`);
-        clipNames.push(clipName);
-        setProgress(10 + Math.round(((cutIndex + 1) / cuts.length) * 72));
+        if (code !== 0) throw new Error(`${index + 1}번 씬을 MP4 규격으로 변환하지 못했습니다.`);
+        normalizedNames.push(outputName);
+        setComposeProgress(8 + Math.round(((index + 1) / approvedCuts.length) * 78));
       }
-      setStatus("컷을 하나의 MP4로 합치고 있습니다.");
-      await ffmpeg.writeFile("concat.txt", clipNames.map((name) => `file '${name}'`).join("\n"));
+
+      setComposeStatus("승인 씬 이어 붙이기");
+      await ffmpeg.writeFile(
+        "concat.txt",
+        normalizedNames.map((name) => `file '${name}'`).join("\n")
+      );
       const concatCode = await ffmpeg.exec([
         "-f", "concat",
         "-safe", "0",
@@ -546,292 +651,436 @@ export default function ShortVideoBuilder() {
         "-movflags", "+faststart",
         "short.mp4",
       ]);
-      if (concatCode !== 0) throw new Error("최종 영상을 합치지 못했습니다.");
+      if (concatCode !== 0) throw new Error("최종 MP4를 이어 붙이지 못했습니다.");
       const output = await ffmpeg.readFile("short.mp4");
       if (typeof output === "string") throw new Error("완성 영상 데이터가 올바르지 않습니다.");
       const blob = new Blob([new Uint8Array(output).buffer], { type: "video/mp4" });
       const localUrl = URL.createObjectURL(blob);
-      if (localOutputUrlRef.current) URL.revokeObjectURL(localOutputUrlRef.current);
       localOutputUrlRef.current = localUrl;
       setOutputBlob(blob);
       setOutputUrl(localUrl);
-      setProgress(88);
+      setComposeProgress(90);
+      setComposeStatus("작업 보관함 저장");
 
-      if (!saveOnline) {
-        setSavedProjectId(sourceMode === "project" ? selectedProjectId || null : null);
-        setStatus("숏폼 영상이 완성됐습니다. 이 브라우저에서 바로 다운로드할 수 있습니다.");
-        setProgress(100);
-        return;
+      const ref = await uploadViaTicket({
+        signEndpoint: "/api/shorts/upload",
+        file: blob,
+        filename: `${safeFilePart(project.title)}-${Date.now()}.mp4`,
+        contentType: "video/mp4",
+        meta: { projectId: project.id, contentType: "video/mp4" },
+      });
+      await readJson(await fetch("/api/shorts/upload/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ref,
+          projectId: project.id,
+          title: `${project.title} 최종본`,
+          cutCount: approvedCuts.length,
+        }),
+      }));
+      setOutputUrl(ref);
+      if (localOutputUrlRef.current) {
+        URL.revokeObjectURL(localOutputUrlRef.current);
+        localOutputUrlRef.current = null;
       }
-
-      let targetProjectId = sourceMode === "project" ? selectedProjectId : "";
-      if (!targetProjectId) {
-        setStatus("완성 영상을 보관할 프로젝트를 만들고 있습니다.");
-        const data = await readJson<{ project: { id: string } }>(await fetch("/api/studio/projects", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: title.trim() || "업로드 이미지 숏폼", aspectRatio: "9:16" }),
-        }));
-        targetProjectId = data.project.id;
-      }
-      setSavedProjectId(targetProjectId);
-
-      setStatus("완성 영상을 작업 보관함에 저장하고 있습니다.");
-      setProgress(93);
-      try {
-        const ref = await uploadViaTicket({
-          signEndpoint: "/api/shorts/upload",
-          file: blob,
-          filename: `${safeFilePart(title)}-${Date.now()}.mp4`,
-          contentType: "video/mp4",
-          meta: { projectId: targetProjectId, contentType: "video/mp4" },
-        });
-        await readJson(await fetch("/api/shorts/upload/confirm", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ref,
-            projectId: targetProjectId,
-            title: title.trim() || "숏폼 영상",
-            cutCount: cuts.length,
-          }),
-        }));
-        setOutputUrl(ref);
-        if (localOutputUrlRef.current) {
-          URL.revokeObjectURL(localOutputUrlRef.current);
-          localOutputUrlRef.current = null;
-        }
-        setStatus("숏폼 영상이 완성되어 작업 보관함에 저장됐습니다.");
-        setProgress(100);
-      } catch (uploadError) {
-        setStatus("영상은 완성됐지만 온라인 보관에 실패했습니다. 지금 다운로드할 수 있습니다.");
-        setError(uploadError instanceof Error ? uploadError.message : "완성 영상을 보관하지 못했습니다.");
-        setProgress(100);
-      }
+      setComposeProgress(100);
+      setComposeStatus("완료");
+      setNotice("승인된 씬을 MP4로 이어 붙여 작업 보관함에 저장했습니다.");
+      await loadProject(project.id, true);
     } catch (cause) {
-      if (cancelRequestedRef.current || (cause instanceof Error && cause.message === "CANCELED")) {
-        setStatus("영상 만들기를 취소했습니다.");
-        setProgress(0);
-      } else {
-        setError(cause instanceof Error ? cause.message : "숏폼 영상을 만들지 못했습니다.");
-        setStatus("영상 만들기에 실패했습니다.");
-      }
+      setError(cause instanceof Error ? cause.message : "최종 MP4를 만들지 못했습니다.");
+      setComposeStatus("실패");
     } finally {
-      if (audioContext && audioContext.state !== "closed") {
-        await audioContext.close().catch(() => undefined);
-      }
       activeFfmpegRef.current?.terminate();
       activeFfmpegRef.current = null;
-      setGenerating(false);
+      setComposing(false);
     }
   };
 
-  const cancelGeneration = () => {
-    cancelRequestedRef.current = true;
-    setStatus("영상 만들기를 취소하고 있습니다.");
-    activeFfmpegRef.current?.terminate();
-  };
-
   const downloadOutput = () => {
-    if (!outputBlob) return;
+    if (!outputBlob || !project) return;
     const url = URL.createObjectURL(outputBlob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${safeFilePart(title)}.mp4`;
+    anchor.download = `${safeFilePart(project.title)}.mp4`;
     anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
   };
 
   if (loading) {
-    return <main className={styles.loading}><LuLoaderCircle className={styles.spin} /> 숏폼 제작 화면을 준비하고 있습니다.</main>;
+    return <main className={styles.loading}><LuLoaderCircle className={styles.spin} /> 숏폼 스튜디오 준비 중</main>;
   }
+
+  if (!project) {
+    return (
+      <main className={styles.emptyPage}>
+        <LuClapperboard />
+        <h1>숏폼 프로젝트</h1>
+        <button type="button" className={styles.primaryButton} onClick={() => void createProject()}>
+          <LuPlus /> 새 프로젝트
+        </button>
+      </main>
+    );
+  }
+
+  const currentProvider = providers.find((item) => item.id === asVideoProvider(selectedCut?.videoProvider || "veo"));
+  const currentJob = selectedCut ? latestJobByCut.get(selectedCut.id) : undefined;
+  const currentInput = jobInput(currentJob);
+  const currentDuration = selectedCut ? sceneDurationSeconds(selectedCut, currentProvider) : 4;
+  const currentCost = selectedCut
+    ? getGenerationCreditCost("video", {
+        provider: asVideoProvider(selectedCut.videoProvider),
+        durationSeconds: currentDuration,
+        resolution: asVideoResolution(selectedCut.videoResolution),
+        generateAudio: selectedCut.videoGenerateAudio,
+      })
+    : 0;
+  const currentJobActive = Boolean(currentJob && ["queued", "running"].includes(currentJob.status));
 
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
-        <Link href="/" className={styles.iconButton} title="홈으로"><LuArrowLeft /></Link>
-        <div className={styles.brand}><LuFilm /><strong>숏폼 제작</strong></div>
-        <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} aria-label="숏폼 제목" />
+        <Link href="/" className={styles.iconButton} title="홈" aria-label="홈">
+          <LuArrowLeft />
+        </Link>
+        <Link href="/" className={styles.brand}>
+          <LuClapperboard />
+          <strong>숏폼 스튜디오</strong>
+        </Link>
+        <input
+          value={project.title}
+          maxLength={120}
+          aria-label="프로젝트 제목"
+          onChange={(event) => setProject({ ...project, title: event.target.value })}
+          onBlur={() => void saveProjectTitle()}
+        />
         <div className={styles.headerActions}>
-          <Link href="/studio" className={styles.studioLink}><LuClapperboard /> 스튜디오</Link>
+          <span className={styles.headerMetric}><LuFilm /> {approvedCuts.length}/{project.cuts.length}</span>
           <GenerationNotifications />
+          <Link href={`/studio?projectId=${project.id}`} className={styles.textButton}>
+            <LuFolderKanban /> 통합 스튜디오
+          </Link>
         </div>
       </header>
 
-      {error && <div className={styles.error} role="alert"><span>{error}</span><button onClick={() => setError(null)} title="닫기"><LuX /></button></div>}
+      {(error || notice) && (
+        <div className={error ? styles.errorBanner : styles.noticeBanner} role="status">
+          {error ? <LuCircleAlert /> : <LuCircleCheck />}
+          <span>{error || notice}</span>
+          <button type="button" onClick={() => { setError(null); setNotice(null); }} title="닫기" aria-label="닫기"><LuX /></button>
+        </div>
+      )}
 
       <div className={styles.workspace}>
-        <aside className={styles.sourcePanel}>
-          <div className={styles.sourceTabs} aria-label="이미지 소스">
-            <button className={sourceMode === "project" ? styles.activeTab : ""} onClick={() => switchSource("project")}>
-              <LuFolderKanban /> 내 프로젝트
-            </button>
-            <button className={sourceMode === "upload" ? styles.activeTab : ""} onClick={() => switchSource("upload")}>
-              <LuUpload /> 이미지 업로드
-            </button>
-          </div>
-
-          {sourceMode === "project" ? (
-            <div className={styles.projectList}>
-              {projects.map((item) => {
-                const image = item.coverCut?.thumbnailUrl || item.coverCut?.imageUrl || item.cuts[0]?.thumbnailUrl || item.cuts[0]?.imageUrl;
-                return (
-                  <button
-                    key={item.id}
-                    className={selectedProjectId === item.id ? styles.projectActive : ""}
-                    onClick={() => { setSelectedProjectId(item.id); void loadProject(item.id); }}
-                    disabled={item.usableCutCount === 0}
-                  >
-                    <span>{image ? <img src={image} alt="" /> : <LuImage />}</span>
-                    <div><strong>{item.title}</strong><small>{item.usableCutCount}개 컷 사용 가능</small></div>
-                  </button>
-                );
-              })}
-              {projects.length === 0 && <div className={styles.emptySource}>먼저 스튜디오에서 프로젝트를 만들어주세요.</div>}
-            </div>
-          ) : (
-            <div
-              className={styles.dropZone}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => { event.preventDefault(); addUploadFiles(Array.from(event.dataTransfer.files)); }}
+        <aside className={styles.scenePanel}>
+          <div className={styles.panelHeader}>
+            <select
+              value={project.id}
+              aria-label="프로젝트 선택"
+              onChange={(event) => void loadProject(event.target.value)}
             >
-              <LuUpload />
-              <strong>컷 이미지를 놓으세요</strong>
-              <span>PNG, JPG, WEBP · 최대 {MAX_CUTS}장</span>
-              <button onClick={() => fileInputRef.current?.click()}>이미지 선택</button>
-              <input
-                ref={fileInputRef}
-                hidden
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                multiple
-                onChange={(event) => {
-                  addUploadFiles(Array.from(event.target.files || []));
-                  event.target.value = "";
-                }}
-              />
-            </div>
-          )}
+              {projects.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+            </select>
+            <button type="button" className={styles.iconButton} onClick={() => void createProject()} title="새 프로젝트" aria-label="새 프로젝트"><LuPlus /></button>
+          </div>
+          <div className={styles.sceneList}>
+            {project.cuts.map((cut, index) => {
+              const job = latestJobByCut.get(cut.id);
+              const active = Boolean(job && ["queued", "running"].includes(job.status));
+              return (
+                <button
+                  type="button"
+                  key={cut.id}
+                  className={`${styles.sceneItem} ${cut.id === selectedCutId ? styles.sceneItemActive : ""}`}
+                  onClick={() => setSelectedCutId(cut.id)}
+                >
+                  <span className={styles.sceneThumb}>
+                    {cut.thumbnailUrl || cut.imageUrl
+                      ? <img src={cut.thumbnailUrl || cut.imageUrl!} alt="" />
+                      : <LuImagePlus />}
+                    <b>{index + 1}</b>
+                  </span>
+                  <span className={styles.sceneMeta}>
+                    <strong>{cut.title || `씬 ${index + 1}`}</strong>
+                    <small className={active ? styles.statusActive : cut.videoApprovedAt ? styles.statusApproved : ""}>
+                      {active ? `${stageLabel(job)} ${job?.progress || 0}%` : cut.videoApprovedAt ? "승인됨" : cut.videoUrl ? "검토 필요" : stageLabel(job)}
+                    </small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <button type="button" className={styles.addSceneButton} onClick={() => void addScene()} disabled={project.cuts.length >= MAX_SCENES}>
+            <LuPlus /> 씬 추가
+          </button>
         </aside>
 
-        <main className={styles.editor}>
-          <div className={styles.editorHeader}>
-            <div><strong>컷과 대사</strong><span>{cuts.length}/{MAX_CUTS}컷</span></div>
-            {sourceMode === "project" && selectedProjectId && (
-              <div>
-                <button onClick={() => void analyzeProject()} disabled={analyzing || projectLoading}>
-                  {analyzing ? <LuLoaderCircle className={styles.spin} /> : <LuSparkles />} AI 대사 분석
-                  <CreditCostBadge credits={AI_CREDIT_COSTS.videoPlan} />
-                </button>
-                <button onClick={() => void saveDialogues()} disabled={savingDialogues || cuts.length === 0}>
-                  {savingDialogues ? <LuLoaderCircle className={styles.spin} /> : <LuSave />} 대사 저장
-                </button>
-              </div>
-            )}
-          </div>
-
-          {projectLoading ? (
-            <div className={styles.emptyEditor}><LuLoaderCircle className={styles.spin} /> 프로젝트를 불러오는 중</div>
-          ) : cuts.length === 0 ? (
-            <div className={styles.emptyEditor}><LuImage /><strong>영상으로 만들 이미지가 없습니다.</strong><span>이미지가 있는 프로젝트를 고르거나 직접 업로드해주세요.</span></div>
+        <main className={styles.editorPanel}>
+          {projectLoading || !selectedCut ? (
+            <div className={styles.panelLoading}><LuLoaderCircle className={styles.spin} /> 프로젝트 불러오는 중</div>
           ) : (
-            <div className={styles.cutList}>
-              {cuts.map((cut, index) => (
-                <article className={styles.cutRow} key={cut.id}>
-                  <div className={styles.orderControls}>
-                    <span>{index + 1}</span>
-                    <button onClick={() => moveCut(index, -1)} disabled={index === 0} title="앞으로"><LuArrowUp /></button>
-                    <button onClick={() => moveCut(index, 1)} disabled={index === cuts.length - 1} title="뒤로"><LuArrowDown /></button>
+            <>
+              <div className={styles.editorToolbar}>
+                <input
+                  value={selectedCut.title}
+                  maxLength={80}
+                  aria-label="씬 제목"
+                  onChange={(event) => replaceCut(selectedCut.id, { title: event.target.value })}
+                  onBlur={() => void patchCut(selectedCut.id, { title: selectedCut.title })}
+                />
+                <div>
+                  <button type="button" className={styles.iconButton} onClick={() => void moveScene(selectedCut.id, -1)} disabled={selectedCut.order === 0} title="앞으로 이동" aria-label="앞으로 이동"><LuArrowUp /></button>
+                  <button type="button" className={styles.iconButton} onClick={() => void moveScene(selectedCut.id, 1)} disabled={selectedCut.order === project.cuts.length - 1} title="뒤로 이동" aria-label="뒤로 이동"><LuArrowDown /></button>
+                  <button type="button" className={styles.iconButtonDanger} onClick={() => void removeScene(selectedCut.id)} title="씬 삭제" aria-label="씬 삭제"><LuTrash2 /></button>
+                </div>
+              </div>
+
+              <section className={styles.sourceSection}>
+                <div className={styles.sectionTitle}>
+                  <span><LuImagePlus /> 시작 컷</span>
+                  <button type="button" className={styles.textButton} onClick={() => openUpload(selectedCut.id)} disabled={Boolean(busy[selectedCut.id])}>
+                    {busy[selectedCut.id]?.includes("이미지") ? <LuLoaderCircle className={styles.spin} /> : <LuUpload />} 업로드
+                  </button>
+                </div>
+                <div className={styles.sourceArea}>
+                  <button type="button" className={styles.sourcePreview} onClick={() => openUpload(selectedCut.id)} title="시작 이미지 바꾸기">
+                    {selectedCut.imageUrl
+                      ? <img src={selectedCut.imageUrl} alt={`${selectedCut.title} 시작 컷`} />
+                      : <span><LuImagePlus /><b>시작 컷 선택</b></span>}
+                  </button>
+                  <div className={styles.assetRail}>
+                    {imageAssets.map((asset) => (
+                      <button
+                        type="button"
+                        key={asset.id}
+                        className={asset.blobUrl === selectedCut.imageUrl ? styles.assetActive : ""}
+                        onClick={() => void selectSourceAsset(asset.id)}
+                        title={asset.name}
+                      >
+                        <img src={asset.thumbnailUrl || asset.blobUrl} alt="" />
+                        {asset.blobUrl === selectedCut.imageUrl && <LuCheck />}
+                      </button>
+                    ))}
+                    {imageAssets.length === 0 && <span className={styles.emptyRail}>업로드한 이미지 없음</span>}
                   </div>
-                  <img src={cut.thumbnailUrl} alt="" />
-                  <div className={styles.cutContent}>
-                    <div className={styles.cutTopline}>
-                      <input value={cut.title} onChange={(event) => updateCut(cut.id, { title: event.target.value })} aria-label={`${index + 1}컷 제목`} />
-                      <label><span>최소</span><input type="number" min={2} max={30} value={cut.durationSeconds} onChange={(event) => updateCut(cut.id, { durationSeconds: Math.max(2, Math.min(30, Number(event.target.value) || 2)) })} /><span>초</span></label>
-                      <button onClick={() => removeCut(cut.id)} title="영상에서 제외"><LuTrash2 /></button>
-                    </div>
-                    <div className={styles.dialogues}>
-                      {cut.dialogues.map((dialogue) => (
-                        <div className={styles.dialogueRow} key={dialogue.id}>
-                          <select value={dialogue.speakerPresetId || NARRATOR_ID} onChange={(event) => updateDialogue(cut.id, dialogue.id, { speakerPresetId: event.target.value === NARRATOR_ID ? null : event.target.value })} aria-label="화자">
-                            <option value={NARRATOR_ID}>내레이터</option>
-                            {characters.map((character) => <option value={character.id} key={character.id}>{character.name}</option>)}
-                          </select>
-                          <textarea value={dialogue.text} onChange={(event) => updateDialogue(cut.id, dialogue.id, { text: event.target.value })} maxLength={1_000} rows={2} aria-label="대사" placeholder="이 컷에서 읽을 대사" />
-                          <button onClick={() => removeDialogue(cut.id, dialogue.id)} title="대사 삭제"><LuX /></button>
-                        </div>
+                </div>
+              </section>
+
+              <section className={styles.promptSection}>
+                <div className={styles.sectionTitle}><span><LuSparkles /> 씬 프롬프트</span></div>
+                <label>
+                  <span>간단 프롬프트</span>
+                  <textarea
+                    value={selectedCut.prompt}
+                    maxLength={2_000}
+                    rows={3}
+                    placeholder="예: 비 오는 골목에서 주인공이 뒤를 돌아보고 카메라가 빠르게 줌인"
+                    onChange={(event) => replaceCut(selectedCut.id, { prompt: event.target.value, videoApprovedAt: null })}
+                    onBlur={() => void patchCut(selectedCut.id, { prompt: selectedCut.prompt })}
+                  />
+                </label>
+                <div className={styles.promptActionRow}>
+                  <button type="button" className={styles.secondaryButton} onClick={() => void expandPrompt()} disabled={Boolean(busy[selectedCut.id]) || !selectedCut.prompt.trim()}>
+                    {busy[selectedCut.id] === "프롬프트 확장" ? <LuLoaderCircle className={styles.spin} /> : <LuSparkles />}
+                    Gemini Flash로 확장
+                    <CreditCostBadge credits={AI_CREDIT_COSTS.videoPrompt} />
+                  </button>
+                </div>
+                <label>
+                  <span>제작 프롬프트</span>
+                  <textarea
+                    value={selectedCut.videoPrompt || ""}
+                    maxLength={5_000}
+                    rows={7}
+                    placeholder="AI 확장 결과를 확인하거나 직접 입력"
+                    onChange={(event) => replaceCut(selectedCut.id, { videoPrompt: event.target.value, videoApprovedAt: null })}
+                    onBlur={() => void patchCut(selectedCut.id, { videoPrompt: selectedCut.videoPrompt || "" })}
+                  />
+                </label>
+                <label>
+                  <span>제외 요소</span>
+                  <textarea
+                    value={selectedCut.negativePrompt || ""}
+                    maxLength={2_000}
+                    rows={2}
+                    placeholder="왜곡, 자막, 워터마크 등"
+                    onChange={(event) => replaceCut(selectedCut.id, { negativePrompt: event.target.value, videoApprovedAt: null })}
+                    onBlur={() => void patchCut(selectedCut.id, { negativePrompt: selectedCut.negativePrompt || "" })}
+                  />
+                </label>
+              </section>
+
+              <section className={styles.generationSection}>
+                <div className={styles.sectionTitle}><span><LuVideo /> 생성 설정</span></div>
+                <div className={styles.providerTabs}>
+                  {providers.map((provider) => (
+                    <button
+                      type="button"
+                      key={provider.id}
+                      className={asVideoProvider(selectedCut.videoProvider) === provider.id ? styles.providerActive : ""}
+                      disabled={!provider.configured || currentJobActive}
+                      onClick={() => void changeProvider(provider.id)}
+                    >
+                      <strong>{provider.label}</strong>
+                      <small>{provider.configured ? provider.models[asVideoResolution(selectedCut.videoResolution)] : "연결 필요"}</small>
+                    </button>
+                  ))}
+                </div>
+                <div className={styles.optionGrid}>
+                  <label>
+                    <span>길이</span>
+                    <select
+                      value={currentDuration}
+                      disabled={currentJobActive}
+                      onChange={(event) => {
+                        const durationMs = Number(event.target.value) * 1_000;
+                        replaceCut(selectedCut.id, { durationMs, videoApprovedAt: null });
+                        void patchCut(selectedCut.id, { durationMs });
+                      }}
+                    >
+                      {(currentProvider?.durations || [4, 6, 8]).map((duration) => <option key={duration} value={duration}>{duration}초</option>)}
+                    </select>
+                  </label>
+                  <fieldset>
+                    <legend>해상도</legend>
+                    <div className={styles.segmented}>
+                      {(["720p", "1080p"] as VideoResolution[]).map((resolution) => (
+                        <button
+                          type="button"
+                          key={resolution}
+                          className={asVideoResolution(selectedCut.videoResolution) === resolution ? styles.segmentActive : ""}
+                          disabled={currentJobActive}
+                          onClick={() => {
+                            replaceCut(selectedCut.id, { videoResolution: resolution, videoApprovedAt: null });
+                            void patchCut(selectedCut.id, { videoResolution: resolution });
+                          }}
+                        >{resolution}</button>
                       ))}
-                      <button className={styles.addDialogue} onClick={() => addDialogue(cut.id)} disabled={cut.dialogues.length >= 12}><LuPlus /> 대사 추가</button>
                     </div>
-                  </div>
-                </article>
-              ))}
-            </div>
+                  </fieldset>
+                  <label className={styles.audioToggle}>
+                    <input
+                      type="checkbox"
+                      checked={selectedCut.videoGenerateAudio}
+                      disabled={currentJobActive}
+                      onChange={(event) => {
+                        const videoGenerateAudio = event.target.checked;
+                        replaceCut(selectedCut.id, { videoGenerateAudio, videoApprovedAt: null });
+                        void patchCut(selectedCut.id, { videoGenerateAudio });
+                      }}
+                    />
+                    {selectedCut.videoGenerateAudio ? <LuVolume2 /> : <LuVolumeX />}
+                    <span>오디오</span>
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  className={styles.generateButton}
+                  onClick={() => void generateScene()}
+                  disabled={Boolean(busy[selectedCut.id]) || currentJobActive || !currentProvider?.configured}
+                >
+                  {currentJobActive || busy[selectedCut.id]?.includes("생성")
+                    ? <LuLoaderCircle className={styles.spin} />
+                    : selectedCut.videoUrl ? <LuRotateCcw /> : <LuSparkles />}
+                  {currentJobActive ? `${stageLabel(currentJob)} ${currentJob?.progress || 0}%` : selectedCut.videoUrl ? "Retry" : "씬 생성"}
+                  <CreditCostBadge credits={currentJobActive ? currentJob?.creditUnits || currentCost : currentCost} />
+                </button>
+                {currentJob?.status === "failed" && <p className={styles.jobError}><LuCircleAlert /> {currentJob.error || "영상 생성에 실패했습니다."}</p>}
+                {currentJobActive && <div className={styles.jobProgress}><span style={{ width: `${currentJob?.progress || 0}%` }} /></div>}
+                {currentJob && <small className={styles.modelLine}>{currentJob.model} · {String(currentInput.durationSeconds || currentDuration)}s</small>}
+              </section>
+            </>
           )}
         </main>
 
-        <aside className={styles.outputPanel}>
-          <section>
-            <h2>인물별 목소리</h2>
-            <div className={styles.voiceList}>
-              {(speakerIds.length > 0 ? speakerIds : [NARRATOR_ID]).map((speakerId) => {
-                const character = characters.find((item) => item.id === speakerId);
-                return (
-                  <label key={speakerId}>
-                    <span>{character?.name || "내레이터"}</span>
-                    <div>
-                      <select value={voiceAssignments[speakerId] || CHARACTER_VOICES[0].voiceId} onChange={(event) => setVoiceAssignments((current) => ({ ...current, [speakerId]: event.target.value }))}>
-                        {CHARACTER_VOICES.map((voice) => <option value={voice.voiceId} key={voice.voiceId}>{voice.label} · {voice.description}</option>)}
-                      </select>
-                      <button onClick={() => void previewVoice(speakerId)} title="목소리 미리듣기">
-                        <LuVolume2 />
-                        <CreditCostBadge credits={AI_CREDIT_COSTS.tts} />
-                      </button>
-                    </div>
-                  </label>
-                );
-              })}
+        <aside className={styles.reviewPanel}>
+          <section className={styles.reviewSection}>
+            <div className={styles.sectionTitle}>
+              <span><LuVideo /> 씬 검토</span>
+              {selectedCut?.videoApprovedAt && <b className={styles.approvedBadge}><LuCheck /> 승인</b>}
             </div>
-          </section>
-
-          <section>
-            <h2>출력 설정</h2>
-            <div className={styles.resolutionControl} aria-label="영상 해상도">
-              <button className={resolution === "720p" ? styles.resolutionActive : ""} onClick={() => setResolution("720p")} aria-pressed={resolution === "720p"}>720p 빠름</button>
-              <button className={resolution === "1080p" ? styles.resolutionActive : ""} onClick={() => setResolution("1080p")} aria-pressed={resolution === "1080p"}>1080p 고화질</button>
+            <div className={styles.videoFrame}>
+              {selectedCut?.videoUrl
+                ? <video key={selectedCut.videoUrl} src={selectedCut.videoUrl} controls playsInline />
+                : currentJobActive
+                  ? <span><LuLoaderCircle className={styles.spin} /><b>{stageLabel(currentJob)}</b><small>{currentJob?.progress || 0}%</small></span>
+                  : <span><LuFilm /><b>생성된 씬 없음</b></span>}
             </div>
-            <label className={styles.storageToggle}>
-              <input type="checkbox" checked={saveOnline} onChange={(event) => setSaveOnline(event.target.checked)} />
-              <span>작업 보관함에 온라인 저장</span>
-            </label>
-            <p>영상 합성은 브라우저에서 처리됩니다. 대사는 음성 생성 사용량을, 온라인 저장은 Blob 저장 공간을 사용합니다.</p>
-          </section>
-
-          {outputUrl && (
-            <section className={styles.result}>
-              <h2><LuCheck /> 완성 영상</h2>
-              <video src={outputUrl} controls playsInline preload="metadata" />
-              <div>
-                <button onClick={downloadOutput} disabled={!outputBlob}><LuDownload /> MP4 다운로드</button>
-                {savedProjectId && <Link href={`/studio?project=${encodeURIComponent(savedProjectId)}`}><LuFolderKanban /> 프로젝트에서 보기</Link>}
+            {selectedCut?.videoUrl && (
+              <div className={styles.reviewActions}>
+                <button
+                  type="button"
+                  className={selectedCut.videoApprovedAt ? styles.secondaryButton : styles.approveButton}
+                  onClick={() => void setApproved(selectedCut, !selectedCut.videoApprovedAt)}
+                  disabled={Boolean(busy[selectedCut.id]) || currentJobActive}
+                >
+                  {selectedCut.videoApprovedAt ? <><LuX /> 승인 취소</> : <><LuCheck /> 이 씬 승인</>}
+                </button>
+                <button type="button" className={styles.iconButton} onClick={() => void generateScene()} disabled={currentJobActive} title="씬 재생성" aria-label="씬 재생성"><LuRefreshCw /></button>
               </div>
-            </section>
-          )}
-
-          <div className={styles.generateArea}>
-            {status && <span>{status}</span>}
-            {generating && <div className={styles.progress}><span style={{ width: `${progress}%` }} /></div>}
-            {generating ? (
-              <button className={styles.cancelButton} onClick={cancelGeneration}><LuX /> 취소</button>
-            ) : (
-              <button className={styles.generateButton} onClick={() => void createShortVideo()} disabled={cuts.length === 0}>
-                <LuFilm /> 숏폼 MP4 만들기
-                {ttsCreditCost > 0 && <CreditCostBadge credits={ttsCreditCost} />}
-              </button>
             )}
-          </div>
+          </section>
+
+          <section className={styles.assemblySection}>
+            <div className={styles.sectionTitle}>
+              <span><LuClapperboard /> 최종 이어 붙이기</span>
+              <b>{approvedCuts.length}씬</b>
+            </div>
+            <div className={styles.approvedList}>
+              {project.cuts.map((cut, index) => (
+                <div key={cut.id} className={cut.videoApprovedAt ? styles.approvedRow : ""}>
+                  <span>{index + 1}</span>
+                  <strong>{cut.title}</strong>
+                  {cut.videoApprovedAt ? <LuCircleCheck /> : <small>미승인</small>}
+                </div>
+              ))}
+            </div>
+            <div className={styles.finalOptions}>
+              <span>출력</span>
+              <div className={styles.segmented}>
+                {(["720p", "1080p"] as VideoResolution[]).map((resolution) => (
+                  <button type="button" key={resolution} className={finalResolution === resolution ? styles.segmentActive : ""} onClick={() => setFinalResolution(resolution)} disabled={composing}>{resolution}</button>
+                ))}
+              </div>
+            </div>
+            <button
+              type="button"
+              className={styles.composeButton}
+              onClick={() => void composeFinalVideo()}
+              disabled={composing || approvedCuts.length === 0 || activeJobCount > 0}
+            >
+              {composing ? <LuLoaderCircle className={styles.spin} /> : <LuClapperboard />}
+              {composing ? composeStatus : "최종 MP4 만들기"}
+            </button>
+            {composing && <div className={styles.composeProgress}><span style={{ width: `${composeProgress}%` }} /><small>{composeProgress}%</small></div>}
+          </section>
+
+          <section className={styles.outputSection}>
+            <div className={styles.sectionTitle}><span><LuFilm /> 최종 결과</span></div>
+            {displayedOutputUrl ? (
+              <>
+                <video key={displayedOutputUrl} src={displayedOutputUrl} controls playsInline />
+                <div className={styles.outputActions}>
+                  {outputBlob
+                    ? <button type="button" className={styles.secondaryButton} onClick={downloadOutput}><LuDownload /> 다운로드</button>
+                    : <a href={displayedOutputUrl} target="_blank" rel="noreferrer" className={styles.secondaryButton}><LuExternalLink /> 열기</a>}
+                </div>
+              </>
+            ) : (
+              <div className={styles.emptyOutput}><LuFilm /><span>완성본 없음</span></div>
+            )}
+          </section>
         </aside>
       </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        hidden
+        onChange={(event) => void uploadSourceImage(event.target.files?.[0])}
+      />
     </div>
   );
 }
