@@ -78,6 +78,11 @@ import {
   LuRotateCcw,
   LuDownload,
   LuArrowRight,
+  LuArrowUpLeft,
+  LuArrowUpRight,
+  LuArrowDownLeft,
+  LuArrowDownRight,
+  LuGripVertical,
   LuX,
 } from "react-icons/lu";
 import {
@@ -94,6 +99,15 @@ import {
 } from "@/lib/bubble-draw";
 import CreditCostBadge from "@/components/CreditCostBadge";
 import { AI_CREDIT_COSTS } from "@/lib/credit-products";
+import {
+  type CaptionSettings,
+  type WatermarkPosition,
+  type WatermarkSettings,
+  DEFAULT_CAPTION_SETTINGS,
+  DEFAULT_WATERMARK_SETTINGS,
+  createCaptionBubble,
+  createWatermarkBubble,
+} from "@/lib/canvas-presets";
 
 interface GalleryImage {
   id: string;
@@ -106,6 +120,8 @@ interface GalleryImage {
 type AssetLibraryTab = "project" | "character" | "gesture" | "background";
 type CanvasTool = "move" | "crop" | "pipette" | "bubble" | "text" | "shape" | "brush" | "eraser" | "mask";
 type RedrawRegionMode = "all" | "auto" | "rectangle" | "freehand";
+type OcrRegionMode = "all" | "rectangle" | "freehand";
+type PresetScope = "current" | "all" | "range";
 
 export interface SavedCanvasImage {
   id: string;
@@ -159,6 +175,8 @@ const FILL_COLORS = [
   "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#6b7280",
 ];
 
+const BRUSH_COLORS = ["#000000", "#ffffff", "#0ea5a8", "#f04452", "#ffb400", "#3182f6", "#00c853", "#8b95a1"] as const;
+
 const IMAGE_FILTERS: Array<{ id: CanvasImageFilter; label: string }> = [
   { id: "original", label: "원본" },
   { id: "grayscale", label: "흑백" },
@@ -196,6 +214,7 @@ export interface CanvasPageItem {
   title: string;
   imageUrl?: string | null;
   thumbnailUrl?: string | null;
+  canvas?: unknown;
 }
 
 interface Props {
@@ -217,8 +236,8 @@ interface Props {
   coverPageId?: string | null;
   onRenamePage?: (pageId: string, title: string) => void | Promise<void>;
   onSetCoverPage?: (pageId: string) => void | Promise<void>;
-  onDownloadCurrentPage?: () => void | Promise<void>;
   onDownloadAllPages?: () => void | Promise<void>;
+  onCanvasBatchChange?: () => void | Promise<void>;
 }
 
 interface CanvasVersionSummary {
@@ -264,7 +283,30 @@ interface SerializedCanvasState {
 
 const MIN_CANVAS = 540;
 const CANVAS_FONT_STYLESHEET_ID = "autocartoon-canvas-fonts";
-const CANVAS_FONT_STYLESHEET = "https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Black+Han+Sans&family=Cute+Font&family=Diphylleia&family=Do+Hyeon&family=Dokdo&family=East+Sea+Dokdo&family=Gaegu:wght@300;400;700&family=Gamja+Flower&family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&family=Grandiflora+One&family=Gugi&family=Hahmlet:wght@300;400;700;900&family=Hi+Melody&family=IBM+Plex+Sans+KR:wght@300;400;700&family=Jua&family=Kirang+Haerang&family=Nanum+Brush+Script&family=Nanum+Myeongjo:wght@400;700;800&family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@300;400;700;900&family=Noto+Serif+KR:wght@400;700&family=Orbit&family=Poor+Story&family=Single+Day&family=Song+Myung&family=Stylish&family=Sunflower:wght@300;500;700&family=Yeon+Sung&display=swap";
+const CANVAS_FONT_STYLESHEETS = [
+  "https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Black+Han+Sans&family=Cute+Font&family=Diphylleia&family=Do+Hyeon&family=Dokdo&family=Dongle:wght@400;700&family=East+Sea+Dokdo&family=Gaegu:wght@300;400;700&family=Gamja+Flower&family=Gothic+A1:wght@400;700;900&family=Gowun+Batang:wght@400;700&family=Gowun+Dodum&family=Grandiflora+One&family=Gugi&family=Hahmlet:wght@300;400;700;900&family=Hi+Melody&family=IBM+Plex+Sans+KR:wght@300;400;700&family=Jua&family=Kirang+Haerang&family=Nanum+Brush+Script&family=Nanum+Gothic:wght@400;700;800&family=Nanum+Myeongjo:wght@400;700;800&family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@300;400;700;900&family=Noto+Serif+KR:wght@400;700&family=Orbit&family=Poor+Story&family=Single+Day&family=Song+Myung&family=Stylish&family=Sunflower:wght@300;500;700&family=Yeon+Sung&display=swap",
+  "https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css",
+  "https://cdn.jsdelivr.net/gh/fonts-archive/Cafe24Ssurround/Cafe24Ssurround.css",
+  "https://cdn.jsdelivr.net/gh/fonts-archive/GangwonEduModu/GangwonEduModu.css",
+  "https://cdn.jsdelivr.net/gh/fonts-archive/TmoneyRoundWind/TmoneyRoundWind.css",
+  "https://cdn.jsdelivr.net/gh/fonts-archive/NanumSquareRound/NanumSquareRound.css",
+  "https://cdn.jsdelivr.net/gh/fonts-archive/Jalnan/Jalnan.css",
+  "https://cdn.jsdelivr.net/gh/fonts-archive/Cafe24SsurroundAir/Cafe24SsurroundAir.css",
+  "https://cdn.jsdelivr.net/gh/fonts-archive/HakgyoansimAllimjang/HakgyoansimAllimjang.css",
+  "https://cdn.jsdelivr.net/gh/sun-typeface/SUITE@2/fonts/static/woff2/SUITE.css",
+] as const;
+const CANVAS_CUSTOM_FONT_FACES = `
+@font-face{font-family:'OngleipEoyeonce';src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2105@1.1/Uiyeun.woff') format('woff');font-display:swap}
+@font-face{font-family:'Binggre';src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_one@1.0/Binggrae.woff') format('woff');font-weight:400;font-display:swap}
+@font-face{font-family:'Binggre';src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2110@1.0/Binggrae-Bold.woff2') format('woff2');font-weight:700;font-display:swap}
+@font-face{font-family:'OngleipParkDahyeon';src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/2411-3@1.0/Ownglyph_ParkDaHyun.woff2') format('woff2');font-display:swap}
+@font-face{font-family:'KyoboHandwriting2019';src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_20-04@1.0/KyoboHand.woff') format('woff');font-display:swap}
+@font-face{font-family:'IsYun';src:url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2202-2@1.0/LeeSeoyun.woff') format('woff');font-display:swap}
+@font-face{font-family:'GriunCherry1Spoon';src:url('https://d26ciffk7xlrlz.cloudfront.net/free-fonts/cherry1spoon/Griun_Cherry1Spoon-Rg.woff2') format('woff2');font-display:swap}
+@font-face{font-family:'GriunCocochoitoon';src:url('https://d26ciffk7xlrlz.cloudfront.net/free-fonts/cocochoitoon/Griun_Cocochoitoon-Rg.woff2') format('woff2');font-display:swap}
+@font-face{font-family:'GriunMyoeunHeullim';src:url('https://d26ciffk7xlrlz.cloudfront.net/free-fonts/myoeunheullim/Griun_MyoeunHeullim-Rg.woff2') format('woff2');font-display:swap}
+@font-face{font-family:'KyoboHandwriting2025';src:url('https://contents.kyobobook.co.kr/display/next/ui-store/build-1783478929/_next/static/media/92727ae68bd428cc-s.p.otf') format('opentype');font-display:swap}
+`;
 type AspectRatio = CanvasAspectRatio;
 
 const ASPECT_CONFIG: Record<
@@ -801,8 +843,8 @@ export default function CanvasEditor({
   coverPageId,
   onRenamePage,
   onSetCoverPage,
-  onDownloadCurrentPage,
   onDownloadAllPages,
+  onCanvasBatchChange,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasViewportRef = useRef<HTMLDivElement>(null);
@@ -814,7 +856,7 @@ export default function CanvasEditor({
   const [shapeType, setShapeType] = useState<Extract<BubbleType, "rectangle" | "roundedRectangle" | "ellipse" | "line" | "arrow" | "star">>("rectangle");
   const [selectedBubbleId, setSelectedBubbleId] = useState<string | null>(null);
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
-  const bubbleDragMode = useRef<"none" | "move" | "resize" | "tail" | "rotate">("none");
+  const bubbleDragMode = useRef<"none" | "move" | "resize" | "tail" | "rotate" | "create">("none");
   const bubbleDragHandle = useRef("");
   const bubbleDragStart = useRef({ x: 0, y: 0 });
   const bubbleOriginal = useRef<Partial<SpeechBubble>>({});
@@ -822,7 +864,6 @@ export default function CanvasEditor({
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
-  const [bgThreshold, setBgThreshold] = useState(240);
   const [aspect, setAspect] = useState<AspectRatio>("1:1");
   const [canvasW, setCanvasW] = useState(MIN_CANVAS);
   const [canvasH, setCanvasH] = useState(MIN_CANVAS);
@@ -840,6 +881,10 @@ export default function CanvasEditor({
   const [ocrOpen, setOcrOpen] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrText, setOcrText] = useState("");
+  const [ocrRegionMode, setOcrRegionMode] = useState<OcrRegionMode>("all");
+  const [regionSelectionPurpose, setRegionSelectionPurpose] = useState<"redraw" | "ocr" | null>(null);
+  const [cutoutLoading, setCutoutLoading] = useState(false);
+  const [cutoutConfigured, setCutoutConfigured] = useState<boolean | null>(null);
   const [redrawOpen, setRedrawOpen] = useState(false);
   const [redrawLoading, setRedrawLoading] = useState(false);
   const [redrawPrompt, setRedrawPrompt] = useState("");
@@ -864,8 +909,18 @@ export default function CanvasEditor({
   const [renamingPageId, setRenamingPageId] = useState<string | null>(null);
   const [pageTitleDraft, setPageTitleDraft] = useState("");
   const [layerPanelSide, setLayerPanelSide] = useState<"left" | "right">("right");
+  const [layerDropTargetId, setLayerDropTargetId] = useState<string | null>(null);
   const [backgroundOpen, setBackgroundOpen] = useState(false);
   const [sfxOpen, setSfxOpen] = useState(false);
+  const [watermarkOpen, setWatermarkOpen] = useState(false);
+  const [watermarkSettings, setWatermarkSettings] = useState<WatermarkSettings>({ ...DEFAULT_WATERMARK_SETTINGS });
+  const [watermarkScope, setWatermarkScope] = useState<PresetScope>("current");
+  const [watermarkRange, setWatermarkRange] = useState({ start: 1, end: Math.max(1, pages.length) });
+  const [watermarkApplying, setWatermarkApplying] = useState(false);
+  const [captionOpen, setCaptionOpen] = useState(false);
+  const [captionSettings, setCaptionSettings] = useState<CaptionSettings>({ ...DEFAULT_CAPTION_SETTINGS });
+  const [captionApplying, setCaptionApplying] = useState(false);
+  const [exportingPages, setExportingPages] = useState(false);
   const [customBubbleOpen, setCustomBubbleOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -879,6 +934,7 @@ export default function CanvasEditor({
   });
   const [assetLibraryLoading, setAssetLibraryLoading] = useState(true);
   const drawing = useRef(false);
+  const drawingLayerRef = useRef<{ id: string; canvas: HTMLCanvasElement; layer: Layer } | null>(null);
   const brushLastPoint = useRef({ x: 0, y: 0, at: 0 });
   const copiedLayerRef = useRef<Layer | null>(null);
   const initializedSourceRef = useRef<string | null>(null);
@@ -890,12 +946,42 @@ export default function CanvasEditor({
     preconnect.href = "https://fonts.gstatic.com";
     preconnect.crossOrigin = "anonymous";
     preconnect.dataset.canvasFont = "preconnect";
-    const stylesheet = document.createElement("link");
-    stylesheet.id = CANVAS_FONT_STYLESHEET_ID;
-    stylesheet.rel = "stylesheet";
-    stylesheet.href = CANVAS_FONT_STYLESHEET;
-    document.head.append(preconnect, stylesheet);
+    const stylesheets = CANVAS_FONT_STYLESHEETS.map((href) => {
+      const stylesheet = document.createElement("link");
+      stylesheet.rel = "stylesheet";
+      stylesheet.href = href;
+      stylesheet.dataset.canvasFont = "stylesheet";
+      return stylesheet;
+    });
+    const customFonts = document.createElement("style");
+    customFonts.id = CANVAS_FONT_STYLESHEET_ID;
+    customFonts.textContent = CANVAS_CUSTOM_FONT_FACES;
+    document.head.append(preconnect, ...stylesheets, customFonts);
+    const refreshCanvasFonts = () => setMaskRevision((value) => value + 1);
+    document.fonts.addEventListener("loadingdone", refreshCanvasFonts);
+    void document.fonts.ready.then(refreshCanvasFonts);
+    return () => document.fonts.removeEventListener("loadingdone", refreshCanvasFonts);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/studio/remove-background", { cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (active) setCutoutConfigured(response.ok && data.configured === true);
+      })
+      .catch(() => {
+        if (active) setCutoutConfigured(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    setWatermarkRange((current) => ({
+      start: Math.max(1, Math.min(Math.max(1, pages.length), current.start)),
+      end: Math.max(1, pages.length),
+    }));
+  }, [pages.length]);
 
   const undoStack = useRef<Layer[][]>([]);
   const redoStack = useRef<Layer[][]>([]);
@@ -1172,7 +1258,7 @@ export default function CanvasEditor({
     renderCanvasLayers(ctx, layers, canvasW, canvasH);
 
     const editMask = aiMaskCanvasRef.current;
-    if (editMask && (redrawOpen || tool === "mask")) {
+    if (editMask && (redrawOpen || ocrOpen || tool === "mask")) {
       const overlay = document.createElement("canvas");
       overlay.width = canvasW;
       overlay.height = canvasH;
@@ -1267,7 +1353,7 @@ export default function CanvasEditor({
       }
       ctx.restore();
     }
-  }, [activeLayerId, layers, cropRect, tool, canvasH, canvasW, selectedBubbleId, showGuides, showOverflow, redrawOpen, maskRevision]);
+  }, [activeLayerId, layers, cropRect, tool, canvasH, canvasW, selectedBubbleId, showGuides, showOverflow, redrawOpen, ocrOpen, maskRevision]);
 
   useEffect(() => {
     render();
@@ -1308,8 +1394,12 @@ export default function CanvasEditor({
       context.beginPath();
       context.moveTo(mx, my);
       aiMaskDrawing.current = true;
-      setRedrawUseRegion(true);
-      setRedrawRegionMode("freehand");
+      if (regionSelectionPurpose === "ocr") {
+        setOcrRegionMode("freehand");
+      } else {
+        setRedrawUseRegion(true);
+        setRedrawRegionMode("freehand");
+      }
       setMaskRevision((value) => value + 1);
     } else if (tool === "pipette") {
       const canvas = canvasRef.current;
@@ -1325,9 +1415,23 @@ export default function CanvasEditor({
       }
       setTool("brush");
     } else if (tool === "brush" || tool === "eraser") {
-      const activeLayer = layers.find((layer) => layer.id === activeLayerId);
-      if (!activeLayer || activeLayer.locked) return;
+      let activeLayer = layers.find((layer) => layer.id === activeLayerId);
+      if ((!activeLayer || activeLayer.locked) && tool === "eraser") return;
       saveUndo();
+      if (!activeLayer || activeLayer.locked) {
+        const newCanvas = document.createElement("canvas");
+        newCanvas.width = canvasW;
+        newCanvas.height = canvasH;
+        activeLayer = {
+          ...createLayer(undefined, canvasW, canvasH),
+          name: "브러시 선",
+          canvas: newCanvas,
+          pixelDirty: true,
+          pixelRevision: 1,
+        };
+        setLayers((current) => [...current, activeLayer!]);
+        setActiveLayerId(activeLayer.id);
+      }
       let drawingCanvas = activeLayer.canvas;
       if (!drawingCanvas) {
         drawingCanvas = document.createElement("canvas");
@@ -1378,6 +1482,7 @@ export default function CanvasEditor({
       const point = canvasPointToLayer(activeLayer, canvasW, canvasH, mx, my);
       ctx.moveTo(point.x, point.y);
       brushLastPoint.current = { ...point, at: performance.now() };
+      drawingLayerRef.current = { id: activeLayer.id, canvas: drawingCanvas, layer: activeLayer };
       drawing.current = true;
     } else if (tool === "move") {
       const activeTransformLayer = layers.find((layer) => layer.id === activeLayerId && layer.visible && !layer.locked);
@@ -1431,7 +1536,11 @@ export default function CanvasEditor({
         if (!layer.visible || layer.locked) return false;
         return pointHitsLayerPixels(layer, canvasW, canvasH, mx, my);
       });
-      if (!selectedLayer) return;
+      if (!selectedLayer) {
+        setActiveLayerId("");
+        setSelectedLayerIds([]);
+        return;
+      }
       setActiveLayerId(selectedLayer.id);
       const movingLayers = selectedLayer.groupId
         ? layers.filter((layer) => layer.groupId === selectedLayer.groupId)
@@ -1456,10 +1565,9 @@ export default function CanvasEditor({
     } else if (tool === "bubble" || tool === "text" || tool === "shape") {
       // 활성 레이어의 말풍선/텍스트 히트 테스트
       const activeLayer = layers.find((l) => l.id === activeLayerId);
-      if (!activeLayer || activeLayer.locked) return;
 
       // 선택된 말풍선부터 체크
-      for (const bubble of [...activeLayer.bubbles].reverse()) {
+      for (const bubble of [...(activeLayer && !activeLayer.locked ? activeLayer.bubbles : [])].reverse()) {
         const hit = hitTestBubble(mx, my, bubble);
         if (hit) {
           pointerChangeCommitted.current = false;
@@ -1488,11 +1596,23 @@ export default function CanvasEditor({
         mx,
         my
       );
-      setLayers((prev) =>
-        prev.map((l) =>
-          l.id === activeLayerId ? { ...l, bubbles: [...l.bubbles, newBubble] } : l
-        )
-      );
+      pointerChangeCommitted.current = true;
+      bubbleDragMode.current = "create";
+      bubbleDragStart.current = { x: mx, y: my };
+      bubbleOriginal.current = { ...newBubble };
+      if (activeLayer && !activeLayer.locked) {
+        setLayers((prev) => prev.map((l) =>
+          l.id === activeLayer.id ? { ...l, bubbles: [...l.bubbles, newBubble] } : l
+        ));
+      } else {
+        const layer = {
+          ...createLayer(undefined, canvasW, canvasH),
+          name: tool === "text" ? "텍스트" : tool === "shape" ? "도형" : "말풍선",
+          bubbles: [newBubble],
+        };
+        setLayers((prev) => [...prev, layer]);
+        setActiveLayerId(layer.id);
+      }
       setSelectedBubbleId(newBubble.id);
     }
   };
@@ -1509,9 +1629,12 @@ export default function CanvasEditor({
     }
 
     if ((tool === "brush" || tool === "eraser") && drawing.current) {
-      const activeLayer = layers.find((layer) => layer.id === activeLayerId);
-      if (!activeLayer?.canvas) return;
-      const ctx = activeLayer.canvas.getContext("2d")!;
+      const drawingLayer = drawingLayerRef.current;
+      const activeLayer = drawingLayer
+        ? layersRef.current.find((layer) => layer.id === drawingLayer.id) ?? drawingLayer.layer
+        : layers.find((layer) => layer.id === activeLayerId);
+      if (!drawingLayer || !activeLayer) return;
+      const ctx = drawingLayer.canvas.getContext("2d")!;
       const point = canvasPointToLayer(activeLayer, canvasW, canvasH, mx, my);
       if (tool === "brush" && brushStyle === "brushPen") {
         const elapsed = Math.max(1, performance.now() - brushLastPoint.current.at);
@@ -1522,7 +1645,7 @@ export default function CanvasEditor({
       ctx.lineTo(point.x, point.y);
       ctx.stroke();
       brushLastPoint.current = { ...point, at: performance.now() };
-      alphaBoundsCache.delete(activeLayer.canvas);
+      alphaBoundsCache.delete(drawingLayer.canvas);
       setLayers((current) => [...current]);
       return;
     }
@@ -1565,6 +1688,24 @@ export default function CanvasEditor({
           bubbles: l.bubbles.map((bb) => {
             if (bb.id !== selectedBubbleId) return bb;
             const original = { ...bb, ...orig } as SpeechBubble;
+            if (bubbleDragMode.current === "create") {
+              const width = Math.abs(mx - bubbleDragStart.current.x);
+              const height = Math.abs(my - bubbleDragStart.current.y);
+              if (width < 8 && height < 8) return bb;
+              const centerX = (mx + bubbleDragStart.current.x) / 2;
+              const centerY = (my + bubbleDragStart.current.y) / 2;
+              const nextWidth = Math.max(original.type === "line" || original.type === "arrow" ? 24 : 40, width);
+              const nextHeight = Math.max(original.type === "line" || original.type === "arrow" ? 8 : 30, height);
+              return {
+                ...bb,
+                x: centerX,
+                y: centerY,
+                width: nextWidth,
+                height: nextHeight,
+                tailTipX: centerX,
+                tailTipY: centerY + nextHeight / 2 + Math.max(20, nextHeight * 0.25),
+              };
+            }
             if (bubbleDragMode.current === "move") {
               return {
                 ...bb,
@@ -1636,12 +1777,12 @@ export default function CanvasEditor({
     if (aiMaskDrawing.current) {
       aiMaskCanvasRef.current?.getContext("2d")?.restore();
       aiMaskDrawing.current = false;
-      setRedrawUseRegion(true);
+      if (regionSelectionPurpose !== "ocr") setRedrawUseRegion(true);
       setMaskRevision((value) => value + 1);
     }
     if (drawing.current) {
-      const activeLayer = layers.find((layer) => layer.id === activeLayerId);
-      activeLayer?.canvas?.getContext("2d")?.restore();
+      drawingLayerRef.current?.canvas.getContext("2d")?.restore();
+      drawingLayerRef.current = null;
       drawing.current = false;
     }
     isDragging.current = false;
@@ -1659,8 +1800,14 @@ export default function CanvasEditor({
         context.fillRect(cropRect.x, cropRect.y, cropRect.w, cropRect.h);
         aiMaskCanvasRef.current = mask;
         setAiRegionMode(false);
-        setRedrawUseRegion(true);
-        setRedrawRegionMode("rectangle");
+        if (regionSelectionPurpose === "ocr") {
+          setOcrRegionMode("rectangle");
+        } else {
+          setRedrawUseRegion(true);
+          setRedrawRegionMode("rectangle");
+        }
+        setTool("move");
+        setCropRect(null);
         setMaskRevision((value) => value + 1);
       } else {
         applyCrop();
@@ -1746,98 +1893,58 @@ export default function CanvasEditor({
     setCropRect(null);
   };
 
-  // 배경 제거: 네 모서리 색을 기준으로 가장자리에서만 flood fill해 내부 색을 보존한다.
-  const handleRemoveBackground = () => {
+  // 고화질 누끼는 서버 프록시를 통해 remove.bg에 전송한다. API 키는 브라우저에 노출하지 않는다.
+  const handleRemoveBackground = async () => {
     const activeLayer = layers.find((l) => l.id === activeLayerId);
-    if (!activeLayer?.canvas || activeLayer.locked) return;
+    if (!activeLayer?.canvas || activeLayer.locked) {
+      setEditorMessage("누끼를 적용할 이미지 레이어를 먼저 선택해주세요.");
+      return;
+    }
+    if (cutoutConfigured !== true) {
+      setEditorMessage("누끼 API가 아직 연결되지 않았습니다. REMOVE_BG_API_KEY 설정이 필요합니다.");
+      return;
+    }
 
-    saveUndo(); // Undo 저장
-
-    const ctx = activeLayer.canvas.getContext("2d")!;
-    const w = activeLayer.canvas.width;
-    const h = activeLayer.canvas.height;
-    const imageData = ctx.getImageData(0, 0, w, h);
-    const data = imageData.data;
-    const threshold = bgThreshold;
-
-    const cornerRadius = Math.max(1, Math.min(4, Math.floor(Math.min(w, h) / 80)));
-    const cornerCenters = [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1]];
-    const referenceColors = cornerCenters.map(([cx, cy]) => {
-      let red = 0;
-      let green = 0;
-      let blue = 0;
-      let count = 0;
-      for (let y = Math.max(0, cy - cornerRadius); y <= Math.min(h - 1, cy + cornerRadius); y += 1) {
-        for (let x = Math.max(0, cx - cornerRadius); x <= Math.min(w - 1, cx + cornerRadius); x += 1) {
-          const offset = (y * w + x) * 4;
-          if (data[offset + 3] === 0) continue;
-          red += data[offset];
-          green += data[offset + 1];
-          blue += data[offset + 2];
-          count += 1;
-        }
+    setCutoutLoading(true);
+    setEditorMessage(null);
+    try {
+      const sourceBlob = await canvasToBlob(activeLayer.canvas);
+      const form = new FormData();
+      form.append("image", sourceBlob, "canvas-layer.png");
+      const response = await fetch("/api/studio/remove-background", { method: "POST", body: form });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "이미지 배경을 제거하지 못했습니다.");
       }
-      return count > 0 ? [red / count, green / count, blue / count] : [255, 255, 255];
-    });
-    const tolerance = Math.max(6, 258 - threshold) * 1.75;
-    const isBackground = (idx: number) => data[idx + 3] > 0 && referenceColors.some(([red, green, blue]) =>
-      Math.hypot(data[idx] - red, data[idx + 1] - green, data[idx + 2] - blue) <= tolerance
-    );
-
-    // BFS Flood Fill: 4방향 가장자리에서 시작
-    const visited = new Uint8Array(w * h);
-    const queue: number[] = [];
-
-    // 가장자리 픽셀을 시드로
-    for (let x = 0; x < w; x++) {
-      // 상단 행
-      if (isBackground(x * 4)) { queue.push(x); visited[x] = 1; }
-      // 하단 행
-      const bottomIdx = (h - 1) * w + x;
-      if (isBackground(bottomIdx * 4)) { queue.push(bottomIdx); visited[bottomIdx] = 1; }
-    }
-    for (let y = 1; y < h - 1; y++) {
-      // 좌측 열
-      const leftIdx = y * w;
-      if (isBackground(leftIdx * 4)) { queue.push(leftIdx); visited[leftIdx] = 1; }
-      // 우측 열
-      const rightIdx = y * w + (w - 1);
-      if (isBackground(rightIdx * 4)) { queue.push(rightIdx); visited[rightIdx] = 1; }
-    }
-
-    // BFS
-    let head = 0;
-    while (head < queue.length) {
-      const pos = queue[head++];
-      const px = pos % w;
-      const py = Math.floor(pos / w);
-
-      // 투명화
-      data[pos * 4 + 3] = 0;
-
-      // 4방향 이웃
-      const neighbors = [
-        py > 0 ? pos - w : -1,       // 상
-        py < h - 1 ? pos + w : -1,   // 하
-        px > 0 ? pos - 1 : -1,       // 좌
-        px < w - 1 ? pos + 1 : -1,   // 우
-      ];
-      for (const n of neighbors) {
-        if (n >= 0 && !visited[n] && isBackground(n * 4)) {
-          visited[n] = 1;
-          queue.push(n);
-        }
+      const resultBlob = await response.blob();
+      const resultUrl = URL.createObjectURL(resultBlob);
+      try {
+        const resultImage = await loadImage(resultUrl);
+        const nextCanvas = document.createElement("canvas");
+        nextCanvas.width = activeLayer.canvas.width;
+        nextCanvas.height = activeLayer.canvas.height;
+        nextCanvas.getContext("2d")!.drawImage(resultImage, 0, 0, nextCanvas.width, nextCanvas.height);
+        saveUndo();
+        setLayers((current) => current.map((layer) => layer.id === activeLayerId
+          ? {
+              ...layer,
+              image: resultImage,
+              imageUrl: null,
+              canvas: nextCanvas,
+              pixelDirty: true,
+              pixelRevision: layer.pixelRevision + 1,
+            }
+          : layer));
+        setBackgroundRemoved(true);
+        setEditorMessage(`누끼를 적용했습니다. ${AI_CREDIT_COSTS.cutout}크레딧을 사용했습니다.`);
+      } finally {
+        URL.revokeObjectURL(resultUrl);
       }
+    } catch (error) {
+      setEditorMessage(error instanceof Error ? error.message : "이미지 배경을 제거하지 못했습니다.");
+    } finally {
+      setCutoutLoading(false);
     }
-
-    ctx.putImageData(imageData, 0, 0);
-    alphaBoundsCache.delete(activeLayer.canvas);
-    setLayers((prev) => prev.map((layer) =>
-      layer.id === activeLayerId
-        ? { ...layer, pixelDirty: true, pixelRevision: layer.pixelRevision + 1 }
-        : layer
-    ));
-    setBackgroundRemoved(true);
   };
 
   // 투명도 조절
@@ -2197,6 +2304,7 @@ export default function CanvasEditor({
     const bubble = kind === "watermark"
       ? {
           ...createBubble("text", canvasW - 125, canvasH - 38),
+          presetKind: "watermark" as const,
           width: 220,
           height: 52,
           text: "워니바나나봇",
@@ -2208,6 +2316,8 @@ export default function CanvasEditor({
       : kind === "caption"
         ? {
             ...createBubble("rectangle", canvasW / 2, canvasH - 75),
+            presetKind: "caption" as const,
+            captionSlot: "bottom" as const,
             width: Math.max(260, canvasW - 70),
             height: 92,
             text: "내레이션을 입력하세요",
@@ -2220,6 +2330,7 @@ export default function CanvasEditor({
           }
         : {
             ...createBubble("spiky", canvasW / 2, canvasH / 2),
+            presetKind: "sfx" as const,
             width: 220,
             height: 150,
             text: sfxText,
@@ -2241,6 +2352,216 @@ export default function CanvasEditor({
     setActiveLayerId(layer.id);
     setSelectedBubbleId(bubble.id);
     setTool(bubble.type === "text" ? "text" : "bubble");
+  };
+
+  const upsertWatermarkLocally = (settings: WatermarkSettings) => {
+    let selectedId = "";
+    let targetLayerId = "";
+    saveUndo();
+    let found = false;
+    const updated = layersRef.current.map((layer) => {
+      const legacyLayer = layer.name === "워터마크";
+      const bubbles = layer.bubbles.map((bubble) => {
+        if (found || (bubble.presetKind !== "watermark" && !legacyLayer)) return bubble;
+        found = true;
+        selectedId = bubble.id;
+        targetLayerId = layer.id;
+        return { ...bubble, ...createWatermarkBubble(canvasW, canvasH, settings, bubble.id) } as SpeechBubble;
+      });
+      return { ...layer, bubbles };
+    });
+    if (!found) {
+      const bubble = createWatermarkBubble(canvasW, canvasH, settings);
+      const layer = {
+        ...createLayer(undefined, canvasW, canvasH),
+        name: "워터마크",
+        bubbles: [bubble],
+      };
+      selectedId = bubble.id;
+      targetLayerId = layer.id;
+      updated.push(layer);
+    }
+    setLayers(updated);
+    setActiveLayerId(targetLayerId);
+    setSelectedBubbleId(selectedId);
+    setTool("text");
+    return updated;
+  };
+
+  const deleteWatermarkLocally = () => {
+    const hasWatermark = layersRef.current.some((layer) =>
+      layer.name === "워터마크" || layer.bubbles.some((bubble) => bubble.presetKind === "watermark")
+    );
+    if (!hasWatermark) return layersRef.current;
+    saveUndo();
+    const next = layersRef.current.flatMap((layer) => {
+      const bubbles = layer.bubbles.filter((bubble) => bubble.presetKind !== "watermark");
+      if (layer.name === "워터마크" && bubbles.length === 0 && !layer.canvas && !layer.fillColor && !layer.background && layersRef.current.length > 1) return [];
+      return [{ ...layer, bubbles }];
+    });
+    const result = next.length > 0 ? next : layersRef.current;
+    setLayers(result);
+    setSelectedBubbleId(null);
+    setTool("move");
+    return result;
+  };
+
+  const applyCaptionSettingsLocally = (settings: CaptionSettings) => {
+    let updatedCount = 0;
+    // Use the rendered state directly here. A save can finish while the ref-sync
+    // effect is still pending, which previously made a visible caption look absent.
+    const next = layers.map((layer) => {
+      const captionLayer = layer.name.includes("캡션") || layer.name.includes("내레이션");
+      return {
+        ...layer,
+        bubbles: layer.bubbles.map((bubble) => {
+          if (bubble.presetKind !== "caption" && !captionLayer) return bubble;
+          const slot = bubble.captionSlot === "top" || bubble.captionSlot === "bottom"
+            ? bubble.captionSlot
+            : bubble.y < canvasH / 2 ? "top" : "bottom";
+          updatedCount += 1;
+          return {
+            ...bubble,
+            ...createCaptionBubble(canvasW, canvasH, slot, bubble.text || "", settings, bubble.id),
+          } as SpeechBubble;
+        }),
+      };
+    });
+    if (updatedCount > 0) {
+      saveUndo();
+      layersRef.current = next;
+      setLayers(next);
+    }
+    return { next, updatedCount };
+  };
+
+  const addCaptionLocally = (slot: "top" | "bottom") => {
+    const bubble = createCaptionBubble(
+      canvasW,
+      canvasH,
+      slot,
+      slot === "top" ? "상단 캡션을 입력하세요" : "하단 캡션을 입력하세요",
+      captionSettings
+    );
+    const layer = {
+      ...createLayer(undefined, canvasW, canvasH),
+      name: `캡션·내레이션 (${slot === "top" ? "상단" : "하단"})`,
+      bubbles: [bubble],
+    };
+    saveUndo();
+    setLayers((current) => [...current, layer]);
+    setActiveLayerId(layer.id);
+    setSelectedBubbleId(bubble.id);
+    setTool("text");
+    setCaptionOpen(false);
+  };
+
+  const applyPresetToOtherPages = async (body: Record<string, unknown>) => {
+    if (!projectId || pages.length <= 1) return 0;
+    const response = await fetch(`/api/studio/projects/${encodeURIComponent(projectId)}/canvas-presets`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, excludeCutId: cutId }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "다른 컷에 설정을 적용하지 못했습니다.");
+    await onCanvasBatchChange?.();
+    return typeof data.updated === "number" ? data.updated : 0;
+  };
+
+  const applyWatermarkSettings = async () => {
+    if (!watermarkSettings.text.trim()) return;
+    setWatermarkApplying(true);
+    setEditorMessage(null);
+    try {
+      const currentPageNumber = currentPageIndex >= 0 ? currentPageIndex + 1 : 1;
+      const includesCurrent = watermarkScope !== "range"
+        || (currentPageNumber >= watermarkRange.start && currentPageNumber <= watermarkRange.end);
+      if (includesCurrent) {
+        const next = upsertWatermarkLocally(watermarkSettings);
+        await handleSave(next);
+      }
+      const updated = watermarkScope === "current"
+        ? 0
+        : await applyPresetToOtherPages({
+            kind: "watermark",
+            action: "apply",
+            scope: watermarkScope,
+            start: watermarkRange.start,
+            end: watermarkRange.end,
+            settings: watermarkSettings,
+          });
+      setWatermarkOpen(false);
+      setEditorMessage(updated > 0 && includesCurrent
+        ? `현재 컷과 다른 ${updated}개 컷에 워터마크를 적용했습니다.`
+        : updated > 0
+          ? `${updated}개 컷에 워터마크를 적용했습니다.`
+          : includesCurrent
+            ? "현재 컷에 워터마크를 적용했습니다."
+            : "선택한 범위에 적용할 컷이 없습니다.");
+    } catch (error) {
+      setEditorMessage(error instanceof Error ? error.message : "워터마크를 적용하지 못했습니다.");
+    } finally {
+      setWatermarkApplying(false);
+    }
+  };
+
+  const deleteWatermarks = async () => {
+    setWatermarkApplying(true);
+    setEditorMessage(null);
+    try {
+      const currentPageNumber = currentPageIndex >= 0 ? currentPageIndex + 1 : 1;
+      const includesCurrent = watermarkScope !== "range"
+        || (currentPageNumber >= watermarkRange.start && currentPageNumber <= watermarkRange.end);
+      if (includesCurrent) {
+        const next = deleteWatermarkLocally();
+        await handleSave(next);
+      }
+      const updated = watermarkScope === "current"
+        ? 0
+        : await applyPresetToOtherPages({
+            kind: "watermark",
+            action: "delete",
+            scope: watermarkScope,
+            start: watermarkRange.start,
+            end: watermarkRange.end,
+          });
+      setWatermarkOpen(false);
+      setEditorMessage(updated > 0 && includesCurrent
+        ? `현재 컷과 다른 ${updated}개 컷에서 워터마크를 삭제했습니다.`
+        : updated > 0
+          ? `${updated}개 컷에서 워터마크를 삭제했습니다.`
+          : includesCurrent
+            ? "현재 컷 워터마크를 삭제했습니다."
+            : "선택한 범위에 적용할 컷이 없습니다.");
+    } catch (error) {
+      setEditorMessage(error instanceof Error ? error.message : "워터마크를 삭제하지 못했습니다.");
+    } finally {
+      setWatermarkApplying(false);
+    }
+  };
+
+  const applyCaptionSettings = async () => {
+    setCaptionApplying(true);
+    setEditorMessage(null);
+    try {
+      const { next, updatedCount: currentUpdated } = applyCaptionSettingsLocally(captionSettings);
+      if (currentUpdated > 0) await handleSave(next);
+      const otherUpdated = await applyPresetToOtherPages({
+        kind: "caption",
+        action: "apply",
+        scope: "all",
+        settings: captionSettings,
+      });
+      setCaptionOpen(false);
+      setEditorMessage(currentUpdated + otherUpdated > 0
+        ? `현재 컷의 캡션 ${currentUpdated}개와 다른 ${otherUpdated}개 컷에 전역 서식을 적용했습니다.`
+        : "적용할 캡션이 없습니다. 상단 또는 하단 캡션을 먼저 추가해주세요.");
+    } catch (error) {
+      setEditorMessage(error instanceof Error ? error.message : "캡션 서식을 적용하지 못했습니다.");
+    } finally {
+      setCaptionApplying(false);
+    }
   };
 
   const addCustomBubble = () => {
@@ -2362,6 +2683,21 @@ export default function CanvasEditor({
     });
   };
 
+  const reorderLayer = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+    const sourceIndex = layersRef.current.findIndex((layer) => layer.id === sourceId);
+    const targetIndex = layersRef.current.findIndex((layer) => layer.id === targetId);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    saveUndo();
+    const next = [...layersRef.current];
+    const [source] = next.splice(sourceIndex, 1);
+    const targetIndexAfterRemoval = next.findIndex((layer) => layer.id === targetId);
+    next.splice(targetIndexAfterRemoval + 1, 0, source);
+    setLayers(next);
+    setActiveLayerId(sourceId);
+    setLayerDropTargetId(null);
+  };
+
   const addImageLayer = async (imageUrl: string, name = "이미지 객체") => {
     const img = await loadImage(imageUrl);
     const layerCanvas = document.createElement("canvas");
@@ -2415,12 +2751,99 @@ export default function CanvasEditor({
     return composite;
   };
 
-  const extractCanvasText = async () => {
+  const createOcrSourceCanvas = () => {
+    const source = createCompositeCanvas();
+    if (ocrRegionMode === "all") return source;
+    const mask = aiMaskCanvasRef.current;
+    if (!mask) throw new Error("글자를 추출할 영역을 먼저 지정해주세요.");
+    const maskContext = mask.getContext("2d")!;
+    const pixels = maskContext.getImageData(0, 0, mask.width, mask.height).data;
+    let minX = mask.width;
+    let minY = mask.height;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < mask.height; y += 1) {
+      for (let x = 0; x < mask.width; x += 1) {
+        if (pixels[(y * mask.width + x) * 4 + 3] === 0) continue;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+    }
+    if (maxX < minX || maxY < minY) throw new Error("글자를 추출할 영역을 먼저 지정해주세요.");
+
+    const width = maxX - minX + 1;
+    const height = maxY - minY + 1;
+    const selected = document.createElement("canvas");
+    selected.width = width;
+    selected.height = height;
+    const selectedContext = selected.getContext("2d")!;
+    selectedContext.drawImage(source, minX, minY, width, height, 0, 0, width, height);
+    selectedContext.globalCompositeOperation = "destination-in";
+    selectedContext.drawImage(mask, minX, minY, width, height, 0, 0, width, height);
+    selectedContext.globalCompositeOperation = "source-over";
+
+    const flattened = document.createElement("canvas");
+    flattened.width = width;
+    flattened.height = height;
+    const flattenedContext = flattened.getContext("2d")!;
+    flattenedContext.fillStyle = "#ffffff";
+    flattenedContext.fillRect(0, 0, width, height);
+    flattenedContext.drawImage(selected, 0, 0);
+    return flattened;
+  };
+
+  const beginOcrRegionSelection = (mode: Exclude<OcrRegionMode, "all">) => {
+    aiMaskCanvasRef.current = null;
+    setMaskRevision((value) => value + 1);
+    setCropRect(null);
+    setOcrRegionMode(mode);
+    setRegionSelectionPurpose("ocr");
+    if (mode === "rectangle") {
+      setAiRegionMode(true);
+      setTool("crop");
+    } else {
+      setAiRegionMode(false);
+      setTool("mask");
+    }
+  };
+
+  const clearOcrRegion = () => {
+    aiMaskCanvasRef.current = null;
+    setMaskRevision((value) => value + 1);
+    setCropRect(null);
+    setAiRegionMode(false);
+    setRegionSelectionPurpose(null);
+    setTool("move");
+  };
+
+  const selectOcrRegionMode = (mode: OcrRegionMode) => {
+    if (mode === "all") {
+      clearOcrRegion();
+      setOcrRegionMode("all");
+      return;
+    }
+    beginOcrRegionSelection(mode);
+  };
+
+  const toggleOcrPanel = () => {
+    if (ocrOpen) {
+      clearOcrRegion();
+      setOcrOpen(false);
+      return;
+    }
+    setRedrawOpen(false);
     setOcrOpen(true);
+    setOcrText("");
+    selectOcrRegionMode("all");
+  };
+
+  const extractCanvasText = async () => {
     setOcrLoading(true);
     setEditorMessage(null);
     try {
-      const image = createCompositeCanvas().toDataURL("image/jpeg", 0.86);
+      const image = createOcrSourceCanvas().toDataURL("image/jpeg", 0.9);
       const response = await fetch("/api/studio/ocr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2430,6 +2853,8 @@ export default function CanvasEditor({
       if (!response.ok) throw new Error(data.error || "글자를 추출하지 못했습니다.");
       setOcrText(typeof data.text === "string" ? data.text : "");
       if (!data.text) setEditorMessage("이미지에서 읽을 수 있는 글자를 찾지 못했습니다.");
+      setRegionSelectionPurpose(null);
+      setTool("move");
     } catch (error) {
       setEditorMessage(error instanceof Error ? error.message : "글자를 추출하지 못했습니다.");
     } finally {
@@ -2648,15 +3073,16 @@ export default function CanvasEditor({
   };
 
   // 합치고 저장하기 (1080px)
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (layersOverride?: Layer[]) => {
     setSaving(true);
     try {
+      const layersToSave = layersOverride ?? layers;
       const { exportW, exportH } = ASPECT_CONFIG[aspect];
       const exportCanvas = document.createElement("canvas");
       exportCanvas.width = exportW;
       exportCanvas.height = exportH;
       const ctx = exportCanvas.getContext("2d")!;
-      renderCanvasLayers(ctx, layers, canvasW, canvasH, exportW, exportH);
+      renderCanvasLayers(ctx, layersToSave, canvasW, canvasH, exportW, exportH);
 
       const blob = await new Promise<Blob>((resolve) =>
         exportCanvas.toBlob((b) => resolve(b!), "image/png")
@@ -2664,7 +3090,7 @@ export default function CanvasEditor({
       const savedPixelRefs = new Map<string, { url: string; revision: number }>();
       let serializedCanvas: SerializedCanvasState | undefined;
       if (projectId && cutId) {
-        const serializedLayers = await Promise.all(layers.map(async (layer, index) => {
+        const serializedLayers = await Promise.all(layersToSave.map(async (layer, index) => {
           const pixelUrl = layer.canvas
             ? !layer.pixelDirty && layer.imageUrl
               ? layer.imageUrl
@@ -2741,6 +3167,7 @@ export default function CanvasEditor({
         return { ...layer, imageUrl: savedPixel.url, pixelDirty: false };
       }));
       setDirty(false);
+      setBackgroundRemoved(false);
       setSavedAt(new Date());
       setEditorMessage("캔버스와 편집 이력을 저장했습니다.");
       onSave(result as SavedCanvasImage);
@@ -2765,6 +3192,64 @@ export default function CanvasEditor({
     link.click();
     URL.revokeObjectURL(url);
   }, [aspect, canvasH, canvasW, layers]);
+
+  const downloadAllCanvasPages = useCallback(async () => {
+    const exportPages = [...pages].sort((left, right) => left.order - right.order);
+    if (exportPages.length === 0) {
+      await onDownloadAllPages?.();
+      return;
+    }
+    setExportingPages(true);
+    setEditorMessage(null);
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      let rendered = 0;
+      for (const [index, page] of exportPages.entries()) {
+        const isCurrent = page.id === currentPageId;
+        const serialized = isCurrent ? null : parseSerializedCanvas(page.canvas);
+        let blob: Blob | null = null;
+        if (isCurrent || (serialized && serialized.layers.length > 0)) {
+          try {
+            const pageLayers = isCurrent ? layers : await hydrateSerializedLayers(serialized!);
+            const pageAspect = isCurrent ? aspect : serialized!.aspect;
+            const pageWidth = isCurrent ? canvasW : serialized!.width;
+            const pageHeight = isCurrent ? canvasH : serialized!.height;
+            const outputSize = ASPECT_CONFIG[pageAspect];
+            const output = document.createElement("canvas");
+            output.width = outputSize.exportW;
+            output.height = outputSize.exportH;
+            renderCanvasLayers(output.getContext("2d")!, pageLayers, pageWidth, pageHeight, output.width, output.height);
+            blob = await canvasToBlob(output);
+          } catch {
+            blob = null;
+          }
+        }
+        if (!blob && page.imageUrl) {
+          const response = await fetch(page.imageUrl);
+          if (response.ok) blob = await response.blob();
+        }
+        if (!blob) continue;
+        const safeTitle = page.title.replace(/[\\/:*?"<>|]/g, "-").trim().slice(0, 60) || `page-${index + 1}`;
+        zip.file(`${String(index + 1).padStart(2, "0")}-${safeTitle}.png`, blob);
+        rendered += 1;
+        setEditorMessage(`전체 PNG 준비 중 · ${index + 1}/${exportPages.length}`);
+      }
+      if (rendered === 0) throw new Error("내보낼 페이지가 없습니다.");
+      const archive = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+      const url = URL.createObjectURL(archive);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `canvas-pages-${Date.now()}.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setEditorMessage(`${rendered}개 페이지를 최신 캔버스 상태로 내보냈습니다.`);
+    } catch (error) {
+      setEditorMessage(error instanceof Error ? error.message : "전체 페이지를 내보내지 못했습니다.");
+    } finally {
+      setExportingPages(false);
+    }
+  }, [aspect, canvasH, canvasW, currentPageId, layers, onDownloadAllPages, pages]);
 
   const loadHistory = useCallback(async () => {
     if (!cutId) return;
@@ -2897,6 +3382,17 @@ export default function CanvasEditor({
         return;
       }
       if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+        if (!selectedBubbleId && !activeLayerId && (event.key === "ArrowLeft" || event.key === "ArrowRight") && onSelectPage) {
+          const ordered = [...pages].sort((left, right) => left.order - right.order);
+          const pageIndex = ordered.findIndex((page) => page.id === currentPageId);
+          const targetIndex = event.key === "ArrowLeft" ? pageIndex - 1 : pageIndex + 1;
+          const target = ordered[targetIndex];
+          if (!target) return;
+          event.preventDefault();
+          if (dirty && !window.confirm("현재 페이지에 저장하지 않은 변경 사항이 있습니다. 저장하지 않고 이동할까요?")) return;
+          void onSelectPage(target.id);
+          return;
+        }
         const amount = event.shiftKey ? 10 : 1;
         const dx = event.key === "ArrowLeft" ? -amount : event.key === "ArrowRight" ? amount : 0;
         const dy = event.key === "ArrowUp" ? -amount : event.key === "ArrowDown" ? amount : 0;
@@ -2922,7 +3418,7 @@ export default function CanvasEditor({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeLayerId, deleteBubble, deleteLayer, duplicateLayer, handleSave, saveUndo, saving, selectedBubbleId]);
+  }, [activeLayerId, currentPageId, deleteBubble, deleteLayer, dirty, duplicateLayer, handleSave, onSelectPage, pages, saveUndo, saving, selectedBubbleId]);
 
   const closeEditor = () => {
     if (dirty && !window.confirm("저장하지 않은 변경 사항이 있습니다. 편집을 종료할까요?")) return;
@@ -3075,8 +3571,10 @@ export default function CanvasEditor({
                   ))}
                 </div>
                 <div className={styles.pageDownloads}>
-                  <button onClick={() => void onDownloadCurrentPage?.()} disabled={!onDownloadCurrentPage || !currentPage?.imageUrl} title="현재 페이지 PNG"><LuDownload size={13} /> PNG</button>
-                  <button onClick={() => void onDownloadAllPages?.()} disabled={!onDownloadAllPages} title="전체 페이지 ZIP"><LuDownload size={13} /> ZIP</button>
+                  <button onClick={() => void downloadCanvasPng()} disabled={layers.length === 0} title="현재 페이지 PNG"><LuDownload size={13} /> PNG</button>
+                  <button onClick={() => void downloadAllCanvasPages()} disabled={exportingPages || orderedPages.length === 0} title="전체 페이지 ZIP">
+                    {exportingPages ? <LuLoaderCircle className={styles.spin} size={13} /> : <LuDownload size={13} />} ZIP
+                  </button>
                 </div>
               </>
             )}
@@ -3139,9 +3637,18 @@ export default function CanvasEditor({
               >
                 <LuCrop size={16} /> 크롭
               </button>
-              <button className={styles.toolBtn} onClick={handleRemoveBackground} title="배경제거">
-                <LuEraser size={16} /> 배경제거
+              <button
+                className={styles.toolBtn}
+                onClick={() => void handleRemoveBackground()}
+                disabled={cutoutLoading || !activeLayer?.canvas || activeLayer?.locked}
+                title={cutoutConfigured === false ? "remove.bg API 연결 필요" : "선택 이미지의 배경 제거"}
+              >
+                {cutoutLoading ? <LuLoaderCircle className={styles.spin} size={16} /> : <LuEraser size={16} />} 누끼
+                <CreditCostBadge credits={AI_CREDIT_COSTS.cutout} />
               </button>
+              {cutoutConfigured !== true && (
+                <span className={styles.apiStatus}>{cutoutConfigured === null ? "API 확인 중" : "API 연결 필요"}</span>
+              )}
             </div>
             <div className={styles.toolGroup}>
               <button className={styles.toolBtn} onClick={() => imageInputRef.current?.click()} title="이미지 객체 추가">
@@ -3172,6 +3679,19 @@ export default function CanvasEditor({
                 {BRUSH_STYLES.map((style) => <option key={style.id} value={style.id}>{style.label}</option>)}
               </select>
               <input type="color" value={brushColor} onChange={(e) => setBrushColor(e.target.value)} className={styles.brushColor} title="펜 색상" />
+              <div className={styles.brushPalette} aria-label="펜 빠른 색상">
+                {BRUSH_COLORS.map((color) => (
+                  <button
+                    type="button"
+                    key={color}
+                    className={brushColor.toLowerCase() === color ? styles.brushPaletteActive : ""}
+                    style={{ backgroundColor: color }}
+                    onClick={() => setBrushColor(color)}
+                    title={color}
+                    aria-label={`펜 색상 ${color}`}
+                  />
+                ))}
+              </div>
               <input
                 className={styles.colorHex}
                 value={brushColor.slice(1).toUpperCase()}
@@ -3338,8 +3858,8 @@ export default function CanvasEditor({
               </button>
             </div>
             <div className={styles.toolGroup} aria-label="툰 도구">
-              <button className={styles.toolBtn} onClick={() => addBubblePreset("watermark")} title="워터마크"><LuStamp size={16} /> 워터마크</button>
-              <button className={styles.toolBtn} onClick={() => addBubblePreset("caption")} title="캡션·내레이션"><LuCaptions size={16} /> 캡션</button>
+              <button className={`${styles.toolBtn} ${watermarkOpen ? styles.toolActive : ""}`} onClick={() => setWatermarkOpen(true)} title="워터마크 설정"><LuStamp size={16} /> 워터마크</button>
+              <button className={`${styles.toolBtn} ${captionOpen ? styles.toolActive : ""}`} onClick={() => setCaptionOpen(true)} title="캡션·내레이션 설정"><LuCaptions size={16} /> 캡션</button>
               <div className={styles.popupAnchor}>
                 <button className={`${styles.toolBtn} ${sfxOpen ? styles.toolActive : ""}`} onClick={() => setSfxOpen((value) => !value)} title="효과음 라이브러리"><LuZap size={16} /> 효과음</button>
                 {sfxOpen && (
@@ -3389,26 +3909,50 @@ export default function CanvasEditor({
               </div>
             </div>
             <div className={styles.toolGroup} style={{ position: "relative" }}>
-              <button className={`${styles.toolBtn} ${ocrOpen ? styles.toolActive : ""}`} onClick={() => ocrOpen ? setOcrOpen(false) : void extractCanvasText()} disabled={ocrLoading} title="이미지 글자 추출">
+              <button className={`${styles.toolBtn} ${ocrOpen ? styles.toolActive : ""}`} onClick={toggleOcrPanel} disabled={ocrLoading} title="이미지 글자 추출">
                 {ocrLoading ? <LuLoaderCircle className={styles.spin} size={16} /> : <LuScanText size={16} />} 텍스트 추출
-                <CreditCostBadge credits={AI_CREDIT_COSTS.ocr} />
               </button>
               {ocrOpen && (
                 <div className={`${styles.bubblePopup} ${styles.aiToolPopup}`}>
-                  <strong>추출한 텍스트</strong>
+                  <strong>이미지 글자 추출</strong>
+                  <div className={styles.segmentedControl} aria-label="글자 추출 영역">
+                    {([["all", "전체"], ["rectangle", "사각형"], ["freehand", "자유형식"]] as const).map(([mode, label]) => (
+                      <button
+                        type="button"
+                        key={mode}
+                        className={ocrRegionMode === mode ? styles.segmentActive : ""}
+                        onClick={() => selectOcrRegionMode(mode)}
+                      >{label}</button>
+                    ))}
+                  </div>
+                  {ocrRegionMode !== "all" && (
+                    <div className={styles.ocrSelectionStatus}>
+                      <span>{aiMaskCanvasRef.current ? "영역 선택됨" : ocrRegionMode === "rectangle" ? "캔버스에서 사각형 선택" : "캔버스에 추출 영역 그리기"}</span>
+                      <button type="button" onClick={() => selectOcrRegionMode(ocrRegionMode)}>다시 선택</button>
+                    </div>
+                  )}
+                  <button className={styles.aiToolAction} onClick={() => void extractCanvasText()} disabled={ocrLoading || (ocrRegionMode !== "all" && !aiMaskCanvasRef.current)}>
+                    {ocrLoading ? <LuLoaderCircle className={styles.spin} /> : <LuScanText />} 글자 추출
+                    <CreditCostBadge credits={AI_CREDIT_COSTS.ocr} />
+                  </button>
                   {ocrLoading ? (
                     <div className={styles.aiToolLoading}><LuLoaderCircle className={styles.spin} /> 분석 중</div>
-                  ) : (
+                  ) : ocrText ? (
                     <>
+                      <strong>추출 결과</strong>
                       <textarea value={ocrText} onChange={(event) => setOcrText(event.target.value)} rows={7} placeholder="추출된 글자가 여기에 표시됩니다." />
                       <button className={styles.aiToolAction} onClick={addExtractedText} disabled={!ocrText.trim()}><LuType size={14} /> 텍스트 객체로 추가</button>
                     </>
-                  )}
+                  ) : null}
                 </div>
               )}
             </div>
             <div className={styles.toolGroup} style={{ position: "relative" }}>
-              <button className={`${styles.toolBtn} ${redrawOpen ? styles.toolActive : ""}`} onClick={() => setRedrawOpen((value) => !value)} title="현재 컷 AI 다시 그리기">
+              <button className={`${styles.toolBtn} ${redrawOpen ? styles.toolActive : ""}`} onClick={() => {
+                setRedrawOpen((value) => !value);
+                setOcrOpen(false);
+                setRegionSelectionPurpose("redraw");
+              }} title="현재 컷 AI 다시 그리기">
                 {redrawLoading || redrawJobId ? <LuLoaderCircle className={styles.spin} size={16} /> : <LuWandSparkles size={16} />} {redrawJobId ? `AI ${redrawProgress}%` : "AI 다시 그리기"}
               </button>
               {redrawOpen && (
@@ -3431,7 +3975,10 @@ export default function CanvasEditor({
                         className={redrawRegionMode === mode ? styles.segmentActive : ""}
                         onClick={() => {
                           setRedrawRegionMode(mode);
+                          setRegionSelectionPurpose("redraw");
                           if (mode === "all" || mode === "auto") {
+                            aiMaskCanvasRef.current = null;
+                            setMaskRevision((value) => value + 1);
                             setTool("move");
                             setAiRegionMode(false);
                             setRedrawUseRegion(mode === "auto");
@@ -3472,20 +4019,6 @@ export default function CanvasEditor({
                   </button>
                 </div>
               )}
-            </div>
-            <div className={styles.toolGroup}>
-              <label className={styles.opacityLabel}>
-                민감도
-                <input
-                  type="range"
-                  min={200}
-                  max={255}
-                  value={bgThreshold}
-                  onChange={(e) => setBgThreshold(Number(e.target.value))}
-                  className={styles.opacitySlider}
-                />
-                <span className={styles.opacityValue}>{bgThreshold}</span>
-              </label>
             </div>
             <div className={styles.toolGroup}>
               <button
@@ -3998,15 +4531,39 @@ export default function CanvasEditor({
                   <LuPlus size={10} />
                 </button>
                 <div
-                  className={`${styles.layerItem} ${activeLayerId === layer.id ? styles.layerActive : ""} ${layer.groupId ? styles.layerGrouped : ""}`}
+                  className={`${styles.layerItem} ${activeLayerId === layer.id ? styles.layerActive : ""} ${layer.groupId ? styles.layerGrouped : ""} ${layerDropTargetId === layer.id ? styles.layerDropTarget : ""}`}
                   onClick={() => setActiveLayerId(layer.id)}
+                  onDragEnter={(event) => {
+                    if (event.dataTransfer.types.includes("application/x-canvas-layer")) setLayerDropTargetId(layer.id);
+                  }}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     e.preventDefault();
+                    const sourceId = e.dataTransfer.getData("application/x-canvas-layer");
+                    if (sourceId) {
+                      reorderLayer(sourceId, layer.id);
+                      return;
+                    }
                     const url = e.dataTransfer.getData("text/plain");
                     if (url) handleDropOnLayer(layer.id, url);
+                    setLayerDropTargetId(null);
                   }}
                 >
+                  <button
+                    type="button"
+                    className={styles.layerDragHandle}
+                    draggable
+                    onClick={(event) => event.stopPropagation()}
+                    onDragStart={(event) => {
+                      event.stopPropagation();
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("application/x-canvas-layer", layer.id);
+                      setLayerDropTargetId(null);
+                    }}
+                    onDragEnd={() => setLayerDropTargetId(null)}
+                    title="드래그해 레이어 순서 변경"
+                    aria-label={`${layer.name || "레이어"} 순서 변경`}
+                  ><LuGripVertical size={12} /></button>
                   <input
                     className={styles.layerSelect}
                     type="checkbox"
@@ -4146,7 +4703,7 @@ export default function CanvasEditor({
 
           <button
             className={styles.saveBtn}
-            onClick={handleSave}
+            onClick={() => void handleSave()}
             disabled={saving}
           >
             <LuSave size={16} />
@@ -4217,6 +4774,136 @@ export default function CanvasEditor({
           </div>
         </div>
       </div>
+      {watermarkOpen && (
+        <div className={styles.presetBackdrop} role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !watermarkApplying) setWatermarkOpen(false);
+        }}>
+          <section className={styles.presetDialog} role="dialog" aria-modal="true" aria-labelledby="watermark-settings-title">
+            <header className={styles.historyHeader}>
+              <div><span>WATERMARK</span><h2 id="watermark-settings-title">워터마크 설정</h2></div>
+              <button onClick={() => setWatermarkOpen(false)} disabled={watermarkApplying} title="닫기"><LuX size={17} /></button>
+            </header>
+            <div className={styles.presetBody}>
+              <div className={styles.presetPreviewColumn}>
+                <div className={styles.watermarkPreview}>
+                  <span
+                    className={styles[`watermark_${watermarkSettings.position.replace("-", "_")}`]}
+                    style={{
+                      color: watermarkSettings.textColor,
+                      fontFamily: watermarkSettings.fontFamily,
+                      fontSize: `${Math.max(11, Math.min(30, watermarkSettings.fontSize * 0.72))}px`,
+                      fontWeight: watermarkSettings.fontWeight,
+                      WebkitTextStroke: watermarkSettings.outlineWidth > 0
+                        ? `${Math.min(3, watermarkSettings.outlineWidth)}px #000000`
+                        : undefined,
+                    }}
+                  >{watermarkSettings.text || "워터마크"}</span>
+                </div>
+                <div className={styles.positionGrid} aria-label="워터마크 위치">
+                  {([
+                    ["top-left", "왼쪽 위", LuArrowUpLeft],
+                    ["top-right", "오른쪽 위", LuArrowUpRight],
+                    ["bottom-left", "왼쪽 아래", LuArrowDownLeft],
+                    ["bottom-right", "오른쪽 아래", LuArrowDownRight],
+                  ] as const).map(([position, label, Icon]) => (
+                    <button
+                      type="button"
+                      key={position}
+                      className={watermarkSettings.position === position ? styles.positionActive : ""}
+                      onClick={() => setWatermarkSettings((current) => ({ ...current, position: position as WatermarkPosition }))}
+                      aria-label={label}
+                      title={label}
+                    ><Icon size={17} /></button>
+                  ))}
+                </div>
+              </div>
+              <div className={styles.presetFields}>
+                <label className={styles.presetFieldWide}><span>텍스트</span><input value={watermarkSettings.text} maxLength={120} onChange={(event) => setWatermarkSettings((current) => ({ ...current, text: event.target.value }))} /></label>
+                <label className={styles.presetFieldWide}><span>글꼴</span><select value={watermarkSettings.fontFamily} onChange={(event) => setWatermarkSettings((current) => ({ ...current, fontFamily: event.target.value }))}>{BUBBLE_FONT_FAMILIES.map((font) => <option key={font.id} value={font.id}>{font.label}</option>)}</select></label>
+                <div className={styles.presetFieldWide}>
+                  <span>굵기</span>
+                  <div className={styles.segmentedControl}>
+                    <button type="button" className={watermarkSettings.fontWeight === "normal" ? styles.segmentActive : ""} onClick={() => setWatermarkSettings((current) => ({ ...current, fontWeight: "normal" }))}>보통</button>
+                    <button type="button" className={watermarkSettings.fontWeight === "bold" ? styles.segmentActive : ""} onClick={() => setWatermarkSettings((current) => ({ ...current, fontWeight: "bold" }))}>굵게</button>
+                  </div>
+                </div>
+                <label><span>색상</span><input type="color" value={watermarkSettings.textColor} onChange={(event) => setWatermarkSettings((current) => ({ ...current, textColor: event.target.value }))} /></label>
+                <label><span>크기</span><input type="number" min={10} max={160} value={watermarkSettings.fontSize} onChange={(event) => setWatermarkSettings((current) => ({ ...current, fontSize: Number(event.target.value) }))} /></label>
+                <label><span>여백</span><input type="number" min={0} max={320} value={watermarkSettings.margin} onChange={(event) => setWatermarkSettings((current) => ({ ...current, margin: Number(event.target.value) }))} /></label>
+                <label><span>외곽선</span><input type="number" min={0} max={16} value={watermarkSettings.outlineWidth} onChange={(event) => setWatermarkSettings((current) => ({ ...current, outlineWidth: Number(event.target.value) }))} /></label>
+              </div>
+            </div>
+            <div className={styles.presetScope}>
+              <span>적용 범위</span>
+              <div className={styles.segmentedControl}>
+                {([["current", "현재 컷"], ["all", "전체 컷"], ["range", "범위"]] as const).map(([scope, label]) => (
+                  <button type="button" key={scope} className={watermarkScope === scope ? styles.segmentActive : ""} onClick={() => setWatermarkScope(scope)}>{label}</button>
+                ))}
+              </div>
+              {watermarkScope === "range" && (
+                <div className={styles.rangeFields}>
+                  <label><span>시작</span><input type="number" min={1} max={Math.max(1, orderedPages.length)} value={watermarkRange.start} onChange={(event) => setWatermarkRange((current) => ({ ...current, start: Math.max(1, Number(event.target.value) || 1) }))} /></label>
+                  <label><span>끝</span><input type="number" min={watermarkRange.start} max={Math.max(1, orderedPages.length)} value={watermarkRange.end} onChange={(event) => setWatermarkRange((current) => ({ ...current, end: Math.max(current.start, Number(event.target.value) || current.start) }))} /></label>
+                </div>
+              )}
+            </div>
+            <footer className={styles.presetActions}>
+              <button className={styles.presetDelete} onClick={() => void deleteWatermarks()} disabled={watermarkApplying}><LuTrash2 size={14} /> 삭제</button>
+              <span />
+              <button onClick={() => setWatermarkOpen(false)} disabled={watermarkApplying}>취소</button>
+              <button className={styles.presetPrimary} onClick={() => void applyWatermarkSettings()} disabled={watermarkApplying || !watermarkSettings.text.trim()}>
+                {watermarkApplying ? <LuLoaderCircle className={styles.spin} /> : <LuCheck />} 적용
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
+      {captionOpen && (
+        <div className={styles.presetBackdrop} role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !captionApplying) setCaptionOpen(false);
+        }}>
+          <section className={`${styles.presetDialog} ${styles.captionDialog}`} role="dialog" aria-modal="true" aria-labelledby="caption-settings-title">
+            <header className={styles.historyHeader}>
+              <div><span>CAPTION</span><h2 id="caption-settings-title">캡션·내레이션 설정</h2></div>
+              <button onClick={() => setCaptionOpen(false)} disabled={captionApplying} title="닫기"><LuX size={17} /></button>
+            </header>
+            <div className={styles.presetBody}>
+              <div className={styles.presetPreviewColumn}>
+                <div className={styles.captionPreview} style={{ fontFamily: captionSettings.fontFamily, fontWeight: captionSettings.fontWeight, color: captionSettings.textColor }}>
+                  <span style={{ fontSize: `${Math.max(12, Math.min(26, captionSettings.fontSize * 0.48))}px` }}>상단 캡션</span>
+                  <span style={{ fontSize: `${Math.max(12, Math.min(26, captionSettings.fontSize * 0.48))}px` }}>하단 캡션</span>
+                </div>
+                <div className={styles.captionAddButtons}>
+                  <button type="button" onClick={() => addCaptionLocally("top")}><LuPanelTop size={15} /> 상단 추가</button>
+                  <button type="button" onClick={() => addCaptionLocally("bottom")}><LuPanelBottom size={15} /> 하단 추가</button>
+                </div>
+              </div>
+              <div className={styles.presetFields}>
+                <label className={styles.presetFieldWide}><span>글꼴</span><select value={captionSettings.fontFamily} onChange={(event) => setCaptionSettings((current) => ({ ...current, fontFamily: event.target.value }))}>{BUBBLE_FONT_FAMILIES.map((font) => <option key={font.id} value={font.id}>{font.label}</option>)}</select></label>
+                <div className={styles.presetFieldWide}>
+                  <span>굵기</span>
+                  <div className={styles.segmentedControl}>
+                    <button type="button" className={captionSettings.fontWeight === "normal" ? styles.segmentActive : ""} onClick={() => setCaptionSettings((current) => ({ ...current, fontWeight: "normal" }))}>보통</button>
+                    <button type="button" className={captionSettings.fontWeight === "bold" ? styles.segmentActive : ""} onClick={() => setCaptionSettings((current) => ({ ...current, fontWeight: "bold" }))}>굵게</button>
+                  </div>
+                </div>
+                <label><span>색상</span><input type="color" value={captionSettings.textColor} onChange={(event) => setCaptionSettings((current) => ({ ...current, textColor: event.target.value }))} /></label>
+                <label><span>크기</span><input type="number" min={12} max={180} value={captionSettings.fontSize} onChange={(event) => setCaptionSettings((current) => ({ ...current, fontSize: Number(event.target.value) }))} /></label>
+                <label className={styles.presetFieldWide}><span>가장자리 여백</span><input type="range" min={0} max={360} value={captionSettings.margin} onChange={(event) => setCaptionSettings((current) => ({ ...current, margin: Number(event.target.value) }))} /><b>{captionSettings.margin}px</b></label>
+              </div>
+            </div>
+            <div className={styles.captionScopeNote}>현재 프로젝트에서 이미 만든 모든 캡션의 서식에 적용됩니다.</div>
+            <footer className={styles.presetActions}>
+              <span />
+              <span />
+              <button onClick={() => setCaptionOpen(false)} disabled={captionApplying}>취소</button>
+              <button className={styles.presetPrimary} onClick={() => void applyCaptionSettings()} disabled={captionApplying}>
+                {captionApplying ? <LuLoaderCircle className={styles.spin} /> : <LuCheck />} 전체 캡션에 적용
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
       {historyOpen && (
         <div className={styles.historyBackdrop} role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget && !restoringVersionId) setHistoryOpen(false);

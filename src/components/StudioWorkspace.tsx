@@ -1914,6 +1914,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
             title: cut.title,
             imageUrl: cut.imageUrl,
             thumbnailUrl: cut.thumbnailUrl,
+            canvas: cut.canvas,
           }))}
           currentPageId={selectedCut.id}
           onSelectPage={selectCut}
@@ -1924,8 +1925,8 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
           coverPageId={project.coverCutId}
           onRenamePage={renameCut}
           onSetCoverPage={setCoverCut}
-          onDownloadCurrentPage={downloadCurrentCut}
           onDownloadAllPages={downloadAllCuts}
+          onCanvasBatchChange={async () => { await loadProject(project.id); }}
           onClose={() => setEditingCut(false)}
           onSave={() => {
             void loadProject(project.id);
