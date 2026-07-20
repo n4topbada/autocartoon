@@ -4,7 +4,7 @@
     {
       "name": "dev",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev"],
+      "runtimeArgs": ["scripts/dev.mjs", "-H", "127.0.0.1"],
       "port": 3000,
       "autoPort": true
     }

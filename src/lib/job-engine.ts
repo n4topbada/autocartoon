@@ -111,7 +111,8 @@ export async function dispatchImageJob(jobId: string): Promise<{ runId: string }
   void runImageGenerationJob(jobId).catch((error) =>
     logError("generation.image.inline_failed", "Inline image job failed", error, { jobId })
   );
-  return { runId: "inline" };
+  // GenerationJob.runId는 @unique라 고정 문자열을 쓰면 두 번째 잡부터 생성이 실패한다.
+  return { runId: `inline-${jobId}` };
 }
 
 export async function dispatchVideoJob(jobId: string): Promise<{ runId: string }> {
@@ -124,7 +125,7 @@ export async function dispatchVideoJob(jobId: string): Promise<{ runId: string }
   void runVideoInline(jobId).catch((error) =>
     logError("generation.video.inline_failed", "Inline video job failed", error, { jobId })
   );
-  return { runId: "inline" };
+  return { runId: `inline-${jobId}` };
 }
 
 /** 영상 폴링 재큐(Cloud Tasks 전용). 다음 폴을 delaySeconds 뒤로 예약한다. */

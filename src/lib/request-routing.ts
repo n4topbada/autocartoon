@@ -1,5 +1,7 @@
 const PUBLIC_PAGE_ROUTES = ["/login", "/verify", "/terms", "/privacy", "/refund"];
-const PUBLIC_API_ROUTES = ["/api/auth", "/api/media", "/api/tasks"];
+// /api/dev is a local-only E2E fixture path: it self-guards with NODE_ENV,
+// DEV_E2E_ROUTE, and a loopback client check, returning 404 otherwise.
+const PUBLIC_API_ROUTES = ["/api/auth", "/api/media", "/api/tasks", "/api/dev"];
 
 function matchesRoute(pathname: string, route: string): boolean {
   return pathname === route || pathname.startsWith(`${route}/`);

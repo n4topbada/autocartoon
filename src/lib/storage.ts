@@ -110,6 +110,13 @@ const MIME_TO_EXT: Record<string, string> = {
 function extFor(mimeType: string, fallback = ".png"): string {
   return MIME_TO_EXT[mimeType] || fallback;
 }
+const EXT_TO_MIME: Record<string, string> = Object.fromEntries(
+  Object.entries(MIME_TO_EXT).map(([mime, ext]) => [ext, mime])
+);
+function mimeForExt(objectPath: string): string | undefined {
+  const ext = path.extname(objectPath).toLowerCase();
+  return EXT_TO_MIME[ext] || (ext === ".jpeg" ? "image/jpeg" : undefined);
+}
 
 /** 소유자 스코프. userId 문자열이면 개인 소유, "public"이면 공용. */
 export type OwnerScope = string | "public" | undefined;
@@ -343,7 +350,8 @@ export async function statObject(
   if (objectPath) {
     try {
       const info = await stat(localUploadPath(objectPath));
-      return { exists: true, sizeBytes: info.size };
+      // 로컬 파일명 확장자는 업로드 티켓의 mimeType에서 만들어지므로 역매핑이 원본과 일치한다.
+      return { exists: true, sizeBytes: info.size, contentType: mimeForExt(objectPath) };
     } catch {
       return { exists: false };
     }

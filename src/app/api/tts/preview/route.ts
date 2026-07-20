@@ -23,20 +23,29 @@ export async function POST(req: NextRequest) {
       { units: AI_CREDIT_COSTS.tts, source: "tts" },
       async () => {
         const accessToken = await getGoogleAccessToken();
-        const response = await fetch("https://texttospeech.googleapis.com/v1/text:synthesize", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            input: { text },
-            voice: { languageCode: "ko-KR", name: voice.voiceId },
-            audioConfig: { audioEncoding: "MP3" },
-          }),
-          cache: "no-store",
-          signal: AbortSignal.timeout(50_000),
-        });
+        const synthesize = (extraHeaders: Record<string, string>) =>
+          fetch("https://texttospeech.googleapis.com/v1/text:synthesize", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+              ...extraHeaders,
+            },
+            body: JSON.stringify({
+              input: { text },
+              voice: { languageCode: "ko-KR", name: voice.voiceId },
+              audioConfig: { audioEncoding: "MP3" },
+            }),
+            cache: "no-store",
+            signal: AbortSignal.timeout(50_000),
+          });
+        let response = await synthesize({});
+        // 사용자 ADC(로컬 gcloud)는 quota project 헤더가 없으면 403이 난다.
+        // Cloud Run 서비스 계정 경로는 기존과 동일하게 헤더 없이 성공한다.
+        const quotaProject = process.env.GOOGLE_CLOUD_PROJECT;
+        if (response.status === 403 && quotaProject) {
+          response = await synthesize({ "x-goog-user-project": quotaProject });
+        }
         if (!response.ok) {
           const detail = await response.text();
           console.error("Google Cloud TTS error:", response.status, detail.slice(0, 1_000));
