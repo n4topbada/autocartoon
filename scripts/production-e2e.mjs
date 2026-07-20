@@ -12,6 +12,10 @@ const runId = process.env.E2E_RUN_ID || new Date().toISOString().replace(/\D/g, 
 const reportPath = process.env.E2E_REPORT || path.join(process.cwd(), `.e2e-${runId}.json`);
 const imageTimeoutMs = Number(process.env.E2E_IMAGE_TIMEOUT_MS || 12 * 60_000);
 const videoTimeoutMs = Number(process.env.E2E_VIDEO_TIMEOUT_MS || 40 * 60_000);
+// local: GCS_BUCKET 미설정 서버(정적 /uploads 폴백, 서명 리다이렉트 없음) 대상 실행.
+const storageMode = process.env.E2E_STORAGE_MODE === "local" ? "local" : "gcs";
+const expectGoogleOauth = process.env.E2E_EXPECT_GOOGLE_OAUTH !== "false";
+const expectKakaopayReady = process.env.E2E_EXPECT_KAKAOPAY !== "false";
 
 if (process.env.E2E_ALLOW_PAID !== "true") {
   throw new Error("E2E_ALLOW_PAID=true is required because this runner invokes paid production AI services.");
@@ -237,19 +241,43 @@ async function runImageGeneration(name, body, expectedCost, options = {}) {
   });
 }
 
-async function uploadWithTicket(ticket, buffer, mimeType, filename) {
+async function uploadWithTicket(ticket, buffer, mimeType, filename, client = primary) {
   const form = new FormData();
   for (const [key, value] of Object.entries(ticket.fields || {})) form.append(key, String(value));
   form.append("file", new Blob([buffer], { type: mimeType }), filename);
-  const response = await fetch(ticket.url.startsWith("http") ? ticket.url : `${baseUrl}${ticket.url}`, {
+  if (ticket.url.startsWith("http")) {
+    const response = await fetch(ticket.url, {
+      method: "POST",
+      body: form,
+      redirect: "manual",
+      signal: AbortSignal.timeout(120_000),
+    });
+    const body = await response.text();
+    assert([200, 201, 204].includes(response.status), `Direct upload failed with HTTP ${response.status}`, body);
+    return { status: response.status, ref: ticket.ref, objectPath: ticket.objectPath };
+  }
+  // 로컬 티켓은 앱 자체 업로드 경로라 세션 쿠키가 필요하다.
+  const response = await client.request(ticket.url, {
     method: "POST",
     body: form,
-    redirect: "manual",
-    signal: AbortSignal.timeout(120_000),
+    timeoutMs: 120_000,
   });
-  const body = await response.text();
-  assert([200, 201, 204].includes(response.status), `Direct upload failed with HTTP ${response.status}`, body);
+  assert([200, 201, 204].includes(response.status), `Direct upload failed with HTTP ${response.status}`, response.data);
   return { status: response.status, ref: ticket.ref, objectPath: ticket.objectPath };
+}
+
+// GCS 모드: 미디어 게이트웨이 302 → 서명 URL 다운로드. 로컬 모드: 정적 200 바이트.
+async function fetchArtifactBytes(client, resource, timeoutMs = 180_000) {
+  const response = await client.request(resource, { binary: true, redirect: "manual", timeoutMs });
+  if ([302, 307].includes(response.status)) {
+    const signedUrl = response.headers.location;
+    assert(signedUrl, "Media gateway did not return a redirect location", response.headers);
+    const download = await fetch(new URL(signedUrl, baseUrl), { signal: AbortSignal.timeout(timeoutMs) });
+    assert(download.ok, `Signed media download failed with HTTP ${download.status}`);
+    return { via: "signed", signedUrl, buffer: Buffer.from(await download.arrayBuffer()) };
+  }
+  assert(response.status === 200, `Artifact fetch failed with HTTP ${response.status}`, response.headers);
+  return { via: "static", signedUrl: null, buffer: response.data };
 }
 
 const robotBuffer = await readFile(path.join(process.cwd(), "public", "robot-wony.png"));
@@ -295,8 +323,12 @@ await check("Public pages and anonymous auth boundary", async () => {
 await check("Google OAuth entry point", async () => {
   const google = expectStatus(await anonymous.request("/api/auth/google?returnTo=%2Fcredits"), 302, 307);
   const googleLocation = google.headers.location || "";
-  assert(googleLocation.includes("accounts.google.com"), "Google OAuth is not configured", { location: googleLocation });
-  return { googleLocation };
+  if (expectGoogleOauth) {
+    assert(googleLocation.includes("accounts.google.com"), "Google OAuth is not configured", { location: googleLocation });
+  } else {
+    assert(googleLocation.includes("google=not_configured"), "Unconfigured Google OAuth should redirect back to login", { location: googleLocation });
+  }
+  return { googleLocation, expectGoogleOauth };
 });
 
 await check("Kakao OAuth entry point", async () => {
@@ -713,17 +745,11 @@ if (editResult) {
 }
 
 await check("Opaque manual mask preserves protected pixels", async () => {
-  const gateway = expectStatus(await primary.request(requireState("editArtifactUrl"), {
-    redirect: "manual",
-    timeoutMs: 90_000,
-  }), 302, 307);
-  const signedUrl = gateway.headers.location;
-  assert(signedUrl, "Media gateway did not return a signed artifact URL", gateway.headers);
-  const downloaded = await fetch(new URL(signedUrl, baseUrl), {
-    signal: AbortSignal.timeout(90_000),
-  });
-  assert(downloaded.ok, `Signed edit artifact download failed with HTTP ${downloaded.status}`);
-  const resultBuffer = Buffer.from(await downloaded.arrayBuffer());
+  const fetched = await fetchArtifactBytes(primary, requireState("editArtifactUrl"), 90_000);
+  if (storageMode === "gcs") {
+    assert(fetched.via === "signed", "Media gateway did not return a signed artifact URL", fetched);
+  }
+  const resultBuffer = fetched.buffer;
   const source = await sharp(robotBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const result = await sharp(resultBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   assert(
@@ -798,6 +824,10 @@ await check("Generated image metadata, content slots, and IDOR boundary", async 
 });
 
 await check("Private media gateway blocks another user", async () => {
+  if (storageMode === "local") {
+    // 로컬 폴백은 정적 /uploads 공개 서빙이라 사용자별 ACL이 없다. GCS 모드 전용 검증.
+    return { skipped: true, reason: "local storage mode has no per-user media ACL" };
+  }
   const resource = requireState("sceneArtifactUrl");
   const response = await secondary.request(resource);
   expectStatus(response, 403);
@@ -836,13 +866,11 @@ await check("Board post, public media, likes, comments, and reports", async () =
   const detail = expectStatus(await secondary.request(`/api/board/${post.data.id}`), 200);
   assert(detail.data.images?.length === 1, "Board post does not expose its attached image", detail.data);
   assert(detail.data.comments?.length === 1, "Board post does not expose its comment", detail.data);
-  const publicMedia = await anonymous.request(requireState("sceneArtifactUrl"));
-  expectStatus(publicMedia, 302);
-  const signedUrl = publicMedia.headers.location;
-  assert(signedUrl?.startsWith("https://storage.googleapis.com/"), "Media gateway did not return a signed GCS URL", publicMedia.headers);
-  const signedResponse = await fetch(signedUrl, { signal: AbortSignal.timeout(120_000) });
-  assert(signedResponse.ok, `Signed media download failed with HTTP ${signedResponse.status}`);
-  const mediaBytes = (await signedResponse.arrayBuffer()).byteLength;
+  const publicMedia = await fetchArtifactBytes(anonymous, requireState("sceneArtifactUrl"), 120_000);
+  if (storageMode === "gcs") {
+    assert(publicMedia.signedUrl?.startsWith("https://storage.googleapis.com/"), "Media gateway did not return a signed GCS URL", publicMedia);
+  }
+  const mediaBytes = publicMedia.buffer.byteLength;
   assert(mediaBytes > 1_000, "Signed media response is unexpectedly small", { mediaBytes });
   return { postId: post.data.id, commentId: comment.data.id, reportOne: reportOne.data, mediaBytes };
 });
@@ -874,11 +902,19 @@ await check("Deprecated paid endpoints do not charge", async () => {
 
 await check("KakaoPay ready and cancel lifecycle", async () => {
   const before = await credits();
-  const ready = expectStatus(await primary.request("/api/payments/kakao/ready", {
+  const readyResponse = await primary.request("/api/payments/kakao/ready", {
     method: "POST",
     json: { productCode: "light" },
     timeoutMs: 70_000,
-  }), 200);
+  });
+  if (!expectKakaopayReady && readyResponse.status !== 200) {
+    // 카카오 앱 도메인 미등록 등 외부 설정 대기 상태: 실패해도 과금이 없어야 한다.
+    assert([400, 502, 503].includes(readyResponse.status), `Unexpected KakaoPay ready failure HTTP ${readyResponse.status}`, readyResponse.data);
+    const after = await credits();
+    assert(after.balance === before.balance, "Failed KakaoPay ready changed the credit balance", { before: before.balance, after: after.balance });
+    return { providerConfigured: false, status: readyResponse.status, detail: readyResponse.data };
+  }
+  const ready = expectStatus(readyResponse, 200);
   assert(ready.data.paymentId && ready.data.redirectUrl, "KakaoPay ready response is incomplete", ready.data);
   state.paymentId = ready.data.paymentId;
   expectStatus(await primary.request(`/api/payments/kakao/cancel?order=${encodeURIComponent(ready.data.paymentId)}`), 302, 307);
@@ -945,10 +981,11 @@ const videoResult = await check("Vertex Veo video generation", async () => {
 
 await check("Shorts GCS upload and confirmation", async () => {
   assert(videoResult, "Veo result is required for the shorts upload test");
-  const gateway = expectStatus(await primary.request(requireState("videoArtifactUrl")), 302);
-  const download = await fetch(gateway.headers.location, { signal: AbortSignal.timeout(180_000) });
-  assert(download.ok, `Could not download the generated video: HTTP ${download.status}`);
-  const videoBuffer = Buffer.from(await download.arrayBuffer());
+  const fetchedVideo = await fetchArtifactBytes(primary, requireState("videoArtifactUrl"), 180_000);
+  if (storageMode === "gcs") {
+    assert(fetchedVideo.via === "signed", "Video artifact should redirect through the media gateway", fetchedVideo);
+  }
+  const videoBuffer = fetchedVideo.buffer;
   assert(videoBuffer.length > 10_000, "Generated video is unexpectedly small", { bytes: videoBuffer.length });
   const ticket = expectStatus(await primary.request("/api/shorts/upload", {
     method: "POST",
