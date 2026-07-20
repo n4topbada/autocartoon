@@ -118,6 +118,7 @@ interface GenerationJob {
   artifacts: JobArtifact[];
   cutId: string | null;
   creditCost?: number;
+  retryCreditCost?: number;
 }
 
 interface StudioProject extends Omit<ProjectSummary, "_count"> {
@@ -1650,7 +1651,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                     <button className={styles.retryButton} onClick={() => void retryJob(job.id)} title="다시 시도">
                       <LuRefreshCw />
                       <CreditCostBadge
-                        credits={job.creditCost ?? getGenerationCreditCost(job.kind, job.kind.includes("video") ? videoOptions : { imageModel, imageSize })}
+                        credits={job.retryCreditCost ?? getGenerationCreditCost(job.kind, job.kind.includes("video") ? videoOptions : { imageModel, imageSize })}
                       />
                     </button>
                   )}
@@ -2252,7 +2253,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                 <CreditCostBadge
                   credits={AI_CREDIT_COSTS.projectBrief}
                   label={briefAutoGenerate
-                    ? `${AI_CREDIT_COSTS.projectBrief} + 컷당 ${getGenerationCreditCost("image", { imageModel, imageSize })}`
+                    ? `${AI_CREDIT_COSTS.projectBrief}C + 컷당 ${getGenerationCreditCost("image", { imageModel, imageSize })}C`
                     : undefined}
                 />
               </button>

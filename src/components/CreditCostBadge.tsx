@@ -14,9 +14,11 @@ export default function CreditCostBadge({
   approximate = false,
   className,
 }: CreditCostBadgeProps) {
-  const amount = label ?? (credits ?? 0).toLocaleString("ko-KR");
+  const numericAmount = (credits ?? 0).toLocaleString("ko-KR");
+  const amount = label ?? `${numericAmount}C`;
   const display = `${approximate ? "약 " : ""}${amount}`;
-  const accessibleLabel = `${display} 크레딧 사용`;
+  const accessibleAmount = label ?? numericAmount;
+  const accessibleLabel = `${approximate ? "약 " : ""}${accessibleAmount} 크레딧 사용`;
 
   return (
     <span

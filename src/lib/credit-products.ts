@@ -14,7 +14,7 @@ import {
   type VideoResolution,
 } from "./ai-pricing";
 
-export const WELCOME_CREDITS = 30;
+export const WELCOME_CREDITS = 100;
 export const CREDIT_UNIT_PRICE_KRW = AI_PRICING_POLICY.creditKrw;
 
 export const CREDIT_PRODUCTS = [

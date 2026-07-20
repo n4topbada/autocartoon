@@ -15,7 +15,7 @@ import {
 import { RiKakaoTalkFill } from "react-icons/ri";
 import { useAuth } from "@/components/AuthProvider";
 import LegalFooter from "@/components/LegalFooter";
-import { CREDIT_UNIT_PRICE_KRW } from "@/lib/credit-products";
+import { CREDIT_UNIT_PRICE_KRW, WELCOME_CREDITS } from "@/lib/credit-products";
 import styles from "./page.module.css";
 
 type WalletData = {
@@ -207,7 +207,7 @@ export default function CreditsPage() {
           </div>
           <div className={styles.welcomeInfo}>
             <LuCoins size={20} />
-            <span>신규 가입 시 {data?.welcomeCredits ?? 30}크레딧이 자동 지급됩니다.</span>
+            <span>신규 가입 시 {data?.welcomeCredits ?? WELCOME_CREDITS}크레딧이 자동 지급됩니다.</span>
           </div>
         </section>
 

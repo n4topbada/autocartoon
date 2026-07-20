@@ -23,7 +23,7 @@ GitHub: `https://github.com/n4topbada/autocartoon`
 | 항목 | 현재 값 |
 | --- | --- |
 | GCP project | `wonybananabot` |
-| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-18 검증 리비전 `wonybananabot-00035-scs` |
+| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-20 검증 리비전 `wonybananabot-00041-5w6` |
 | Cloud SQL | `wony-postgres`, PostgreSQL 16 |
 | Cloud Tasks | `wony-jobs`, `asia-northeast3`; 동시 10, 초당 5, 최대 5회 재시도 |
 | GCS | `wonybananabot-media`, private. 브라우저 직접 업로드 CORS는 `scripts/gcs-cors.json` 기준 |
@@ -91,7 +91,7 @@ flowchart LR
 
 ### 크레딧·결제
 
-- 신규 30크레딧, 1크레딧 12원 기준 상품, 서버 소유 요율
+- 신규 100크레딧, 1크레딧 12원 기준 상품, 서버 소유 요율
 - Nano Banana 2·Pro·2 Lite와 GPT Image 2 가격표, Veo·Seedance 해상도별 공식 원가를 `src/lib/ai-pricing.ts` 한 곳에서 관리
 - 이미지·영상 작업은 API 원가에 환율 1,500원과 1.5배를 적용해 자동 표시·차감하고 예상 달러 원가도 작업에 기록
 - 모든 유료 AI 버튼 비용 표시, idempotent 차감 원장, 실패 환불

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthError, requireAuth } from "@/lib/auth";
 import { getGenerationCreditCost } from "@/lib/credit-products";
+import { getPublicJobError } from "@/lib/generation-jobs";
 import { prisma } from "@/lib/prisma";
 
 const COMPLETED_STATUSES = ["succeeded", "failed"];
@@ -41,15 +42,18 @@ export async function GET() {
       prisma.generationJob.count({ where: { ...where, notifiedAt: null } }),
     ]);
     return NextResponse.json({
-      notifications: notifications.map(({ input, creditUnits, ...notification }) => ({
-        ...notification,
-        creditCost: creditUnits ?? getGenerationCreditCost(
-          notification.kind,
-          input && typeof input === "object" && !Array.isArray(input)
-            ? input as Record<string, unknown>
-            : {},
-        ),
-      })),
+      notifications: notifications.map(({ input, creditUnits, ...notification }) => {
+        const parsedInput = input && typeof input === "object" && !Array.isArray(input)
+          ? input as Record<string, unknown>
+          : {};
+        const retryCreditCost = getGenerationCreditCost(notification.kind, parsedInput);
+        return {
+          ...notification,
+          error: getPublicJobError(notification.error),
+          creditCost: creditUnits ?? retryCreditCost,
+          retryCreditCost,
+        };
+      }),
       unreadCount,
     });
   } catch (error) {

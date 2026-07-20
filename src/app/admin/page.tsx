@@ -25,6 +25,7 @@ import {
   validateAdminTemporaryPassword,
 } from "@/lib/admin-password-reset";
 import { ANNOUNCEMENT_CATEGORY_LABELS, type AnnouncementCategory } from "@/lib/announcements";
+import { WELCOME_CREDITS } from "@/lib/credit-products";
 import styles from "./page.module.css";
 
 interface UserRow {
@@ -448,7 +449,7 @@ export default function AdminPage() {
 
       <section className={styles.policySection}>
         <h2>운영 정책</h2>
-        <p>신규 가입 30크레딧, 외부 AI 호출 전 차감, 실패 작업 자동 환불이 기본입니다. 수동 지급도 크레딧 원장에 관리자 ID와 함께 기록됩니다.</p>
+        <p>신규 가입 {WELCOME_CREDITS}크레딧, 외부 AI 호출 전 차감, 실패 작업 자동 환불이 기본입니다. 수동 지급도 크레딧 원장에 관리자 ID와 함께 기록됩니다.</p>
         <Link href="/credits" className={styles.walletLink}>사용자 지갑 화면 보기</Link>
       </section>
 

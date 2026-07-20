@@ -1,5 +1,11 @@
 import { WELCOME_CREDITS } from "./credit-products";
 
+const LEGACY_WELCOME_CREDITS = 30;
+const SUPPORTED_WELCOME_GRANTS = new Set([
+  LEGACY_WELCOME_CREDITS,
+  WELCOME_CREDITS,
+]);
+
 type KakaoPlaceholderLedger = {
   action: string;
   source: string;
@@ -18,7 +24,7 @@ export function isDisposableKakaoPlaceholderAccount({
   hasUserData,
   ledgers,
 }: DisposableKakaoAccountInput) {
-  if (hasUserData || credits < 0 || credits > WELCOME_CREDITS || ledgers.length === 0) {
+  if (hasUserData || credits < 0 || ledgers.length === 0) {
     return false;
   }
 
@@ -26,9 +32,10 @@ export function isDisposableKakaoPlaceholderAccount({
     (ledger) =>
       ledger.action === "grant" &&
       ledger.source === "welcome" &&
-      ledger.units === WELCOME_CREDITS,
+      SUPPORTED_WELCOME_GRANTS.has(ledger.units),
   );
   if (welcomeGrants.length !== 1) return false;
+  if (credits > welcomeGrants[0].units) return false;
 
   if (
     !ledgers.every(

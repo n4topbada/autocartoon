@@ -4,11 +4,16 @@ import {
   AI_CREDIT_COSTS,
   CREDIT_PRODUCTS,
   CREDIT_UNIT_PRICE_KRW,
+  WELCOME_CREDITS,
   getCreditProduct,
   getGenerationCreditCost,
   getProductBonusRate,
   getProductTotalCredits,
 } from "../src/lib/credit-products";
+
+test("all new OAuth accounts receive 100 welcome credits", () => {
+  assert.equal(WELCOME_CREDITS, 100);
+});
 
 test("credit products use unique server-owned codes and positive values", () => {
   assert.equal(new Set(CREDIT_PRODUCTS.map((product) => product.code)).size, CREDIT_PRODUCTS.length);

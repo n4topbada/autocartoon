@@ -11,6 +11,7 @@ import {
   LuWalletCards,
 } from "react-icons/lu";
 import { useAuth } from "./AuthProvider";
+import { WELCOME_CREDITS } from "@/lib/credit-products";
 import styles from "./UserAvatar.module.css";
 
 export default function UserAvatar({ onOpenSettings }: { onOpenSettings: () => void }) {
@@ -109,7 +110,7 @@ export default function UserAvatar({ onOpenSettings }: { onOpenSettings: () => v
               </div>
               <div className={styles.faqItem}>
                 <p className={styles.faqQ}>Q: 가입 혜택이 있나요?</p>
-                <p className={styles.faqA}>A: 새 계정에는 첫 AI 작업을 시험할 수 있도록 30크레딧이 한 번 지급됩니다.</p>
+                <p className={styles.faqA}>A: 새 계정에는 첫 AI 작업을 시험할 수 있도록 {WELCOME_CREDITS}크레딧이 한 번 지급됩니다.</p>
               </div>
             </div>
             <button className={styles.faqClose} type="button" onClick={() => setShowFaq(false)}>닫기</button>

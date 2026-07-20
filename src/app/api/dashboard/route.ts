@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { AuthError, requireAuth } from "@/lib/auth";
+import { getPublicJobError } from "@/lib/generation-jobs";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -109,6 +110,7 @@ export async function GET() {
       },
       recentJobs: recentJobs.map((job) => ({
         ...job,
+        error: getPublicJobError(job.error),
         createdAt: job.createdAt.toISOString(),
         completedAt: job.completedAt?.toISOString() ?? null,
       })),

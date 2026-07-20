@@ -1019,7 +1019,16 @@ export default function ShortVideoBuilder() {
                 >
                   {selectedCut.videoApprovedAt ? <><LuX /> 승인 취소</> : <><LuCheck /> 이 씬 승인</>}
                 </button>
-                <button type="button" className={styles.iconButton} onClick={() => void generateScene()} disabled={currentJobActive} title="씬 재생성" aria-label="씬 재생성"><LuRefreshCw /></button>
+                <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  onClick={() => void generateScene()}
+                  disabled={Boolean(busy[selectedCut.id]) || currentJobActive || !currentProvider?.configured}
+                  title="씬 재생성"
+                >
+                  <LuRefreshCw /> 재생성
+                  <CreditCostBadge credits={currentCost} />
+                </button>
               </div>
             )}
           </section>

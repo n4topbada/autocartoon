@@ -53,6 +53,8 @@ interface GestureJob {
   progress: number;
   prompt: string;
   error?: string | null;
+  creditCost?: number;
+  retryCreditCost?: number;
   createdAt: string;
   artifacts: GestureArtifact[];
 }
@@ -500,7 +502,17 @@ export default function GestureGenerator({ active = true }: { active?: boolean }
 
         {failedJobs.length > 0 && (
           <div className={styles.failedList}>
-            {failedJobs.map((job) => <div key={job.id}><span>{job.error || "생성 실패"}</span><button type="button" onClick={() => void retryJob(job.id)}><LuRotateCcw /> 다시 시도</button></div>)}
+            {failedJobs.map((job) => (
+              <div key={job.id}>
+                <span>{job.error || "생성 실패"}</span>
+                <button type="button" onClick={() => void retryJob(job.id)}>
+                  <LuRotateCcw /> 다시 시도
+                  <CreditCostBadge
+                    credits={job.retryCreditCost ?? getGenerationCreditCost("gesture", { imageModel, imageSize })}
+                  />
+                </button>
+              </div>
+            ))}
           </div>
         )}
       </section>

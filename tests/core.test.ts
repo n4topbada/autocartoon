@@ -110,12 +110,18 @@ test("job responses expose durable progress and artifacts", () => {
   const response = jobToResponse(job);
   assert.equal(response.status, "succeeded");
   assert.equal(response.progress, 100);
+  assert.equal(response.creditCost, 1);
+  assert.equal(response.retryCreditCost, 60);
   assert.equal(response.artifacts[0].mimeType, "video/mp4");
 });
 
 test("provider error payloads are not exposed in job responses", () => {
   assert.equal(
     getPublicJobError('{"error":{"code":400,"status":"INVALID_ARGUMENT"}}'),
+    "AI 생성 요청을 처리하지 못했습니다. 사용한 크레딧은 자동 환불되었습니다."
+  );
+  assert.equal(
+    getPublicJobError("Invalid `prisma.generationJob.update()` invocation: Unique constraint failed"),
     "AI 생성 요청을 처리하지 못했습니다. 사용한 크레딧은 자동 환불되었습니다."
   );
   assert.equal(getPublicJobError("이미지 생성이 제한 시간을 초과했습니다."), "이미지 생성이 제한 시간을 초과했습니다.");

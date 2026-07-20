@@ -52,7 +52,7 @@ export function getPublicJobError(error: string | null): string | null {
   if (
     error.length > 300 ||
     /^\s*[\[{]/.test(error) ||
-    /ApiError|INVALID_ARGUMENT|PERMISSION_DENIED|RESOURCE_EXHAUSTED|"code"\s*:/i.test(error)
+    /ApiError|INVALID_ARGUMENT|PERMISSION_DENIED|RESOURCE_EXHAUSTED|"code"\s*:|prisma\.|PrismaClient|Unique constraint failed/i.test(error)
   ) {
     return "AI 생성 요청을 처리하지 못했습니다. 사용한 크레딧은 자동 환불되었습니다.";
   }
@@ -63,6 +63,7 @@ export function jobToResponse(job: JobWithArtifacts) {
   const input = job.input && typeof job.input === "object" && !Array.isArray(job.input)
     ? job.input as Record<string, unknown>
     : {};
+  const retryCreditCost = getGenerationCreditCost(job.kind, input);
   return {
     id: job.id,
     kind: job.kind,
@@ -82,7 +83,8 @@ export function jobToResponse(job: JobWithArtifacts) {
     updatedAt: job.updatedAt,
     startedAt: job.startedAt,
     completedAt: job.completedAt,
-    creditCost: job.creditUnits ?? getGenerationCreditCost(job.kind, input),
+    creditCost: job.creditUnits ?? retryCreditCost,
+    retryCreditCost,
     artifacts: job.artifacts.map((artifact) => ({
       id: artifact.id,
       kind: artifact.kind,

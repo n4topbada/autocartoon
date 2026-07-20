@@ -30,6 +30,7 @@ interface GenerationNotification {
   project: { title: string } | null;
   cut: { title: string } | null;
   creditCost: number;
+  retryCreditCost: number;
   artifacts: Array<{ thumbnailUrl: string | null; blobUrl: string; kind: string }>;
 }
 
@@ -267,7 +268,7 @@ export default function GenerationNotifications() {
                     {item.status === "failed" && (
                       <button type="button" className={styles.retry} title="다시 시도" aria-label="생성 다시 시도" onClick={() => void retry(item.id)} disabled={retrying === item.id}>
                         {retrying === item.id ? <LuLoaderCircle className={styles.spin} /> : <LuRotateCw />}
-                        <CreditCostBadge credits={item.creditCost} />
+                        <CreditCostBadge credits={item.retryCreditCost} />
                       </button>
                     )}
                     <span className={item.status === "succeeded" ? styles.success : styles.failure}>{item.status === "succeeded" ? <LuCheck /> : <LuX />}</span>

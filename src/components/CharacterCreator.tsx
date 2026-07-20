@@ -37,6 +37,7 @@ interface CharacterJob {
   error?: string | null;
   createdAt: string;
   creditCost?: number;
+  retryCreditCost?: number;
   artifacts: JobArtifact[];
 }
 
@@ -476,7 +477,7 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
                 <span>{job.error || "생성에 실패했습니다."}</span>
                 <button type="button" onClick={() => retryJob(job.id)} disabled={Boolean(trackedJobId)}>
                   <LuRefreshCw /> 다시 시도
-                  <CreditCostBadge credits={job.creditCost ?? getGenerationCreditCost("character", { imageModel, imageSize })} />
+                  <CreditCostBadge credits={job.retryCreditCost ?? getGenerationCreditCost("character", { imageModel, imageSize })} />
                 </button>
               </div>
             ))}
