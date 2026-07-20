@@ -84,7 +84,10 @@ export default function CouponLanding({ initialCode }: { initialCode: string }) 
   }, [code]);
 
   useEffect(() => {
-    if (authLoading || !user || lookup?.status !== "available" || attempted.current) return;
+    // Authenticated users always ask the idempotent grant endpoint. This lets a
+    // previous recipient see "already redeemed" even after the campaign expires
+    // or reaches its quota, while new recipients still receive the real error.
+    if (authLoading || !user || !lookup || attempted.current) return;
     attempted.current = true;
     setRedeeming(true);
     fetch("/api/coupons/redeem", {

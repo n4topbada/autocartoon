@@ -62,9 +62,10 @@ test("coupon availability follows active, time, and quota boundaries", () => {
 });
 
 test("coupon redemption has database and ledger idempotency boundaries", async () => {
-  const [schema, redemptionSource, migration] = await Promise.all([
+  const [schema, redemptionSource, landingSource, migration] = await Promise.all([
     readFile("prisma/schema.prisma", "utf8"),
     readFile("src/lib/coupon-redemption.ts", "utf8"),
+    readFile("src/components/CouponLanding.tsx", "utf8"),
     readFile("prisma/migrations/20260720223000_add_coupon_campaigns/migration.sql", "utf8"),
   ]);
 
@@ -74,6 +75,8 @@ test("coupon redemption has database and ledger idempotency boundaries", async (
   assert.match(redemptionSource, /redeemedCount:\s*\{ increment: 1 \}/);
   assert.match(redemptionSource, /credits:\s*\{ increment: campaign\.credits \}/);
   assert.match(redemptionSource, /referenceKey: `coupon:\$\{campaign\.id\}:\$\{userId\}:grant`/);
+  assert.match(landingSource, /authLoading \|\| !user \|\| !lookup \|\| attempted\.current/);
+  assert.doesNotMatch(landingSource, /lookup\?\.status !== "available"/);
   assert.match(migration, /CouponCampaign_credits_check/);
   assert.match(migration, /CouponCampaign_quota_check/);
   assert.match(migration, /CouponRedemption_campaignId_userId_key/);
