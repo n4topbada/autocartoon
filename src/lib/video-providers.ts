@@ -1,7 +1,12 @@
 import { getPlatformAIProvider, getVideoModel } from "./platform-ai";
+import {
+  VIDEO_PROVIDER_PRICING,
+  type VideoProviderId,
+  type VideoResolution,
+} from "./ai-pricing";
 
-export type VideoProvider = "veo" | "seedance";
-export type VideoResolution = "720p" | "1080p";
+export type VideoProvider = VideoProviderId;
+export type { VideoResolution };
 
 export function normalizeVideoProvider(value: unknown): VideoProvider {
   return String(value || "").toLowerCase() === "seedance" ? "seedance" : "veo";
@@ -31,10 +36,10 @@ export function getVideoProviderModel(
 ): string {
   if (provider === "seedance") {
     return resolution === "1080p"
-      ? process.env.SEEDANCE_MODEL || "dreamina-seedance-2-0-260128"
-      : process.env.SEEDANCE_FAST_MODEL || "dreamina-seedance-2-0-fast-260128";
+      ? process.env.SEEDANCE_MODEL || VIDEO_PROVIDER_PRICING.seedance.models["1080p"]
+      : process.env.SEEDANCE_FAST_MODEL || VIDEO_PROVIDER_PRICING.seedance.models["720p"];
   }
-  return getVideoModel();
+  return process.env.VERTEX_VIDEO_MODEL || VIDEO_PROVIDER_PRICING.veo.models[resolution] || getVideoModel();
 }
 
 export function getStoredJobProvider(provider: VideoProvider): string {

@@ -923,7 +923,9 @@ export default function ShortVideoBuilder() {
                       onClick={() => void changeProvider(provider.id)}
                     >
                       <strong>{provider.label}</strong>
-                      <small>{provider.configured ? provider.models[asVideoResolution(selectedCut.videoResolution)] : "연결 필요"}</small>
+                      <small>{provider.configured
+                        ? `${provider.models[asVideoResolution(selectedCut.videoResolution)]} · 4초 ${provider.creditExamples["4s720p"]}C`
+                        : "연결 필요"}</small>
                     </button>
                   ))}
                 </div>

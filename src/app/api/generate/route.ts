@@ -9,10 +9,18 @@ import {
   jobToResponse,
   type StoredImageJobInput,
 } from "@/lib/generation-jobs";
+import { getPlatformAIProvider } from "@/lib/platform-ai";
 import {
-  getImageModel,
-  getPlatformAIProvider,
-} from "@/lib/platform-ai";
+  DEFAULT_IMAGE_MODEL_ID,
+  DEFAULT_IMAGE_RESOLUTION,
+  IMAGE_MODEL_PRICING,
+  getImageApiCostUsd,
+  isImageModelId,
+  isImageResolution,
+  isImageResolutionSupported,
+  type ImageModelId,
+  type ImageResolution,
+} from "@/lib/ai-pricing";
 import { dispatchImageJob } from "@/lib/job-engine";
 import { logError, logEvent } from "@/lib/observability";
 import { Prisma } from "@prisma/client";
@@ -38,7 +46,6 @@ const MAX_REFERENCE_ASSETS = 3;
 const MAX_INPUT_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_BASE64_LENGTH = Math.ceil(MAX_INPUT_IMAGE_BYTES / 3) * 4;
 const ALLOWED_ASPECT_RATIOS = new Set(["1:1", "4:5", "9:16", "16:9"]);
-const ALLOWED_IMAGE_SIZES = new Set(["1K", "2K"]);
 const JOB_KINDS = new Set(["image", "gesture", "character", "background"] as const);
 
 type ImageJobKind = "image" | "gesture" | "character" | "background";
@@ -48,8 +55,9 @@ type InputImage = { base64: string; mimeType: string };
 interface ValidatedGenerationRequest {
   presetIds: string[];
   mode: GenerationMode;
+  imageModel: ImageModelId;
   aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
-  imageSize?: "1K" | "2K";
+  imageSize: ImageResolution;
   count: number;
   prompt: string;
   background?: string;
@@ -230,9 +238,25 @@ function parseGenerationRequest(value: unknown): ValidatedGenerationRequest {
   const aspectRatio = typeof value.aspectRatio === "string" && ALLOWED_ASPECT_RATIOS.has(value.aspectRatio)
     ? value.aspectRatio as "1:1" | "4:5" | "9:16" | "16:9"
     : undefined;
-  const imageSize = typeof value.imageSize === "string" && ALLOWED_IMAGE_SIZES.has(value.imageSize)
-    ? value.imageSize as "1K" | "2K"
-    : undefined;
+  const imageModel = value.imageModel === undefined
+    ? DEFAULT_IMAGE_MODEL_ID
+    : isImageModelId(value.imageModel)
+      ? value.imageModel
+      : (() => {
+          throw new RequestValidationError("지원하지 않는 이미지 모델입니다.");
+        })();
+  const imageSize = value.imageSize === undefined
+    ? DEFAULT_IMAGE_RESOLUTION
+    : isImageResolution(value.imageSize)
+      ? value.imageSize
+      : (() => {
+          throw new RequestValidationError("imageSize는 1K 또는 2K여야 합니다.");
+        })();
+  if (!isImageResolutionSupported(imageModel, imageSize)) {
+    throw new RequestValidationError(
+      `${IMAGE_MODEL_PRICING[imageModel].label}은 ${imageSize} 출력을 지원하지 않습니다.`
+    );
+  }
   const requestedCount = Number(value.count ?? 1);
   const count = jobKind === "background" && Number.isInteger(requestedCount)
     ? Math.max(1, Math.min(5, requestedCount))
@@ -301,6 +325,7 @@ function parseGenerationRequest(value: unknown): ValidatedGenerationRequest {
   return {
     presetIds,
     mode: value.mode as GenerationMode,
+    imageModel,
     aspectRatio,
     imageSize,
     count,
@@ -433,6 +458,14 @@ export async function POST(req: NextRequest) {
       throw error;
     }
 
+    const selectedModel = IMAGE_MODEL_PRICING[input.imageModel];
+    if (selectedModel.availability !== "available") {
+      return NextResponse.json(
+        { error: selectedModel.disabledReason || "선택한 이미지 모델은 아직 사용할 수 없습니다." },
+        { status: 503 }
+      );
+    }
+
     const accessError = await validateResourceAccess(
       session.userId,
       isAdmin,
@@ -498,8 +531,9 @@ export async function POST(req: NextRequest) {
     const storedInput: StoredImageJobInput = {
       presetIds: input.presetIds,
       mode: input.mode,
+      imageModel: input.imageModel,
       ...(input.aspectRatio ? { aspectRatio: input.aspectRatio } : {}),
-      ...(input.imageSize ? { imageSize: input.imageSize } : {}),
+      imageSize: input.imageSize,
       ...(input.count > 1 ? { count: input.count } : {}),
       prompt: input.prompt,
       isAdmin,
@@ -533,7 +567,10 @@ export async function POST(req: NextRequest) {
           cutId: input.cutId,
           kind: input.jobKind || "image",
           provider: getPlatformAIProvider(),
-          model: getImageModel(),
+          model: selectedModel.apiModel,
+          estimatedCostUsdMicros: Math.round(
+            getImageApiCostUsd(input.imageModel, input.imageSize, input.count) * 1_000_000
+          ),
           idempotencyKey,
           prompt: input.prompt,
           input: storedInput as unknown as Prisma.InputJsonValue,

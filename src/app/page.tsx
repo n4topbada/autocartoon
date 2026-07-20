@@ -33,7 +33,9 @@ import {
 import { resizeFromFile, fetchImageFromUrl } from "@/lib/image-resize";
 import PromptInput from "@/components/PromptInput";
 import CreditCostBadge from "@/components/CreditCostBadge";
-import { AI_CREDIT_COSTS } from "@/lib/credit-products";
+import ImageModelSelector from "@/components/ImageModelSelector";
+import { getGenerationCreditCost } from "@/lib/credit-products";
+import { DEFAULT_IMAGE_MODEL_ID, type ImageModelId } from "@/lib/ai-pricing";
 
 function DeferredPanelLoader() {
   return (
@@ -280,6 +282,8 @@ export default function Home() {
   const [showPromptPresets, setShowPromptPresets] = useState(false);
 
   const [prompt, setPrompt] = useState("");
+  const [imageModel, setImageModel] = useState<ImageModelId>(DEFAULT_IMAGE_MODEL_ID);
+  const [imageSize, setImageSize] = useState<"1K" | "2K">("1K");
   const [background, setBackground] = useState("없음");
   const [characterOnly, setCharacterOnly] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -972,6 +976,8 @@ export default function Home() {
       const body: Record<string, unknown> = {
         presetIds: selectedPresets.map((p) => p.id),
         mode: autoMode,
+        imageModel,
+        imageSize,
         prompt: finalPrompt,
       };
       if (!characterOnly && selectedBgImageId) {
@@ -1630,6 +1636,16 @@ export default function Home() {
             />
           </section>
 
+          <section className={styles.section}>
+            <ImageModelSelector
+              modelId={imageModel}
+              resolution={imageSize}
+              onModelChange={setImageModel}
+              onResolutionChange={setImageSize}
+              disabled={generating}
+            />
+          </section>
+
           {/* 6) 생성 버튼 */}
           <button
             className={styles.generateBtn}
@@ -1638,7 +1654,7 @@ export default function Home() {
           >
             <LuSparkles size={16} />
             {generating ? "생성 중..." : "이미지 생성"}
-            <CreditCostBadge credits={AI_CREDIT_COSTS.image1k} />
+            <CreditCostBadge credits={getGenerationCreditCost("image", { imageModel, imageSize })} />
           </button>
           {error && <p className={styles.error}>{error}</p>}
         </aside>

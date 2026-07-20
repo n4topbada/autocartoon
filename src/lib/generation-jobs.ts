@@ -2,6 +2,7 @@ import type { GenerationArtifact, GenerationJob, Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { refundJobCredit } from "./credit-service";
 import { getGenerationCreditCost } from "./credit-products";
+import type { ImageModelId } from "./ai-pricing";
 
 interface StoredImageReference {
   url: string;
@@ -15,6 +16,7 @@ interface StoredLabeledImageReference extends StoredImageReference {
 export interface StoredImageJobInput {
   presetIds: string[];
   mode: "text" | "sketch" | "edit" | "transform";
+  imageModel?: ImageModelId;
   aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
   imageSize?: "1K" | "2K";
   count?: number;
@@ -45,6 +47,18 @@ export type JobWithArtifacts = GenerationJob & {
   artifacts: GenerationArtifact[];
 };
 
+export function getPublicJobError(error: string | null): string | null {
+  if (!error) return null;
+  if (
+    error.length > 300 ||
+    /^\s*[\[{]/.test(error) ||
+    /ApiError|INVALID_ARGUMENT|PERMISSION_DENIED|RESOURCE_EXHAUSTED|"code"\s*:/i.test(error)
+  ) {
+    return "AI 생성 요청을 처리하지 못했습니다. 사용한 크레딧은 자동 환불되었습니다.";
+  }
+  return error;
+}
+
 export function jobToResponse(job: JobWithArtifacts) {
   const input = job.input && typeof job.input === "object" && !Array.isArray(job.input)
     ? job.input as Record<string, unknown>
@@ -61,7 +75,7 @@ export function jobToResponse(job: JobWithArtifacts) {
     projectId: job.projectId,
     cutId: job.cutId,
     output: job.output,
-    error: job.error,
+    error: getPublicJobError(job.error),
     runId: job.runId,
     operationName: job.operationName,
     createdAt: job.createdAt,

@@ -98,7 +98,9 @@ import {
   canvasPointToBubble,
 } from "@/lib/bubble-draw";
 import CreditCostBadge from "@/components/CreditCostBadge";
-import { AI_CREDIT_COSTS } from "@/lib/credit-products";
+import ImageModelSelector from "@/components/ImageModelSelector";
+import { AI_CREDIT_COSTS, getGenerationCreditCost } from "@/lib/credit-products";
+import { DEFAULT_IMAGE_MODEL_ID, type ImageModelId } from "@/lib/ai-pricing";
 import {
   type CaptionSettings,
   type WatermarkPosition,
@@ -972,6 +974,8 @@ export default function CanvasEditor({
   const [redrawOpen, setRedrawOpen] = useState(false);
   const [redrawLoading, setRedrawLoading] = useState(false);
   const [redrawPrompt, setRedrawPrompt] = useState("");
+  const [redrawImageModel, setRedrawImageModel] = useState<ImageModelId>(DEFAULT_IMAGE_MODEL_ID);
+  const [redrawImageSize, setRedrawImageSize] = useState<"1K" | "2K">("1K");
   const [redrawUseRegion, setRedrawUseRegion] = useState(false);
   const [redrawRegionMode, setRedrawRegionMode] = useState<RedrawRegionMode>("all");
   const [maskBrushSize, setMaskBrushSize] = useState(64);
@@ -3356,7 +3360,8 @@ export default function CanvasEditor({
           jobKind: "image",
           mode: "edit",
           aspectRatio: generationAspect,
-          imageSize: "1K",
+          imageModel: redrawImageModel,
+          imageSize: redrawImageSize,
           projectId,
           cutId,
           inputImage: { base64: image.split(",")[1], mimeType: "image/jpeg" },
@@ -4220,7 +4225,7 @@ export default function CanvasEditor({
                     <div className={styles.selectionStatus}>{eraserPending ? "지울 영역이 선택되었습니다." : "선택된 영역이 없습니다."}</div>
                     <button className={styles.primaryOptionButton} onClick={() => void applyStagedEraser()} disabled={!eraserPending || redrawLoading || Boolean(redrawJobId)}>
                       {redrawLoading ? <LuLoaderCircle className={styles.spin} /> : <LuEraser />} 지우기 적용
-                      {eraserApplyMode === "heal" && <CreditCostBadge credits={AI_CREDIT_COSTS.image1k} />}
+                      {eraserApplyMode === "heal" && <CreditCostBadge credits={getGenerationCreditCost("image", { imageModel: redrawImageModel, imageSize: redrawImageSize })} />}
                     </button>
                     <button className={styles.secondaryOptionButton} onClick={clearStagedEraser} disabled={!eraserPending}>선택 지우기</button>
                   </section>
@@ -4538,12 +4543,20 @@ export default function CanvasEditor({
                 <div className={`${styles.utilityPopover} ${styles.redrawUtilityPopover}`}>
                   <strong>AI 다시 그리기</strong>
                   <textarea rows={4} maxLength={2_000} value={redrawPrompt} onChange={(event) => setRedrawPrompt(event.target.value)} placeholder="수정할 내용을 입력하세요." />
+                  <ImageModelSelector
+                    modelId={redrawImageModel}
+                    resolution={redrawImageSize}
+                    onModelChange={setRedrawImageModel}
+                    onResolutionChange={setRedrawImageSize}
+                    disabled={redrawLoading || Boolean(redrawJobId)}
+                    compact
+                  />
                   <button className={styles.promptPresetButton} onClick={() => setRedrawPrompt("모든 말풍선·자막·글자를 제거하고 그 자리를 주변 배경·그림체와 자연스럽게 이어지도록 채운다.")}>글자·말풍선 지우기</button>
                   <div className={styles.segmentedControl}>{([['all', '전체'], ['auto', 'AI 자동'], ['rectangle', '사각형'], ['freehand', '직접 그리기']] as const).map(([mode, label]) => <button key={mode} className={redrawRegionMode === mode ? styles.segmentActive : ""} onClick={() => selectRedrawRegionMode(mode)}>{label}</button>)}</div>
                   {(redrawRegionMode === "rectangle" || redrawRegionMode === "freehand") && <p className={styles.toolHint}>{aiMaskCanvasRef.current ? "수정 영역이 선택되었습니다." : redrawRegionMode === "rectangle" ? "캔버스에서 사각형을 지정하세요." : "캔버스에 수정할 영역을 칠하세요."}</p>}
                   {redrawRegionMode === "freehand" && <label className={styles.utilityRange}><span>브러쉬</span><input type="range" min={12} max={180} value={maskBrushSize} onChange={(event) => setMaskBrushSize(Number(event.target.value))} /><b>{maskBrushSize}px</b></label>}
                   {redrawJobId && <div className={styles.aiProgress}><span style={{ width: `${redrawProgress}%` }} /><b>{redrawProgress}%</b></div>}
-                  <button className={styles.utilityPrimary} onClick={() => void queueAiRedraw()} disabled={redrawLoading || Boolean(redrawJobId) || !redrawPrompt.trim()}>{redrawLoading ? <LuLoaderCircle className={styles.spin} /> : <LuWandSparkles />} 생성 <CreditCostBadge credits={AI_CREDIT_COSTS.image1k} /></button>
+                  <button className={styles.utilityPrimary} onClick={() => void queueAiRedraw()} disabled={redrawLoading || Boolean(redrawJobId) || !redrawPrompt.trim()}>{redrawLoading ? <LuLoaderCircle className={styles.spin} /> : <LuWandSparkles />} 생성 <CreditCostBadge credits={getGenerationCreditCost("image", { imageModel: redrawImageModel, imageSize: redrawImageSize })} /></button>
                 </div>
               )}
             </div>
@@ -4925,6 +4938,14 @@ export default function CanvasEditor({
                 <div className={`${styles.bubblePopup} ${styles.aiToolPopup}`}>
                   <strong>수정 요청</strong>
                   <textarea value={redrawPrompt} onChange={(event) => setRedrawPrompt(event.target.value)} rows={5} maxLength={2_000} placeholder="예: 배경은 유지하고 인물 표정을 놀란 표정으로 변경" />
+                  <ImageModelSelector
+                    modelId={redrawImageModel}
+                    resolution={redrawImageSize}
+                    onModelChange={setRedrawImageModel}
+                    onResolutionChange={setRedrawImageSize}
+                    disabled={redrawLoading || Boolean(redrawJobId)}
+                    compact
+                  />
                   <div className={styles.aiPresetRow}>
                     <button
                       type="button"
@@ -4981,7 +5002,7 @@ export default function CanvasEditor({
                   )}
                   <button className={styles.aiToolAction} onClick={() => void queueAiRedraw()} disabled={redrawLoading || Boolean(redrawJobId) || !redrawPrompt.trim()}>
                     {redrawLoading ? <LuLoaderCircle className={styles.spin} /> : <LuWandSparkles />} 작업 시작
-                    <CreditCostBadge credits={AI_CREDIT_COSTS.image1k} />
+                    <CreditCostBadge credits={getGenerationCreditCost("image", { imageModel: redrawImageModel, imageSize: redrawImageSize })} />
                   </button>
                 </div>
               )}

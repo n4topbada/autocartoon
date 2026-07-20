@@ -11,6 +11,7 @@ import {
   timeoutVideoJob,
 } from "./video-generation";
 import { logError, logEvent } from "./observability";
+import { getPublicPlatformAIError } from "./platform-ai";
 
 /**
  * 이미지 생성 잡의 단일 실행 로직. 인라인(로컬) 실행과 Cloud Tasks 핸들러가
@@ -51,6 +52,7 @@ export async function runImageGenerationJob(
       isAdmin: input.isAdmin,
       presetIds: input.presetIds,
       mode: input.mode,
+      model: job.model,
       aspectRatio: input.aspectRatio,
       imageSize: input.imageSize,
       count: input.count,
@@ -76,7 +78,7 @@ export async function runImageGenerationJob(
       jobKind: job.kind,
       durationMs: Date.now() - startedAt,
     });
-    await failGenerationJob(jobId, error);
+    await failGenerationJob(jobId, getPublicPlatformAIError(error));
     return { status: "failed" };
   }
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuthError, requireAuth } from "@/lib/auth";
 import { AI_CREDIT_COSTS, getGenerationCreditCost } from "@/lib/credit-products";
+import { VIDEO_PROVIDER_PRICING } from "@/lib/ai-pricing";
 import {
   getAllowedVideoDurations,
   getVideoProviderModel,
@@ -16,7 +17,7 @@ export async function GET() {
       promptCreditCost: AI_CREDIT_COSTS.videoPrompt,
       providers: providers.map((provider) => ({
         id: provider,
-        label: provider === "veo" ? "Veo" : "Seedance",
+        label: VIDEO_PROVIDER_PRICING[provider].label,
         configured: isVideoProviderConfigured(provider),
         durations: getAllowedVideoDurations(provider),
         resolutions: ["720p", "1080p"],
@@ -38,6 +39,7 @@ export async function GET() {
             generateAudio: true,
           }),
         },
+        pricingSource: VIDEO_PROVIDER_PRICING[provider].pricingSource,
       })),
     });
   } catch (error) {

@@ -40,7 +40,7 @@
 
 ## 크레딧
 
-새 계정에는 30크레딧을 한 번 지급합니다. 유상 기본 크레딧은 1개당 12원이며, 실제 외부 비용이 드는 AI·OCR·TTS·영상과 유료 캐릭터 구매에만 사용합니다. 서버가 상품과 차감량을 결정하고 같은 작업은 한 번만 차감하며 실패하면 같은 원장 참조로 자동 환불합니다.
+새 계정에는 30크레딧을 한 번 지급합니다. 유상 기본 크레딧은 1개당 12원이며, 실제 외부 비용이 드는 AI·OCR·TTS·영상과 유료 캐릭터 구매에만 사용합니다. 서버가 상품과 차감량을 결정하고 같은 작업은 한 번만 차감하며 실패하면 같은 원장 참조로 자동 환불합니다. 이미지·영상은 공식 API 원가를 기준으로 `1달러=1,500원`, 원가 1.5배를 요청 전체에서 한 번 올림해 계산합니다. 최신 모델별 표와 출처는 [AI 모델 가격·크레딧 정책](./docs/ai-model-pricing.md)에 있습니다.
 
 | 작업 | 비용 |
 | --- | ---: |
@@ -48,13 +48,12 @@
 | 캐릭터 디렉터, AI 기획, 영상 플랜 | 2 |
 | 영상 프롬프트 확장 | 1 |
 | 고화질 누끼 | 25 |
-| 1K 이미지 1장 | 10 |
-| 2K 이미지 1장 | 20 |
-| Veo 기본 영상 | 60 |
-| 6초 / 8초 | +20 / +40 |
-| 1080p / 오디오 | +40 / +10 |
-| Seedance 720p | 초당 18 |
-| Seedance 1080p | 초당 48 |
+| Nano Banana 2 Lite 1K | 7 |
+| Nano Banana 2 1K / 2K | 13 / 19 |
+| Nano Banana Pro 1K / 2K | 26 / 26 |
+| GPT Image 2 1K / 2K | 10 / 21, API 연결 예정 |
+| Veo 3.1 Fast | 해상도·오디오·초 길이 자동 계산 |
+| Seedance 2.0 | 720p·1080p·초 길이 자동 계산 |
 
 | 상품 | 기본 | 보너스 | 보너스율 | 총 적립 | 금액 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -114,6 +113,7 @@ GOOGLE_CLOUD_PROJECT=wonybananabot
 GOOGLE_CLOUD_LOCATION=global
 GOOGLE_CLOUD_VIDEO_LOCATION=us-central1
 VERTEX_TEXT_MODEL=gemini-3.1-flash-lite
+# 기본값은 가격표의 gemini-3.1-flash-image이며 화면에서 모델별로 선택합니다.
 VERTEX_IMAGE_MODEL=gemini-3.1-flash-image
 VERTEX_VIDEO_MODEL=veo-3.1-fast-generate-001
 VERTEX_VIDEO_OUTPUT_GCS_URI=gs://BUCKET/autocartoon/veo

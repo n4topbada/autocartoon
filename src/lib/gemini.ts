@@ -1,11 +1,13 @@
 import { GoogleGenAI, type Content, type Part } from "@google/genai";
 import { withTransientAIRetry } from "./ai-retry";
 import { getImageModel, getPlatformAIClients } from "./platform-ai";
+import { getImageModelPriceByApiModel } from "./ai-pricing";
 
 type Modality = "IMAGE" | "TEXT";
 
 export interface GeminiRequest {
   prompt: string;
+  model?: string;
   aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
   imageSize?: "1K" | "2K";
   referenceImages?: { base64: string; mimeType: string }[];
@@ -21,11 +23,12 @@ export interface GeminiResult {
 
 async function callGemini(
   genai: GoogleGenAI,
+  model: string,
   contents: Content[],
   config: Record<string, unknown>
 ): Promise<GeminiResult> {
   const response = await genai.models.generateContentStream({
-    model: getImageModel(),
+    model,
     contents,
     config,
   });
@@ -86,20 +89,22 @@ export async function generateContent(
 
   const config: Record<string, unknown> = {
     responseModalities: req.modalities || ["IMAGE", "TEXT"],
-    thinkingConfig: {
-      thinkingLevel: "MINIMAL",
-    },
     imageConfig: {
       aspectRatio: req.aspectRatio || "1:1",
       imageSize: req.imageSize || "1K",
     },
   };
+  const selectedModel = req.model || getImageModel();
+  const thinkingLevel = getImageModelPriceByApiModel(selectedModel)?.thinkingLevel;
+  if (thinkingLevel) {
+    config.thinkingConfig = { thinkingLevel };
+  }
 
   let lastError: unknown;
   for (const client of await getPlatformAIClients()) {
     try {
       return await withTransientAIRetry(
-        () => callGemini(client, contents, config),
+        () => callGemini(client, selectedModel, contents, config),
         {
           onRetry: (_error, attempt, delayMs) => {
             console.warn(

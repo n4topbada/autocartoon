@@ -37,8 +37,14 @@ import {
 } from "react-icons/lu";
 import { PROJECT_BRIEF_TEMPLATE } from "@/lib/project-brief";
 import { AI_CREDIT_COSTS, getGenerationCreditCost } from "@/lib/credit-products";
+import {
+  DEFAULT_IMAGE_MODEL_ID,
+  type ImageModelId,
+  type VideoProviderId,
+} from "@/lib/ai-pricing";
 import { useAuth } from "./AuthProvider";
 import CreditCostBadge from "./CreditCostBadge";
+import ImageModelSelector from "./ImageModelSelector";
 import GenerationNotifications from "./GenerationNotifications";
 import {
   buildStudioGenerationPrompt,
@@ -245,6 +251,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [imageModel, setImageModel] = useState<ImageModelId>(DEFAULT_IMAGE_MODEL_ID);
   const [imageSize, setImageSize] = useState<"1K" | "2K">("1K");
   const [uploading, setUploading] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -274,10 +281,15 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
   const [videoBatchStarting, setVideoBatchStarting] = useState(false);
   const [previewingDialogueId, setPreviewingDialogueId] = useState<string | null>(null);
   const [videoOptions, setVideoOptions] = useState({
+    provider: "veo" as VideoProviderId,
     aspectRatio: "9:16" as "9:16" | "16:9",
-    durationSeconds: 8 as 4 | 6 | 8,
+    durationSeconds: 8,
     resolution: "720p" as "720p" | "1080p",
     generateAudio: true,
+  });
+  const [videoProviderConfigured, setVideoProviderConfigured] = useState<Record<VideoProviderId, boolean>>({
+    veo: false,
+    seedance: false,
   });
   const [dragActive, setDragActive] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -298,6 +310,20 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
     () => characters.filter((character) => selectedCharacterIds.includes(character.id)),
     [characters, selectedCharacterIds]
   );
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/shorts/providers", { cache: "no-store" })
+      .then((response) => readJson<{ providers: Array<{ id: VideoProviderId; configured: boolean }> }>(response))
+      .then((data) => {
+        if (!active) return;
+        setVideoProviderConfigured(Object.fromEntries(
+          data.providers.map((provider) => [provider.id, provider.configured])
+        ) as Record<VideoProviderId, boolean>);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (loading) return;
@@ -640,6 +666,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                 aspectRatio: data.project.aspectRatio === "3:4" || data.project.aspectRatio === "8:11"
                   ? "4:5"
                   : data.project.aspectRatio,
+                imageModel,
                 imageSize,
                 jobKind: "image",
                 prompt,
@@ -1021,6 +1048,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
           aspectRatio: project.aspectRatio === "3:4" || project.aspectRatio === "8:11"
             ? "4:5"
             : project.aspectRatio,
+          imageModel,
           imageSize,
           jobKind: mode === "gesture" ? "gesture" : "image",
           prompt,
@@ -1622,7 +1650,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                     <button className={styles.retryButton} onClick={() => void retryJob(job.id)} title="다시 시도">
                       <LuRefreshCw />
                       <CreditCostBadge
-                        credits={job.creditCost ?? getGenerationCreditCost(job.kind, job.kind.includes("video") ? videoOptions : { imageSize })}
+                        credits={job.creditCost ?? getGenerationCreditCost(job.kind, job.kind.includes("video") ? videoOptions : { imageModel, imageSize })}
                       />
                     </button>
                   )}
@@ -1775,25 +1803,13 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                       </button>
                     </div>
                   </div>
-                  <div className={styles.field}>
-                    <span>출력 품질</span>
-                    <div className={styles.segmentControl} aria-label="이미지 출력 품질">
-                      <button
-                        className={imageSize === "1K" ? styles.segmentActive : ""}
-                        onClick={() => setImageSize("1K")}
-                        aria-pressed={imageSize === "1K"}
-                      >
-                        빠른 1K
-                      </button>
-                      <button
-                        className={imageSize === "2K" ? styles.segmentActive : ""}
-                        onClick={() => setImageSize("2K")}
-                        aria-pressed={imageSize === "2K"}
-                      >
-                        고품질 2K
-                      </button>
-                    </div>
-                  </div>
+                  <ImageModelSelector
+                    modelId={imageModel}
+                    resolution={imageSize}
+                    onModelChange={setImageModel}
+                    onResolutionChange={setImageSize}
+                    disabled={generating}
+                  />
                   <div className={styles.field}>
                     <span>구도·분위기 참고 자산</span>
                     <div className={styles.referenceAssetGrid}>
@@ -1835,8 +1851,31 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
 
               {mode === "video" && (
                 <div className={styles.inspectorSection}>
-                  <h2>Veo 설정</h2>
+                  <h2>영상 AI 설정</h2>
                   <div className={styles.twoColumnFields}>
+                    <label className={styles.field}>
+                      <span>영상 모델</span>
+                      <select
+                        value={videoOptions.provider}
+                        onChange={(event) => setVideoOptions((current) => {
+                          const provider = event.target.value as VideoProviderId;
+                          return {
+                            ...current,
+                            provider,
+                            durationSeconds: provider === "veo" && ![4, 6, 8].includes(current.durationSeconds)
+                              ? 8
+                              : current.durationSeconds,
+                          };
+                        })}
+                      >
+                        <option value="veo" disabled={!videoProviderConfigured.veo}>
+                          Veo 3.1 Fast{videoProviderConfigured.veo ? "" : " · 연결 필요"}
+                        </option>
+                        <option value="seedance" disabled={!videoProviderConfigured.seedance}>
+                          Seedance 2.0{videoProviderConfigured.seedance ? "" : " · 연결 필요"}
+                        </option>
+                      </select>
+                    </label>
                     <label className={styles.field}>
                       <span>화면 비율</span>
                       <select value={videoOptions.aspectRatio} onChange={(event) => setVideoOptions((current) => ({ ...current, aspectRatio: event.target.value as "9:16" | "16:9" }))}>
@@ -1846,10 +1885,11 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                     </label>
                     <label className={styles.field}>
                       <span>길이</span>
-                      <select value={videoOptions.durationSeconds} onChange={(event) => setVideoOptions((current) => ({ ...current, durationSeconds: Number(event.target.value) as 4 | 6 | 8 }))}>
-                        <option value={4}>4초</option>
-                        <option value={6}>6초</option>
-                        <option value={8}>8초</option>
+                      <select value={videoOptions.durationSeconds} onChange={(event) => setVideoOptions((current) => ({ ...current, durationSeconds: Number(event.target.value) }))}>
+                        {(videoOptions.provider === "seedance"
+                          ? Array.from({ length: 12 }, (_, index) => index + 4)
+                          : [4, 6, 8]
+                        ).map((duration) => <option key={duration} value={duration}>{duration}초</option>)}
                       </select>
                     </label>
                     <label className={styles.field}>
@@ -1861,7 +1901,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                     </label>
                     <label className={styles.toggleField}>
                       <input type="checkbox" checked={videoOptions.generateAudio} onChange={(event) => setVideoOptions((current) => ({ ...current, generateAudio: event.target.checked }))} />
-                      <span>Veo 오디오</span>
+                      <span>오디오 생성</span>
                     </label>
                   </div>
                   <div className={styles.sourceAssetInfo}>
@@ -1880,14 +1920,14 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
               <button
                 className={styles.generateButton}
                 onClick={() => void (mode === "video" ? startVideoGeneration() : startImageGeneration())}
-                disabled={generating}
+                disabled={generating || (mode === "video" && !videoProviderConfigured[videoOptions.provider])}
               >
                 {generating ? <LuLoaderCircle className={styles.spin} /> : mode === "video" ? <LuPlay /> : <LuSparkles />}
-                {generating ? "작업 등록 중" : mode === "video" ? "Veo 영상 만들기" : mode === "gesture" ? "제스처 만들기" : "장면 만들기"}
+                {generating ? "작업 등록 중" : mode === "video" ? "영상 만들기" : mode === "gesture" ? "제스처 만들기" : "장면 만들기"}
                 <CreditCostBadge
                   credits={mode === "video"
                     ? getGenerationCreditCost("video", videoOptions)
-                    : getGenerationCreditCost(mode === "gesture" ? "gesture" : "image", { imageSize })}
+                    : getGenerationCreditCost(mode === "gesture" ? "gesture" : "image", { imageModel, imageSize })}
                 />
               </button>
             </>
@@ -2137,25 +2177,13 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                   </select>
                 </label>
 
-                <div className={styles.field}>
-                  <span>이미지 출력 품질</span>
-                  <div className={styles.segmentControl} aria-label="기획서 이미지 출력 품질">
-                    <button
-                      className={imageSize === "1K" ? styles.segmentActive : ""}
-                      onClick={() => setImageSize("1K")}
-                      aria-pressed={imageSize === "1K"}
-                    >
-                      Gemini 빠른 1K
-                    </button>
-                    <button
-                      className={imageSize === "2K" ? styles.segmentActive : ""}
-                      onClick={() => setImageSize("2K")}
-                      aria-pressed={imageSize === "2K"}
-                    >
-                      Gemini 고품질 2K
-                    </button>
-                  </div>
-                </div>
+                <ImageModelSelector
+                  modelId={imageModel}
+                  resolution={imageSize}
+                  onModelChange={setImageModel}
+                  onResolutionChange={setImageSize}
+                  disabled={briefGenerating}
+                />
 
                 <label className={styles.briefAutoOption}>
                   <input
@@ -2224,7 +2252,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
                 <CreditCostBadge
                   credits={AI_CREDIT_COSTS.projectBrief}
                   label={briefAutoGenerate
-                    ? `${AI_CREDIT_COSTS.projectBrief} + 컷당 ${getGenerationCreditCost("image", { imageSize })}`
+                    ? `${AI_CREDIT_COSTS.projectBrief} + 컷당 ${getGenerationCreditCost("image", { imageModel, imageSize })}`
                     : undefined}
                 />
               </button>

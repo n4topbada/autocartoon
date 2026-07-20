@@ -96,6 +96,14 @@ function ledgerLabel(action: string, source: string) {
   return labels[source] || "AI 생성";
 }
 
+function ledgerNote(note: string | null, action: string) {
+  if (!note) return "";
+  if (note.length > 160 || /^\s*[\[{]/.test(note) || /ApiError|INVALID_ARGUMENT|"error"\s*:/i.test(note)) {
+    return action === "refund" ? "AI 작업 실패 자동 환불" : "처리 기록";
+  }
+  return note;
+}
+
 export default function CreditsPage() {
   const router = useRouter();
   const { user, loading: authLoading, refresh } = useAuth();
@@ -272,7 +280,7 @@ export default function CreditsPage() {
                 <strong>{cost.credits} 크레딧</strong>
               </div>
             ))}
-            <div className={styles.costFootnote}>영상 길이, 해상도, 오디오 옵션에 따라 추가 크레딧이 표시됩니다.</div>
+            <div className={styles.costFootnote}>영상은 4초 기준입니다. 실제 요청은 모델, 길이, 해상도, 오디오를 합산한 가격이 생성 버튼에 표시됩니다.</div>
           </div>
         </section>
 
@@ -286,11 +294,12 @@ export default function CreditsPage() {
           <div className={styles.historyTable}>
             {data?.ledger.length ? data.ledger.map((entry) => {
               const positive = entry.action === "purchase" || entry.action === "grant" || entry.action === "refund";
+              const note = ledgerNote(entry.note, entry.action);
               return (
                 <div className={styles.historyRow} key={entry.id}>
                   <div>
                     <strong>{ledgerLabel(entry.action, entry.source)}</strong>
-                    <span>{formatDate(entry.createdAt)}{entry.note ? ` · ${entry.note}` : ""}</span>
+                    <span>{formatDate(entry.createdAt)}{note ? ` · ${note}` : ""}</span>
                   </div>
                   <div className={styles.historyAmount}>
                     <strong className={positive ? styles.amountPositive : styles.amountNegative}>

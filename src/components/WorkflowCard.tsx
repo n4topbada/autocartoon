@@ -10,7 +10,9 @@ import {
   buildAnglesPrompt,
 } from "@/lib/background-prompts";
 import { getGenerationCreditCost } from "@/lib/credit-products";
+import { DEFAULT_IMAGE_MODEL_ID, type ImageModelId } from "@/lib/ai-pricing";
 import CreditCostBadge from "@/components/CreditCostBadge";
+import ImageModelSelector from "@/components/ImageModelSelector";
 import { LuSparkles, LuTrash2 } from "react-icons/lu";
 
 interface GeneratedImage {
@@ -115,6 +117,7 @@ async function runBackgroundJob(args: {
   prompt: string;
   count: number;
   aspectRatio: "1:1" | "4:5" | "9:16" | "16:9";
+  imageModel: ImageModelId;
   imageSize: "1K" | "2K";
   onProgress: (progress: number, stage: string) => void;
 }) {
@@ -136,6 +139,7 @@ async function runBackgroundJob(args: {
       prompt: args.prompt,
       count: args.count,
       aspectRatio: args.aspectRatio,
+      imageModel: args.imageModel,
       imageSize: args.imageSize,
       ...(args.inputImage?.artifactId
         ? { sourceArtifactId: args.inputImage.artifactId }
@@ -172,6 +176,7 @@ async function runBackgroundJob(args: {
 
 export default function WorkflowCard({ id, initialImage, onDelete, onPreview, onSaveBackground, onJobComplete }: WorkflowCardProps) {
   const [aspectRatio, setAspectRatio] = useState<"1:1" | "4:5" | "9:16" | "16:9">("1:1");
+  const [imageModel, setImageModel] = useState<ImageModelId>(DEFAULT_IMAGE_MODEL_ID);
   const [imageSize, setImageSize] = useState<"1K" | "2K">("1K");
   const [quickSource, setQuickSource] = useState<ImageData | null>(null);
   const [quickStyle, setQuickStyle] = useState<ImageData | null>(null);
@@ -255,6 +260,7 @@ export default function WorkflowCard({ id, initialImage, onDelete, onPreview, on
         prompt,
         count: quickCount,
         aspectRatio,
+        imageModel,
         imageSize,
         onProgress: (progress, stage) => setQuickStep((state) => ({ ...state, progress, stage })),
       });
@@ -316,6 +322,7 @@ export default function WorkflowCard({ id, initialImage, onDelete, onPreview, on
         prompt,
         count: cleanupCount,
         aspectRatio,
+        imageModel,
         imageSize,
         onProgress: (progress, stage) => setStep1((state) => ({ ...state, progress, stage })),
       });
@@ -384,6 +391,7 @@ export default function WorkflowCard({ id, initialImage, onDelete, onPreview, on
         prompt,
         count: stylizeCount,
         aspectRatio,
+        imageModel,
         imageSize,
         onProgress: (progress, stage) => setStep2((state) => ({ ...state, progress, stage })),
       });
@@ -469,6 +477,7 @@ export default function WorkflowCard({ id, initialImage, onDelete, onPreview, on
         prompt,
         count: angleCount,
         aspectRatio,
+        imageModel,
         imageSize,
         onProgress: (progress, stage) => setStep3((state) => ({ ...state, progress, stage })),
       });
@@ -613,10 +622,13 @@ export default function WorkflowCard({ id, initialImage, onDelete, onPreview, on
               <option value="16:9">16:9</option>
             </select>
           </label>
-          <div className={styles.qualityToggle} aria-label="배경 출력 품질">
-            <button aria-pressed={imageSize === "1K"} className={imageSize === "1K" ? styles.optionActive : ""} onClick={() => setImageSize("1K")}>빠른 1K</button>
-            <button aria-pressed={imageSize === "2K"} className={imageSize === "2K" ? styles.optionActive : ""} onClick={() => setImageSize("2K")}>고품질 2K</button>
-          </div>
+          <ImageModelSelector
+            modelId={imageModel}
+            resolution={imageSize}
+            onModelChange={setImageModel}
+            onResolutionChange={setImageSize}
+            compact
+          />
         </div>
         <button className={styles.deleteBtn} onClick={onDelete} title="이 작업 삭제">
           <LuTrash2 size={18} />
@@ -676,7 +688,7 @@ export default function WorkflowCard({ id, initialImage, onDelete, onPreview, on
                 {quickStep.generating ? <div className={styles.loader} /> : <LuSparkles />}
                 {quickStep.generating ? "배경 생성 중" : quickStep.results.length > 0 ? "다시 생성" : "배경 생성"}
                 <CreditCostBadge
-                  credits={getGenerationCreditCost("background", { count: quickCount, imageSize })}
+                  credits={getGenerationCreditCost("background", { count: quickCount, imageModel, imageSize })}
                 />
               </button>
             </div>
@@ -721,7 +733,7 @@ export default function WorkflowCard({ id, initialImage, onDelete, onPreview, on
                   "배경 정리하기"
                 )}
                 <CreditCostBadge
-                  credits={getGenerationCreditCost("background", { count: cleanupCount, imageSize })}
+                  credits={getGenerationCreditCost("background", { count: cleanupCount, imageModel, imageSize })}
                 />
               </button>
             </div>
@@ -762,7 +774,7 @@ export default function WorkflowCard({ id, initialImage, onDelete, onPreview, on
                   "일러스트로 변환하기"
                 )}
                 <CreditCostBadge
-                  credits={getGenerationCreditCost("background", { count: stylizeCount, imageSize })}
+                  credits={getGenerationCreditCost("background", { count: stylizeCount, imageModel, imageSize })}
                 />
               </button>
             </div>
@@ -814,7 +826,7 @@ export default function WorkflowCard({ id, initialImage, onDelete, onPreview, on
                   "앵글 생성"
                 )}
                 <CreditCostBadge
-                  credits={getGenerationCreditCost("background", { count: angleCount, imageSize })}
+                  credits={getGenerationCreditCost("background", { count: angleCount, imageModel, imageSize })}
                 />
               </button>
             </div>

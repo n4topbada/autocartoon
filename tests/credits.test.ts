@@ -56,25 +56,26 @@ test("image generation cost scales by output count and resolution", () => {
   assert.equal(getGenerationCreditCost("image", {}), AI_CREDIT_COSTS.image1k);
   assert.equal(
     getGenerationCreditCost("background", { count: 3, imageSize: "2K" }),
-    AI_CREDIT_COSTS.image2k * 3
+    57
   );
   assert.equal(
     getGenerationCreditCost("image", { count: 999, imageSize: "1K" }),
-    AI_CREDIT_COSTS.image1k * 5
+    63
+  );
+  assert.equal(
+    getGenerationCreditCost("image", { imageModel: "nano-banana-pro", imageSize: "2K" }),
+    26
   );
 });
 
 test("video generation cost includes duration, resolution, and audio options", () => {
   assert.equal(
     getGenerationCreditCost("video", { durationSeconds: 5, resolution: "720p", generateAudio: false }),
-    AI_CREDIT_COSTS.videoBase
+    75
   );
   assert.equal(
     getGenerationCreditCost("video", { durationSeconds: 8, resolution: "1080p", generateAudio: true }),
-    AI_CREDIT_COSTS.videoBase +
-      AI_CREDIT_COSTS.videoEightSeconds +
-      AI_CREDIT_COSTS.video1080p +
-      AI_CREDIT_COSTS.videoAudio
+    180
   );
   assert.equal(
     getGenerationCreditCost("video", {
@@ -83,7 +84,7 @@ test("video generation cost includes duration, resolution, and audio options", (
       resolution: "720p",
       generateAudio: true,
     }),
-    AI_CREDIT_COSTS.seedance720pPerSecond * 6
+    135
   );
   assert.equal(
     getGenerationCreditCost("video", {
@@ -92,7 +93,7 @@ test("video generation cost includes duration, resolution, and audio options", (
       resolution: "1080p",
       generateAudio: false,
     }),
-    AI_CREDIT_COSTS.seedance1080pPerSecond * 15
+    1_041
   );
 });
 

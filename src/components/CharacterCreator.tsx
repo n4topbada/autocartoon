@@ -15,7 +15,9 @@ import {
   type CharacterCreatorSettings,
 } from "@/lib/character-creator";
 import { getGenerationCreditCost } from "@/lib/credit-products";
+import { DEFAULT_IMAGE_MODEL_ID, type ImageModelId } from "@/lib/ai-pricing";
 import CreditCostBadge from "@/components/CreditCostBadge";
+import ImageModelSelector from "@/components/ImageModelSelector";
 import styles from "./CharacterCreator.module.css";
 
 interface JobArtifact {
@@ -97,6 +99,7 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
   const [saveTarget, setSaveTarget] = useState<SaveTarget | null>(null);
   const [saveName, setSaveName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [imageModel, setImageModel] = useState<ImageModelId>(DEFAULT_IMAGE_MODEL_ID);
   const [imageSize, setImageSize] = useState<"1K" | "2K">("1K");
   const completedRef = useRef<Set<string>>(new Set());
 
@@ -175,6 +178,7 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
             jobKind: "character",
             mode: "text",
             aspectRatio: "1:1",
+            imageModel,
             imageSize,
             prompt,
           }),
@@ -368,13 +372,13 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
           </div>
         </div>
 
-        <div className={styles.field}>
-          <span>출력 품질</span>
-          <div className={styles.segmented} aria-label="캐릭터 이미지 출력 품질">
-            <button type="button" aria-pressed={imageSize === "1K"} className={imageSize === "1K" ? styles.selected : ""} onClick={() => setImageSize("1K")}>빠른 1K</button>
-            <button type="button" aria-pressed={imageSize === "2K"} className={imageSize === "2K" ? styles.selected : ""} onClick={() => setImageSize("2K")}>고품질 2K</button>
-          </div>
-        </div>
+        <ImageModelSelector
+          modelId={imageModel}
+          resolution={imageSize}
+          onModelChange={setImageModel}
+          onResolutionChange={setImageSize}
+          disabled={starting || Boolean(trackedJobId)}
+        />
 
         <label className={styles.field}>
           <span>세부 요구</span>
@@ -398,7 +402,7 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
           >
             {starting || trackedJobId ? <LuLoaderCircle className={styles.spin} /> : <LuSparkles />}
             {starting ? "요청 중" : trackedJobId ? "생성 중" : "캐릭터 생성"}
-            <CreditCostBadge credits={getGenerationCreditCost("character", { imageSize })} />
+            <CreditCostBadge credits={getGenerationCreditCost("character", { imageModel, imageSize })} />
           </button>
         </div>
 
@@ -449,7 +453,7 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
                   <div className={styles.resultActions}>
                     <button type="button" title="같은 설정으로 재생성" onClick={() => startGeneration(job.prompt)} disabled={Boolean(trackedJobId)}>
                       <LuRefreshCw />
-                      <CreditCostBadge credits={getGenerationCreditCost("character", { imageSize })} />
+                      <CreditCostBadge credits={getGenerationCreditCost("character", { imageModel, imageSize })} />
                     </button>
                     <button type="button" title="이미지 다운로드" onClick={() => downloadImage(artifact.blobUrl)}>
                       <LuDownload />
@@ -472,7 +476,7 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
                 <span>{job.error || "생성에 실패했습니다."}</span>
                 <button type="button" onClick={() => retryJob(job.id)} disabled={Boolean(trackedJobId)}>
                   <LuRefreshCw /> 다시 시도
-                  <CreditCostBadge credits={job.creditCost ?? getGenerationCreditCost("character", { imageSize })} />
+                  <CreditCostBadge credits={job.creditCost ?? getGenerationCreditCost("character", { imageModel, imageSize })} />
                 </button>
               </div>
             ))}

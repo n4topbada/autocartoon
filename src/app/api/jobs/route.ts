@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { logError, logEvent } from "@/lib/observability";
 import { Prisma } from "@prisma/client";
 import { statObject } from "@/lib/storage";
+import { getVideoApiCostUsd } from "@/lib/ai-pricing";
 import {
   getStoredJobProvider,
   getVideoProviderModel,
@@ -197,6 +198,14 @@ export async function POST(req: NextRequest) {
           kind: "video",
           provider: getStoredJobProvider(provider),
           model: getVideoProviderModel(provider, resolution),
+          estimatedCostUsdMicros: Math.round(
+            getVideoApiCostUsd(
+              provider,
+              resolution,
+              durationSeconds,
+              input.generateAudio
+            ) * 1_000_000
+          ),
           idempotencyKey,
           prompt,
           input: input as unknown as Prisma.InputJsonValue,

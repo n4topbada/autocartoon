@@ -59,6 +59,7 @@ export interface GenerateInput {
   userId: string;
   isAdmin?: boolean;
   mode: GenerationMode;
+  model?: string;
   aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
   imageSize?: "1K" | "2K";
   count?: number;
@@ -465,6 +466,7 @@ export async function generate(input: GenerateInput) {
         status: "fulfilled",
         value: await generateContent({
           prompt,
+          model: input.model,
           aspectRatio: input.aspectRatio,
           imageSize: input.imageSize,
           referenceImages,

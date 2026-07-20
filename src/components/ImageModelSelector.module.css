@@ -1,0 +1,95 @@
+.root {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  width: 100%;
+}
+
+.modelField,
+.resolutionField {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.modelField > span,
+.resolutionField legend {
+  color: #62676f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.modelField select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 30px 0 10px;
+  border: 1px solid #d9dce1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #25282d;
+  font: inherit;
+  font-size: 13px;
+}
+
+.resolutionField > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(58px, 1fr));
+  gap: 4px;
+}
+
+.resolutionField button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid #d9dce1;
+  border-radius: 6px;
+  background: #f8f9fa;
+  color: #3f444b;
+  cursor: pointer;
+}
+
+.resolutionField button[aria-pressed="true"] {
+  border-color: #4f7867;
+  background: #edf5f0;
+  color: #234c3b;
+}
+
+.resolutionField button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.resolutionField strong,
+.resolutionField small {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.resolutionField small {
+  color: #737980;
+  font-weight: 600;
+}
+
+.compact {
+  grid-template-columns: 1fr;
+  gap: 7px;
+}
+
+.compact .modelField select,
+.compact .resolutionField button {
+  min-height: 34px;
+}
+
+@media (max-width: 560px) {
+  .root {
+    grid-template-columns: 1fr;
+  }
+}

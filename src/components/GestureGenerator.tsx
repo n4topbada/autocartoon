@@ -14,8 +14,10 @@ import {
   LuX,
 } from "react-icons/lu";
 import CreditCostBadge from "@/components/CreditCostBadge";
+import ImageModelSelector from "@/components/ImageModelSelector";
 import ImageDropZone, { type ImageData } from "@/components/ImageDropZone";
 import { getGenerationCreditCost } from "@/lib/credit-products";
+import { DEFAULT_IMAGE_MODEL_ID, type ImageModelId } from "@/lib/ai-pricing";
 import {
   buildStudioGenerationPrompt,
   CAMERA_ANGLES,
@@ -104,6 +106,7 @@ export default function GestureGenerator({ active = true }: { active?: boolean }
   const [backgroundMode, setBackgroundMode] = useState<"scene" | "none">("scene");
   const [aspectRatio, setAspectRatio] = useState<"1:1" | "4:5" | "9:16">("1:1");
   const [imageSize, setImageSize] = useState<"1K" | "2K">("1K");
+  const [imageModel, setImageModel] = useState<ImageModelId>(DEFAULT_IMAGE_MODEL_ID);
   const [jobs, setJobs] = useState<GestureJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -259,6 +262,7 @@ export default function GestureGenerator({ active = true }: { active?: boolean }
           jobKind: "gesture",
           mode: "text",
           aspectRatio,
+          imageModel,
           imageSize,
           prompt: generatedPrompt,
           ...(inputImages.length ? { inputImages } : {}),
@@ -432,15 +436,21 @@ export default function GestureGenerator({ active = true }: { active?: boolean }
 
         <div className={styles.optionRow}>
           <div className={styles.optionGroup}><span>배경</span><div className={styles.compactSegment}><button type="button" aria-pressed={backgroundMode === "scene"} onClick={() => setBackgroundMode("scene")}>포함</button><button type="button" aria-pressed={backgroundMode === "none"} onClick={() => setBackgroundMode("none")}>없음</button></div></div>
-          <div className={styles.optionGroup}><span>품질</span><div className={styles.compactSegment}><button type="button" aria-pressed={imageSize === "1K"} onClick={() => setImageSize("1K")}>1K</button><button type="button" aria-pressed={imageSize === "2K"} onClick={() => setImageSize("2K")}>2K</button></div></div>
         </div>
+        <ImageModelSelector
+          modelId={imageModel}
+          resolution={imageSize}
+          onModelChange={setImageModel}
+          onResolutionChange={setImageSize}
+          disabled={starting || Boolean(trackedJobId)}
+        />
 
         <div className={styles.formActions}>
           <button type="button" className={styles.resetButton} onClick={reset} disabled={starting}><LuRefreshCw /> 초기화</button>
           <button type="button" className={styles.generateButton} onClick={() => void startGeneration()} disabled={starting || Boolean(trackedJobId)}>
             {starting || trackedJobId ? <LuLoaderCircle className={styles.spin} /> : <LuSparkles />}
             {starting ? "요청 중" : trackedJobId ? "생성 중" : "제스처 생성"}
-            <CreditCostBadge credits={getGenerationCreditCost("gesture", { imageSize })} />
+            <CreditCostBadge credits={getGenerationCreditCost("gesture", { imageModel, imageSize })} />
           </button>
         </div>
 
