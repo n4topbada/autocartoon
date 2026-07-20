@@ -146,6 +146,30 @@
   color: var(--warning);
 }
 
+.balanceTools {
+  max-width: 330px;
+  display: grid;
+  justify-items: end;
+  gap: 12px;
+}
+
+.couponButton {
+  min-height: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.couponButton:hover { border-color: var(--accent); color: var(--accent); }
+
 .section {
   padding: 34px 0;
   border-bottom: 1px solid var(--border);
@@ -395,6 +419,12 @@
 
   .balance {
     font-size: 32px;
+  }
+
+  .balanceTools {
+    width: 100%;
+    max-width: none;
+    justify-items: start;
   }
 
   .productGrid {

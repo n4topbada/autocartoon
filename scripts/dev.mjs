@@ -18,6 +18,10 @@ for (const file of environmentFiles) {
   Object.assign(environment, parseEnv(readFileSync(filePath, "utf8")));
 }
 
+// Keep development output separate so a browser session cannot corrupt a
+// concurrent production build's .next directory.
+environment.NEXT_DIST_DIR ||= ".next-dev";
+
 const nextCli = path.join(
   projectRoot,
   "node_modules",

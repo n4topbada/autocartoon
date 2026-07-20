@@ -141,27 +141,29 @@ model User {
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
 
-  presets            CharacterPreset[]
-  characterGroups    CharacterGroup[]
-  backgrounds        SavedBackground[]
-  generationRequests GenerationRequest[]
-  purchasedPresets   PurchasedPreset[]
-  boardPosts         BoardPost[]
-  boardComments      BoardComment[]
-  boardLikes         BoardLike[]
-  helpRequests       HelpRequest[]
-  imageTags          ImageTag[]
-  instagramAccount   InstagramAccount?
-  promptPresets      PromptPreset[]
-  contents           Content[]
-  generationJobs     GenerationJob[]
-  creditLedger       CreditLedger[]
-  creditPayments     CreditPayment[]
-  creativeProjects   CreativeProject[]
-  savedProjectBriefs SavedProjectBrief[]
-  sessions           UserSession[]
-  reports            Report[]
-  announcementReads  AnnouncementRead[]
+  presets                CharacterPreset[]
+  characterGroups        CharacterGroup[]
+  backgrounds            SavedBackground[]
+  generationRequests     GenerationRequest[]
+  purchasedPresets       PurchasedPreset[]
+  boardPosts             BoardPost[]
+  boardComments          BoardComment[]
+  boardLikes             BoardLike[]
+  helpRequests           HelpRequest[]
+  imageTags              ImageTag[]
+  instagramAccount       InstagramAccount?
+  promptPresets          PromptPreset[]
+  contents               Content[]
+  generationJobs         GenerationJob[]
+  creditLedger           CreditLedger[]
+  creditPayments         CreditPayment[]
+  creativeProjects       CreativeProject[]
+  savedProjectBriefs     SavedProjectBrief[]
+  sessions               UserSession[]
+  reports                Report[]
+  announcementReads      AnnouncementRead[]
+  couponCampaignsCreated CouponCampaign[]    @relation("CouponCreator")
+  couponRedemptions      CouponRedemption[]
 }
 
 model Announcement {
@@ -313,6 +315,43 @@ model CreditPayment {
   @@index([status, updatedAt])
 }
 
+model CouponCampaign {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  title          String
+  credits        Int       @default(600)
+  active         Boolean   @default(true)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  maxRedemptions Int?
+  redeemedCount  Int       @default(0)
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  createdBy   User?              @relation("CouponCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  redemptions CouponRedemption[]
+
+  @@index([active, startsAt, endsAt])
+  @@index([createdAt])
+}
+
+model CouponRedemption {
+  id           String   @id @default(cuid())
+  campaignId   String
+  userId       String
+  credits      Int
+  balanceAfter Int
+  redeemedAt   DateTime @default(now())
+
+  campaign CouponCampaign @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([userId, redeemedAt])
+  @@index([campaignId, redeemedAt])
+}
+
 model CreativeProject {
   id           String   @id @default(cuid())
   userId       String
@@ -350,28 +389,28 @@ model SavedProjectBrief {
 }
 
 model ProjectCut {
-  id              String   @id @default(cuid())
-  projectId       String
-  order           Int
-  title           String
-  durationMs      Int      @default(5000)
-  prompt          String   @default("") @db.Text
-  videoPrompt     String?  @db.Text
-  videoProvider   String   @default("veo")
-  videoResolution String   @default("720p")
-  videoGenerateAudio Boolean @default(true)
-  videoApprovedAt DateTime?
-  negativePrompt  String?  @db.Text
-  dialogue        String?  @db.Text
-  dialoguePlan    Json?
-  speakerPresetId String?
-  scene           Json?
-  canvas          Json?
-  imageUrl        String?
-  thumbnailUrl    String?
-  videoUrl        String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                 String    @id @default(cuid())
+  projectId          String
+  order              Int
+  title              String
+  durationMs         Int       @default(5000)
+  prompt             String    @default("") @db.Text
+  videoPrompt        String?   @db.Text
+  videoProvider      String    @default("veo")
+  videoResolution    String    @default("720p")
+  videoGenerateAudio Boolean   @default(true)
+  videoApprovedAt    DateTime?
+  negativePrompt     String?   @db.Text
+  dialogue           String?   @db.Text
+  dialoguePlan       Json?
+  speakerPresetId    String?
+  scene              Json?
+  canvas             Json?
+  imageUrl           String?
+  thumbnailUrl       String?
+  videoUrl           String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   project  CreativeProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   jobs     GenerationJob[]

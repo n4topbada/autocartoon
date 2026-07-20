@@ -6,8 +6,8 @@ import {
   isStaticPath,
 } from "../src/lib/request-routing";
 
-test("로그인과 법적 고지 페이지는 비로그인 사용자에게 공개된다", () => {
-  for (const pathname of ["/login", "/verify", "/terms", "/privacy", "/refund"]) {
+test("로그인, 법적 고지와 쿠폰 진입 페이지는 비로그인 사용자에게 공개된다", () => {
+  for (const pathname of ["/login", "/verify", "/terms", "/privacy", "/refund", "/coupon/WONY-ABCD-EFGH"]) {
     assert.equal(isPublicRoute(pathname), true, pathname);
     assert.equal(isPublicPageRoute(pathname), true, pathname);
   }
@@ -18,6 +18,8 @@ test("공개 API 접두사는 경로 경계에서만 일치한다", () => {
   assert.equal(isPublicRoute("/api/auth/google"), true);
   assert.equal(isPublicRoute("/api/media/example"), true);
   assert.equal(isPublicRoute("/api/tasks/generate"), true);
+  assert.equal(isPublicRoute("/api/coupons/lookup/WONY-ABCD-EFGH"), true);
+  assert.equal(isPublicRoute("/api/coupons/redeem"), false);
   assert.equal(isPublicRoute("/api/authentic"), false);
   assert.equal(isPublicRoute("/api/mediation"), false);
   assert.equal(isPublicRoute("/settings"), false);

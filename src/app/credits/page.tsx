@@ -11,9 +11,11 @@ import {
   LuLoaderCircle,
   LuRefreshCw,
   LuShieldCheck,
+  LuTicket,
 } from "react-icons/lu";
 import { RiKakaoTalkFill } from "react-icons/ri";
 import { useAuth } from "@/components/AuthProvider";
+import CouponRedeemDialog from "@/components/CouponRedeemDialog";
 import LegalFooter from "@/components/LegalFooter";
 import { CREDIT_UNIT_PRICE_KRW, WELCOME_CREDITS } from "@/lib/credit-products";
 import styles from "./page.module.css";
@@ -75,7 +77,11 @@ function formatBonusRate(credits: number, bonusCredits = 0) {
 
 function ledgerLabel(action: string, source: string) {
   if (action === "purchase") return "카카오페이 충전";
-  if (action === "grant") return "가입 크레딧";
+  if (action === "grant") {
+    if (source === "coupon") return "쿠폰 지급";
+    if (source === "admin") return "관리자 지급";
+    return "가입 크레딧";
+  }
   if (action === "refund") return "실패 자동 환불";
   const labels: Record<string, string> = {
     chat: "AI 채팅",
@@ -112,6 +118,7 @@ export default function CreditsPage() {
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState<string | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [couponOpen, setCouponOpen] = useState(false);
 
   const loadWallet = useCallback(async () => {
     setLoading(true);
@@ -205,9 +212,14 @@ export default function CreditsPage() {
             <strong className={styles.balance}>{data?.balance.toLocaleString() ?? 0}</strong>
             <span className={styles.balanceUnit}>크레딧</span>
           </div>
-          <div className={styles.welcomeInfo}>
-            <LuCoins size={20} />
-            <span>신규 가입 시 {data?.welcomeCredits ?? WELCOME_CREDITS}크레딧이 자동 지급됩니다.</span>
+          <div className={styles.balanceTools}>
+            <div className={styles.welcomeInfo}>
+              <LuCoins size={20} />
+              <span>신규 가입 시 {data?.welcomeCredits ?? WELCOME_CREDITS}크레딧이 자동 지급됩니다.</span>
+            </div>
+            <button className={styles.couponButton} type="button" onClick={() => setCouponOpen(true)}>
+              <LuTicket /> 쿠폰 등록
+            </button>
           </div>
         </section>
 
@@ -313,6 +325,11 @@ export default function CreditsPage() {
           </div>
         </section>
       </div>
+      <CouponRedeemDialog
+        open={couponOpen}
+        onClose={() => setCouponOpen(false)}
+        onRedeemed={() => loadWallet()}
+      />
       <LegalFooter />
     </main>
   );

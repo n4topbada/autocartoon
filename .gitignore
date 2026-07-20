@@ -1,5 +1,6 @@
 node_modules/
 .next/
+.next-dev/
 out/
 .env
 .env.local
@@ -21,6 +22,7 @@ assets/kang-geonma/*.webp
 assets/kang-geonma/*.gif
 /.swc
 .codex-dev.*.log
+dev-server.*.log
 .e2e-*.json
 src/app/.well-known/workflow/
 public/uploads/

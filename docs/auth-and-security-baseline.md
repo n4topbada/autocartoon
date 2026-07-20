@@ -17,7 +17,7 @@ This document records the current prototype posture, the changes already impleme
 OAuth proves control of a provider account, not that one human owns only one provider account. A determined person can still create multiple Google or Kakao accounts, so IP blocking has been replaced with benefit-level controls:
 
 1. Free credits are not transferable between users, and every grant or spend is recorded in `CreditLedger`.
-2. Coupon campaigns must enforce one redemption per local user and campaign with a database unique constraint, an atomic campaign quota, and an idempotent ledger reference.
+2. Coupon campaigns enforce one redemption per local user and campaign with a database unique constraint, an atomic campaign quota, and an idempotent ledger reference.
 3. Expensive AI routes retain server-side credit reservation and request controls, so repeated accounts cannot generate without a recorded balance deduction.
 4. Add phone or stronger identity verification only if observed abuse justifies the added signup friction. Device fingerprints and raw IP identity matching are not treated as reliable person identifiers.
 

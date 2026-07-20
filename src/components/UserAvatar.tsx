@@ -7,17 +7,20 @@ import {
   LuLogOut,
   LuMail,
   LuSettings,
+  LuTicket,
   LuUserRoundCog,
   LuWalletCards,
 } from "react-icons/lu";
 import { useAuth } from "./AuthProvider";
 import { WELCOME_CREDITS } from "@/lib/credit-products";
+import CouponRedeemDialog from "./CouponRedeemDialog";
 import styles from "./UserAvatar.module.css";
 
 export default function UserAvatar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const [showFaq, setShowFaq] = useState(false);
+  const [showCoupon, setShowCoupon] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -64,6 +67,9 @@ export default function UserAvatar({ onOpenSettings }: { onOpenSettings: () => v
           <a className={styles.menuItem} href="/credits" onClick={() => setOpen(false)}>
             <LuWalletCards size={14} /> 충전 및 사용 내역
           </a>
+          <button className={styles.menuItem} type="button" role="menuitem" onClick={() => { setOpen(false); setShowCoupon(true); }}>
+            <LuTicket size={14} /> 쿠폰 등록
+          </button>
 
           <div className={styles.divider} />
           <button className={styles.menuItem} type="button" onClick={() => { setOpen(false); setShowFaq(true); }}>
@@ -117,6 +123,7 @@ export default function UserAvatar({ onOpenSettings }: { onOpenSettings: () => v
           </div>
         </div>
       )}
+      <CouponRedeemDialog open={showCoupon} onClose={() => setShowCoupon(false)} />
     </div>
   );
 }

@@ -26,19 +26,20 @@ Client
 
 ## Data Model
 
-Prisma 모델 33개:
+Prisma 모델 35개:
 
 - 인증: `User`, `UserSession`
 - 캐릭터: `CharacterGroup`, `CharacterPreset`, `PresetImage`, `PurchasedPreset`
 - 생성: `GenerationRequest`, `GeneratedImage`, `SavedBackground`, `GenerationJob`, `GenerationArtifact`
 - 과금: `CreditLedger`, `CreditPayment`
+- 쿠폰: `CouponCampaign`, `CouponRedemption`
 - 제작: `CreativeProject`, `SavedProjectBrief`, `ProjectCut`, `CanvasVersion`, `ProjectAsset`
 - 커뮤니티: `BoardPost`, `BoardComment`, `BoardLike`, `Report`
 - 콘텐츠: `Content`, `ContentSlot`, `PromptPreset`, `ImageTag`, `ImageTagLink`
 - 운영: `Announcement`, `AnnouncementRead`, `ChatKnowledge`, `HelpRequest`
 - 외부 연동: `InstagramAccount`, `InstagramPost`
 
-API Route Handler는 99개다. `src/middleware.ts`가 인증을 먼저 검사하고 각 라우트가 다시 객체 소유권이나 관리자 역할을 확인한다. 로그인·인증 확인·정책 페이지는 공개이며, 공개 미디어와 Cloud Tasks 핸들러는 각자의 소유권/공유 토큰 검증을 수행한다.
+API Route Handler는 103개다. `src/middleware.ts`가 인증을 먼저 검사하고 각 라우트가 다시 객체 소유권이나 관리자 역할을 확인한다. 로그인·인증 확인·정책·쿠폰 진입 페이지는 공개이며, 공개 미디어와 Cloud Tasks 핸들러는 각자의 소유권/공유 토큰 검증을 수행한다.
 
 ## Durable Generation
 

@@ -26,6 +26,7 @@ import {
 } from "@/lib/admin-password-reset";
 import { ANNOUNCEMENT_CATEGORY_LABELS, type AnnouncementCategory } from "@/lib/announcements";
 import { WELCOME_CREDITS } from "@/lib/credit-products";
+import CouponAdminPanel from "@/components/CouponAdminPanel";
 import styles from "./page.module.css";
 
 interface UserRow {
@@ -132,6 +133,7 @@ export default function AdminPage() {
   const [announcementForm, setAnnouncementForm] = useState<AnnouncementForm>(EMPTY_ANNOUNCEMENT);
   const [editingAnnouncementId, setEditingAnnouncementId] = useState<string | null>(null);
   const [announcementSaving, setAnnouncementSaving] = useState(false);
+  const [couponRefreshKey, setCouponRefreshKey] = useState(0);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -307,6 +309,7 @@ export default function AdminPage() {
   const refreshAll = () => {
     void loadUsers();
     void loadAnnouncements();
+    setCouponRefreshKey((current) => current + 1);
   };
 
   return (
@@ -316,7 +319,7 @@ export default function AdminPage() {
           <Link href="/" className={styles.iconButton} aria-label="작업 화면으로 돌아가기" title="돌아가기">
             <LuArrowLeft size={19} />
           </Link>
-          <div><h1 className={styles.title}>운영 관리</h1><p>공지, 사용자와 크레딧을 관리합니다.</p></div>
+          <div><h1 className={styles.title}>운영 관리</h1><p>공지, 쿠폰, 사용자와 크레딧을 관리합니다.</p></div>
         </div>
         <button className={styles.iconButton} type="button" onClick={refreshAll} title="전체 새로고침">
           <LuRefreshCw size={17} />
@@ -389,6 +392,8 @@ export default function AdminPage() {
           </div>
         </div>
       </section>
+
+      <CouponAdminPanel refreshKey={couponRefreshKey} />
 
       <section className={styles.userSection} aria-labelledby="user-heading">
         <div className={styles.sectionHeader}><div><LuCoins /><span><h2 id="user-heading">사용자 및 크레딧</h2><p>잔액, 로그인 복구와 결제 연결 상태를 관리합니다.</p></span></div></div>
