@@ -63,7 +63,7 @@
 .creditAction { display: flex; align-items: center; gap: 6px; }
 .creditInput { width: 82px; height: 34px; padding: 0 9px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-subtle); color: var(--text); font-size: 12px; }
 .creditBtn { min-width: 70px; height: 34px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 6px; background: var(--success); color: #fff; font-size: 12px; font-weight: 700; }
-.creditBtn:hover:not(:disabled) { background: var(--success); }
+.creditBtn:hover:not(:disabled) { background: #2f6250; }
 .creditBtn:disabled { opacity: .45; cursor: not-allowed; }
 .loginMethods { display: inline-flex; align-items: center; gap: 4px; }
 .loginMethods span { padding: 3px 6px; border-radius: 4px; background: var(--surface-hover); color: var(--text-dim); font-size: 10px; }

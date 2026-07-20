@@ -214,10 +214,19 @@ function DepthBScroller({
           const isSelected = !!selectedPresets.find((s) => s.id === p.id);
           const isOwner = p.userId === currentUserId;
           return (
-            <button
+            <div
               key={p.id}
+              role="button"
+              tabIndex={0}
+              aria-pressed={isSelected}
               className={`${styles.presetCard} ${isSelected ? styles.presetSelected : ""}`}
               onClick={() => onToggle(p)}
+              onKeyDown={(e) => {
+                if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                  e.preventDefault();
+                  onToggle(p);
+                }
+              }}
             >
               <div className={styles.presetThumbSingle}>
                 {(p.representativeImage ?? p.images[0]) && (
@@ -225,6 +234,7 @@ function DepthBScroller({
                 )}
                 {isSelected && isOwner && (
                   <button
+                    type="button"
                     className={styles.editBtn}
                     onClick={(e) => { e.stopPropagation(); onManage(p); }}
                   >
@@ -233,7 +243,7 @@ function DepthBScroller({
                 )}
               </div>
               <span className={styles.presetName}>{p.name}</span>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -1489,10 +1499,19 @@ export default function Home() {
                     const isSelected = !!selectedPresets.find((s) => s.id === p.id);
                     const isOwner = p.userId === user?.id;
                     return (
-                      <button
+                      <div
                         key={p.id}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={isSelected}
                         className={`${styles.presetCard} ${isSelected ? styles.presetSelected : ""}`}
                         onClick={() => togglePresetSelection(p)}
+                        onKeyDown={(e) => {
+                          if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                            e.preventDefault();
+                            togglePresetSelection(p);
+                          }
+                        }}
                       >
                         <div className={styles.presetThumbSingle}>
                           {(p.representativeImage ?? p.images[0]) && (
@@ -1500,6 +1519,7 @@ export default function Home() {
                           )}
                           {isSelected && isOwner && (
                             <button
+                              type="button"
                               className={styles.editBtn}
                               onClick={(e) => { e.stopPropagation(); handleManagePreset(p); }}
                             >
@@ -1508,7 +1528,7 @@ export default function Home() {
                           )}
                         </div>
                         <span className={styles.presetName}>{p.name}</span>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -1567,22 +1587,32 @@ export default function Home() {
                 <span className={styles.bgSectionLabel}>저장된 배경</span>
                 <div className={styles.bgThumbnailStrip}>
                   {savedBackgrounds.map((bg) => (
-                    <button
+                    <div
                       key={bg.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={selectedBgImageId === bg.id}
                       className={`${styles.bgThumb} ${selectedBgImageId === bg.id ? styles.bgThumbSelected : ""}`}
                       onClick={() => handleBgImageSelect(bg.id)}
+                      onKeyDown={(e) => {
+                        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                          e.preventDefault();
+                          handleBgImageSelect(bg.id);
+                        }
+                      }}
                       title={bg.name}
                     >
                       <img src={bg.thumbnailUrl ?? bg.dataUrl} alt={bg.name} />
                       <span className={styles.bgThumbName}>{bg.name}</span>
                       <button
+                        type="button"
                         className={styles.bgThumbDelete}
                         onClick={(e) => { e.stopPropagation(); handleDeleteBg(bg.id); }}
                         title="삭제"
                       >
                         ×
                       </button>
-                    </button>
+                    </div>
                   ))}
                 </div>
               </>

@@ -118,7 +118,7 @@
 .field small { color: var(--text-dim); font-size: 10px; text-align: right; }
 .settingsGrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(100px, .5fr); gap: 8px; }
 
-.optionRow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 18px; }
+.optionRow { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 18px; }
 .optionGroup { display: grid; gap: 7px; }
 .compactSegment { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .compactSegment button { min-height: 32px; font-size: 11px; }

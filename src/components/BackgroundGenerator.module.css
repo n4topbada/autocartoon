@@ -1,8 +1,9 @@
 .container {
   flex: 1;
+  min-height: 0;
+  height: 100%;
   padding: 24px;
   overflow-y: auto;
-  max-height: calc(100vh - 72px);
 }
 
 .inner {
@@ -46,6 +47,8 @@
 
 .clearBtn:hover {
   background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
 }
 
 .cardList {
@@ -204,8 +207,13 @@
 }
 
 .emptyIcon {
-  font-size: 48px;
   margin-bottom: 16px;
+  color: var(--text-dim);
+}
+
+.emptyIcon svg {
+  width: 28px;
+  height: 28px;
 }
 
 .emptyTitle {
@@ -228,16 +236,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  padding: 5vh 16px;
+  z-index: var(--z-modal);
 }
 
 .modal {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 28px;
   width: 440px;
   max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -280,7 +291,7 @@
 
 .modalInput {
   padding: 10px 14px;
-  background: var(--border);
+  background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   color: var(--text);
@@ -290,7 +301,7 @@
 
 .modalInput:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 .modalActions {

@@ -248,14 +248,29 @@ export default function AdminPage() {
     setPasswordCopied(false);
   };
 
-  const closePasswordReset = () => {
+  const closePasswordReset = useCallback(() => {
     if (passwordResetting) return;
     setPasswordResetTarget(null);
     setTemporaryPassword("");
     setPasswordResetError("");
     setPasswordResetResult(null);
     setPasswordCopied(false);
-  };
+  }, [passwordResetting]);
+
+  // 비밀번호 재설정 모달이 열려 있는 동안 뒤 페이지 스크롤을 잠그고 Escape로 닫는다.
+  useEffect(() => {
+    if (!passwordResetTarget) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !passwordResetting) closePasswordReset();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [closePasswordReset, passwordResetTarget, passwordResetting]);
 
   const copyTemporaryPassword = async () => {
     try {

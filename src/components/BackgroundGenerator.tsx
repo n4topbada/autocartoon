@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { LuDownload, LuMaximize2, LuRefreshCw, LuRotateCcw, LuSave } from "react-icons/lu";
+import { LuDownload, LuImage, LuMaximize2, LuRefreshCw, LuRotateCcw, LuSave } from "react-icons/lu";
 import type { ImageData } from "./ImageDropZone";
 import WorkflowCard from "./WorkflowCard";
 import ImageModal from "./ImageModal";
@@ -175,7 +175,7 @@ export default function BackgroundGenerator({ active = true, onBackgroundSaved }
 
         {cards.length === 0 ? (
           <div className={styles.emptyState}>
-            <div className={styles.emptyIcon}>🎨</div>
+            <div className={styles.emptyIcon}><LuImage /></div>
             <div className={styles.emptyTitle}>배경 생성을 시작하세요</div>
             <p className={styles.emptyDesc}>
               사진에서 배경을 추출하고, 일러스트 스타일로 변환하고, 다양한 앵글을 생성합니다.

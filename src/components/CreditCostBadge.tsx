@@ -24,7 +24,6 @@ export default function CreditCostBadge({
     <span
       className={`${styles.badge}${className ? ` ${className}` : ""}`}
       aria-label={accessibleLabel}
-      title={accessibleLabel}
     >
       <LuCoins aria-hidden="true" size={11} />
       <span>{display}</span>

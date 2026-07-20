@@ -53,7 +53,7 @@
   max-width: 1440px;
   margin: 0 auto 14px;
   padding: 10px 12px;
-  border: 1px solid #dfc98f;
+  border: 1px solid var(--warning-border);
   border-radius: 6px;
   background: var(--warning-soft);
   color: var(--warning);
@@ -86,7 +86,7 @@
 }
 
 .noticeHeading strong { font-size: 12px; }
-.noticeHeading span { color: var(--text-dim); font-size: 9px; }
+.noticeHeading span { color: var(--text-dim); font-size: 11px; }
 .noticeList { min-width: 0; }
 .notice { border-bottom: 1px solid var(--border); }
 .notice:last-child { border-bottom: 0; }
@@ -105,9 +105,9 @@
   cursor: pointer;
 }
 .notice button:hover { background: var(--surface-hover); }
-.notice button > span { color: var(--accent); font-size: 9px; font-weight: 800; }
+.notice button > span { color: var(--accent); font-size: 11px; font-weight: 800; }
 .notice button > strong { min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.notice button > time { color: var(--text-dim); font-size: 9px; text-align: right; }
+.notice button > time { color: var(--text-dim); font-size: 11px; text-align: right; }
 .notice button > svg { color: var(--text-dim); transition: transform .16s ease; }
 .noticeUnread button > strong::before { content: ""; width: 5px; height: 5px; margin-right: 6px; display: inline-block; border-radius: 50%; background: var(--danger); vertical-align: 1px; }
 .noticeChevronOpen { transform: rotate(180deg); }
@@ -160,12 +160,12 @@
 .sectionHeading { display: grid; grid-template-columns: minmax(180px, auto) minmax(180px, 1fr); align-items: center; gap: 24px; margin-bottom: 14px; }
 .sectionHeading > div:first-child { display: flex; align-items: baseline; gap: 10px; }
 .sectionHeading strong { font-size: 12px; }
-.progress { height: 4px; overflow: hidden; border-radius: 2px; background: var(--surface); }
+.progress { height: 4px; overflow: hidden; border-radius: 2px; background: var(--surface-hover); }
 .progress span { display: block; height: 100%; background: var(--accent); transition: width 0.25s ease; }
 .workflowSteps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .workflowSteps a, .workflowSteps button { min-width: 0; min-height: 54px; padding: 10px 12px; display: grid; grid-template-columns: 24px auto minmax(0, 1fr) 16px; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); text-decoration: none; text-align: left; cursor: pointer; }
 .workflowSteps a:hover, .workflowSteps button:hover { border-color: var(--accent); }
-.workflowSteps small { color: var(--text-dim); font-size: 9px; }
+.workflowSteps small { color: var(--text-dim); font-size: 11px; }
 .workflowSteps strong { min-width: 0; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .done, .pending { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; }
 .done { background: var(--success); color: white; }
@@ -186,8 +186,8 @@
 .jobText strong, .jobText small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .jobText strong { font-size: 12px; }
 .jobText small { margin-top: 3px; color: var(--text-dim); font-size: 10px; }
-.job time, .project time { color: var(--text-dim); font-size: 9px; text-align: right; }
-.status { padding: 3px 6px; border-radius: 4px; background: var(--bg); color: var(--text-dim); font-size: 9px; white-space: nowrap; }
+.job time, .project time { color: var(--text-dim); font-size: 11px; text-align: right; }
+.status { padding: 3px 6px; border-radius: 4px; background: var(--bg); color: var(--text-dim); font-size: 11px; white-space: nowrap; }
 .status_succeeded { color: var(--success); }
 .status_failed { color: var(--danger); }
 .status_running, .status_queued { color: var(--warning); }

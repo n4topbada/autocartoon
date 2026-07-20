@@ -114,6 +114,21 @@ export default function CharacterManagementModal({ preset, onClose, onUpdate, on
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
   }, []);
 
+  // 전체 화면 오버레이 동안 뒤 페이지 스크롤을 잠가 이중 스크롤을 막고,
+  // Escape로 닫는다. (ImageModal/CharacterDesigner와 동일 패턴)
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
+
   // 방향이 정해지지 않은(reference) 이미지들. 자동으로 좌/우/후면 등에 억지로
   // 배정하지 않고 아래 '미분류' 영역에 노출해 사용자가 직접 지정하게 한다.
   // (예전에는 모달을 열기만 해도 정면 변형들을 좌/우/후면으로 잘못 재라벨했다)

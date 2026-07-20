@@ -16,10 +16,10 @@ function VerifyContent() {
     <div style={{ textAlign: "center" }}>
       {error ? (
         <>
-          <p style={{ color: "#ef4444", fontSize: 18 }}>
+          <p style={{ color: "var(--danger)", fontSize: 18 }}>
             {errorMessages[error] || "인증에 실패했습니다."}
           </p>
-          <a href="/login" style={{ color: "#818cf8", marginTop: 16, display: "block" }}>
+          <a href="/login" style={{ color: "var(--accent)", marginTop: 16, display: "block" }}>
             로그인 페이지로 이동
           </a>
         </>
@@ -37,8 +37,8 @@ export default function VerifyPage() {
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      background: "#0a0a0a",
-      color: "#f3f4f6",
+      background: "var(--bg)",
+      color: "var(--text)",
     }}>
       <Suspense fallback={<p>로딩 중...</p>}>
         <VerifyContent />

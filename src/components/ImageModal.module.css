@@ -39,17 +39,18 @@
   height: 32px;
   border-radius: 50%;
   background: var(--surface);
-  border: none;
-  color: white;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
 .closeBtn:hover {
   background: var(--danger);
+  color: #fff;
 }
 
 @keyframes fadeIn {

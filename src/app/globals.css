@@ -25,9 +25,18 @@
   --success-border: #b8d6c4;
   --warning: #906b27;
   --warning-soft: #f7f0dc;
+  --warning-border: #e3d3a0;
   --shadow-sm: 0 1px 2px rgba(32, 39, 34, 0.05);
   --shadow-md: 0 12px 32px rgba(32, 39, 34, 0.12);
   --radius: 6px;
+
+  /* 스태킹 순서 스케일: 임의의 z-index 대신 이 토큰을 사용해 팝업/모달/토스트가
+     항상 올바른 층에 쌓이도록 한다. (header < dropdown < overlay < modal < toast) */
+  --z-header: 20;
+  --z-dropdown: 100;
+  --z-overlay: 1000;
+  --z-modal: 1100;
+  --z-toast: 2000;
 }
 
 * {

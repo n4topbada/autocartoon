@@ -27,7 +27,7 @@
 }
 
 .adminUserSelectCompact {
-  min-height: 36px;
+  min-height: 38px;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -762,6 +762,10 @@
   border: 2px solid var(--border);
   border-radius: var(--radius);
   transition: all 0.15s;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: center;
 }
 
 .presetCard:hover {
@@ -1045,7 +1049,7 @@
   color: var(--danger);
   font-size: 13px;
   padding: 8px;
-  background: rgba(231, 76, 60, 0.1);
+  background: var(--danger-soft);
   border-radius: 8px;
 }
 
@@ -1125,7 +1129,7 @@
 }
 
 .favFilterActive {
-  background: rgba(220, 38, 38, 0.1);
+  background: var(--danger-soft);
   border-color: var(--danger);
   color: var(--danger);
 }

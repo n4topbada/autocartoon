@@ -127,13 +127,13 @@
 }
 
 .chips button {
-  min-height: 27px;
+  min-height: 28px;
   padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: 5px;
   background: transparent;
   color: var(--text-dim);
-  font-size: 10px;
+  font-size: 12px;
   cursor: pointer;
 }
 
