@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     if (isCreditError(error)) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      return NextResponse.json({ error: error.message, traceId: error.traceId }, { status: error.status });
     }
     return NextResponse.json(
       { error: getPublicPlatformAIError(error, "영상 프롬프트를 확장하지 못했습니다.") },

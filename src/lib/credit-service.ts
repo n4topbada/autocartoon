@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
+import {
+  createCreditAuditEvent,
+  createCreditLedgerWithAudit,
+  createCreditTraceId,
+  recordCreditAuditSafely,
+  sanitizeCreditAuditError,
+} from "./credit-audit";
 import { getGenerationCreditCost } from "./credit-products";
 import { prisma } from "./prisma";
 
@@ -13,17 +20,18 @@ type ReserveOptions = {
   referenceId: string;
   jobId?: string;
   note?: string;
+  metadata?: Record<string, unknown>;
 };
 
 type ReserveResult =
-  | { ok: true; source: "credit"; units: number; balanceAfter: number }
-  | { ok: false; error: string };
+  | { ok: true; source: "credit"; units: number; balanceAfter: number; traceId: string }
+  | { ok: false; error: string; traceId: string };
 
 export class CreditError extends Error {
   readonly status = 402;
   readonly code = "INSUFFICIENT_CREDITS";
 
-  constructor(message = INSUFFICIENT_CREDITS) {
+  constructor(message = INSUFFICIENT_CREDITS, readonly traceId?: string) {
     super(message);
     this.name = "CreditError";
   }
@@ -53,6 +61,7 @@ async function reserveCreditsWithTransaction(
   options: ReserveOptions
 ): Promise<ReserveResult> {
   validateUnits(options.units);
+  const traceId = createCreditTraceId(options.referenceId);
 
   const existing = await tx.creditLedger.findUnique({
     where: { referenceKey: chargeKey(options.referenceId) },
@@ -65,11 +74,28 @@ async function reserveCreditsWithTransaction(
       where: { id: userId },
       select: { credits: true },
     });
+    await createCreditAuditEvent(tx, {
+      userId,
+      jobId: options.jobId,
+      traceId,
+      referenceId: options.referenceId,
+      operation: "charge_reused",
+      direction: "neutral",
+      status: "success",
+      source: options.source,
+      units: existing.units,
+      balanceBefore: user.credits,
+      balanceAfter: user.credits,
+      reasonCode: "IDEMPOTENT_REPLAY",
+      summary: "이미 처리된 크레딧 차감을 안전하게 재사용",
+      metadata: { ...options.metadata, idempotent: true },
+    });
     return {
       ok: true,
       source: "credit",
       units: existing.units,
       balanceAfter: existing.balanceAfter ?? user.credits,
+      traceId,
     };
   }
 
@@ -78,24 +104,49 @@ async function reserveCreditsWithTransaction(
     data: { credits: { decrement: options.units } },
   });
   if (deduction.count !== 1) {
-    return { ok: false, error: INSUFFICIENT_CREDITS };
+    const wallet = await tx.user.findUnique({
+      where: { id: userId },
+      select: { credits: true },
+    });
+    const audit = await createCreditAuditEvent(tx, {
+      userId: wallet ? userId : null,
+      jobId: options.jobId,
+      traceId,
+      referenceId: options.referenceId,
+      operation: "charge",
+      direction: "debit",
+      status: "failure",
+      source: options.source,
+      units: options.units,
+      balanceBefore: wallet?.credits,
+      balanceAfter: wallet?.credits,
+      reasonCode: wallet ? "INSUFFICIENT_CREDITS" : "USER_NOT_FOUND",
+      summary: wallet ? "크레딧 부족으로 차감 거절" : "사용자를 찾지 못해 차감 거절",
+      errorMessage: wallet
+        ? `필요 ${options.units.toLocaleString("ko-KR")}C, 보유 ${wallet.credits.toLocaleString("ko-KR")}C`
+        : "크레딧 계정을 찾을 수 없습니다.",
+      metadata: options.metadata,
+    });
+    return { ok: false, error: INSUFFICIENT_CREDITS, traceId: audit.traceId };
   }
 
   const user = await tx.user.findUniqueOrThrow({
     where: { id: userId },
     select: { credits: true },
   });
-  await tx.creditLedger.create({
-    data: {
-      userId,
-      jobId: options.jobId,
-      referenceKey: chargeKey(options.referenceId),
-      action: "charge",
-      source: options.source,
-      units: options.units,
-      balanceAfter: user.credits,
-      note: options.note,
-    },
+  await createCreditLedgerWithAudit(tx, {
+    userId,
+    jobId: options.jobId,
+    referenceKey: chargeKey(options.referenceId),
+    referenceId: options.referenceId,
+    traceId,
+    action: "charge",
+    source: options.source,
+    units: options.units,
+    balanceBefore: user.credits + options.units,
+    balanceAfter: user.credits,
+    note: options.note,
+    metadata: options.metadata,
   });
 
   return {
@@ -103,6 +154,7 @@ async function reserveCreditsWithTransaction(
     source: "credit",
     units: options.units,
     balanceAfter: user.credits,
+    traceId,
   };
 }
 
@@ -110,7 +162,30 @@ async function reserveCredits(
   userId: string,
   options: ReserveOptions
 ): Promise<ReserveResult> {
-  return prisma.$transaction((tx) => reserveCreditsWithTransaction(tx, userId, options));
+  try {
+    return await prisma.$transaction((tx) => reserveCreditsWithTransaction(tx, userId, options));
+  } catch (error) {
+    const safe = sanitizeCreditAuditError(error);
+    const wallet = await prisma.user.findUnique({ where: { id: userId }, select: { credits: true } }).catch(() => null);
+    await recordCreditAuditSafely({
+      userId: wallet ? userId : null,
+      jobId: options.jobId,
+      traceId: createCreditTraceId(options.referenceId),
+      referenceId: options.referenceId,
+      operation: "charge",
+      direction: "debit",
+      status: "failure",
+      source: options.source,
+      units: options.units,
+      balanceBefore: wallet?.credits,
+      balanceAfter: wallet?.credits,
+      reasonCode: safe.reasonCode,
+      summary: "크레딧 차감 처리 중 오류",
+      errorMessage: safe.message,
+      metadata: options.metadata,
+    });
+    throw error;
+  }
 }
 
 async function refundCreditsWithTransaction(
@@ -119,15 +194,52 @@ async function refundCreditsWithTransaction(
   referenceId: string,
   note?: string
 ) {
+  const traceId = createCreditTraceId(referenceId);
   const existingRefund = await tx.creditLedger.findUnique({
     where: { referenceKey: refundKey(referenceId) },
   });
-  if (existingRefund) return;
+  if (existingRefund) {
+    const wallet = await tx.user.findUnique({ where: { id: userId }, select: { credits: true } });
+    await createCreditAuditEvent(tx, {
+      userId: wallet ? userId : null,
+      jobId: existingRefund.jobId,
+      traceId,
+      referenceId,
+      operation: "refund",
+      direction: "neutral",
+      status: "success",
+      source: existingRefund.source,
+      units: existingRefund.units,
+      balanceBefore: wallet?.credits,
+      balanceAfter: wallet?.credits,
+      reasonCode: "REFUND_ALREADY_APPLIED",
+      summary: "이미 처리된 환불을 안전하게 재확인",
+      metadata: { idempotent: true },
+    });
+    return;
+  }
 
   const charge = await tx.creditLedger.findUnique({
     where: { referenceKey: chargeKey(referenceId) },
   });
-  if (!charge || charge.userId !== userId) return;
+  if (!charge || charge.userId !== userId) {
+    const wallet = await tx.user.findUnique({ where: { id: userId }, select: { credits: true } });
+    await createCreditAuditEvent(tx, {
+      userId: wallet ? userId : null,
+      traceId,
+      referenceId,
+      operation: "refund",
+      direction: "neutral",
+      status: "failure",
+      source: charge?.source || "unknown",
+      balanceBefore: wallet?.credits,
+      balanceAfter: wallet?.credits,
+      reasonCode: charge ? "REFUND_USER_MISMATCH" : "CHARGE_NOT_FOUND",
+      summary: "환불할 원거래를 찾지 못함",
+      errorMessage: "원 차감 기록과 환불 요청을 연결할 수 없습니다.",
+    });
+    return;
+  }
 
   if (charge.source === "tier") {
     await tx.user.updateMany({
@@ -145,17 +257,20 @@ async function refundCreditsWithTransaction(
     where: { id: userId },
     select: { credits: true },
   });
-  await tx.creditLedger.create({
-    data: {
-      userId,
-      jobId: charge.jobId,
-      referenceKey: refundKey(referenceId),
-      action: "refund",
-      source: charge.source,
-      units: charge.units,
-      balanceAfter: user.credits,
-      note,
-    },
+  const isTier = charge.source === "tier";
+  await createCreditLedgerWithAudit(tx, {
+    userId,
+    jobId: charge.jobId,
+    referenceKey: refundKey(referenceId),
+    referenceId,
+    traceId,
+    action: "refund",
+    direction: isTier ? "neutral" : "credit",
+    source: charge.source,
+    units: charge.units,
+    balanceBefore: isTier ? user.credits : user.credits - charge.units,
+    balanceAfter: user.credits,
+    note,
   });
 }
 
@@ -181,14 +296,49 @@ export async function withCreditCharge<T>(
 ): Promise<T> {
   const referenceId = options.referenceId ?? `direct:${options.source}:${randomUUID()}`;
   const result = await reserveCredits(userId, { ...options, referenceId });
-  if (!result.ok) throw new CreditError(result.error);
+  if (!result.ok) throw new CreditError(result.error, result.traceId);
 
   try {
     return await operation(referenceId);
   } catch (error) {
+    const safe = sanitizeCreditAuditError(error);
+    const wallet = await prisma.user.findUnique({ where: { id: userId }, select: { credits: true } }).catch(() => null);
+    await recordCreditAuditSafely({
+      userId: wallet ? userId : null,
+      traceId: result.traceId,
+      referenceId,
+      operation: "usage",
+      direction: "neutral",
+      status: "failure",
+      source: options.source,
+      units: options.units,
+      balanceBefore: wallet?.credits,
+      balanceAfter: wallet?.credits,
+      reasonCode: safe.reasonCode,
+      summary: "유료 기능 실행 실패",
+      errorMessage: safe.message,
+      metadata: options.metadata,
+    });
     try {
       await refundCredits(userId, referenceId, "AI 요청 실패 자동 환불");
     } catch (refundError) {
+      const refundSafe = sanitizeCreditAuditError(refundError);
+      const currentWallet = await prisma.user.findUnique({ where: { id: userId }, select: { credits: true } }).catch(() => null);
+      await recordCreditAuditSafely({
+        userId: currentWallet ? userId : null,
+        traceId: result.traceId,
+        referenceId,
+        operation: "refund",
+        direction: "credit",
+        status: "failure",
+        source: options.source,
+        units: options.units,
+        balanceBefore: currentWallet?.credits,
+        balanceAfter: currentWallet?.credits,
+        reasonCode: refundSafe.reasonCode,
+        summary: "자동 환불 처리 실패",
+        errorMessage: refundSafe.message,
+      });
       console.error("Credit refund failed:", refundError);
     }
     throw error;
@@ -198,22 +348,58 @@ export async function withCreditCharge<T>(
 export async function reserveJobCredit(
   userId: string,
   jobId: string
-): Promise<{ ok: boolean; error?: string; source?: "tier" | "credit"; units?: number }> {
+): Promise<{ ok: boolean; error?: string; source?: "tier" | "credit"; units?: number; traceId?: string }> {
   return prisma.$transaction(async (tx) => {
     const job = await tx.generationJob.findFirst({
       where: { id: jobId, userId },
       select: { id: true, kind: true, input: true, creditSource: true, creditUnits: true },
     });
-    if (!job) return { ok: false, error: "생성 작업을 찾을 수 없습니다." };
+    if (!job) {
+      const wallet = await tx.user.findUnique({ where: { id: userId }, select: { credits: true } });
+      const traceId = createCreditTraceId(`job:${jobId}`);
+      await createCreditAuditEvent(tx, {
+        userId: wallet ? userId : null,
+        traceId,
+        referenceId: `job:${jobId}`,
+        operation: "charge",
+        direction: "debit",
+        status: "failure",
+        source: "generation",
+        balanceBefore: wallet?.credits,
+        balanceAfter: wallet?.credits,
+        reasonCode: "JOB_NOT_FOUND",
+        summary: "생성 작업을 찾지 못해 차감 거절",
+      });
+      return { ok: false, error: "생성 작업을 찾을 수 없습니다.", traceId };
+    }
 
     const existingCharge = await tx.creditLedger.findUnique({
       where: { jobId_action: { jobId, action: "charge" } },
     });
     if (existingCharge) {
+      const wallet = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { credits: true } });
+      const traceId = createCreditTraceId(`job:${jobId}`);
+      await createCreditAuditEvent(tx, {
+        userId,
+        jobId,
+        traceId,
+        referenceId: `job:${jobId}`,
+        operation: "charge_reused",
+        direction: "neutral",
+        status: "success",
+        source: existingCharge.source,
+        units: existingCharge.units,
+        balanceBefore: wallet.credits,
+        balanceAfter: wallet.credits,
+        reasonCode: "IDEMPOTENT_REPLAY",
+        summary: "이미 처리된 생성 차감을 재사용",
+        metadata: { idempotent: true },
+      });
       return {
         ok: true,
         source: existingCharge.source as "tier" | "credit",
         units: existingCharge.units,
+        traceId,
       };
     }
 
@@ -222,11 +408,18 @@ export async function reserveJobCredit(
         ? (job.input as Record<string, unknown>)
         : {};
     const units = job.creditUnits ?? getGenerationCreditCost(job.kind, input);
+    const metadata = {
+      provider: typeof input.provider === "string" ? input.provider : undefined,
+      model: typeof input.model === "string" ? input.model : undefined,
+      imageSize: typeof input.imageSize === "string" ? input.imageSize : undefined,
+      requestedCount: typeof input.count === "number" ? input.count : undefined,
+    };
     const result = await reserveCreditsWithTransaction(tx, userId, {
       units,
       source: job.kind,
       referenceId: `job:${jobId}`,
       jobId,
+      metadata,
     });
     if (!result.ok) return result;
 
@@ -234,7 +427,7 @@ export async function reserveJobCredit(
       where: { id: jobId },
       data: { creditSource: "credit", creditUnits: units },
     });
-    return { ok: true, source: "credit", units };
+    return { ok: true, source: "credit", units, traceId: result.traceId };
   });
 }
 

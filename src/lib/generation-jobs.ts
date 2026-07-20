@@ -1,4 +1,9 @@
 import type { GenerationArtifact, GenerationJob, Prisma } from "@prisma/client";
+import {
+  createCreditAuditEvent,
+  createCreditTraceId,
+  sanitizeCreditAuditError,
+} from "./credit-audit";
 import { prisma } from "./prisma";
 import { refundJobCredit } from "./credit-service";
 import { getGenerationCreditCost } from "./credit-products";
@@ -164,6 +169,18 @@ export async function failGenerationJob(jobId: string, error: unknown) {
   const safeMessage = message.slice(0, 4000);
 
   await prisma.$transaction(async (tx) => {
+    const job = await tx.generationJob.findUnique({
+      where: { id: jobId },
+      select: {
+        id: true,
+        userId: true,
+        kind: true,
+        provider: true,
+        model: true,
+        creditUnits: true,
+      },
+    });
+    if (!job) return;
     const failed = await tx.generationJob.updateMany({
       where: {
         id: jobId,
@@ -177,6 +194,28 @@ export async function failGenerationJob(jobId: string, error: unknown) {
       },
     });
     if (failed.count === 0) return;
+    const wallet = await tx.user.findUnique({
+      where: { id: job.userId },
+      select: { credits: true },
+    });
+    const auditError = sanitizeCreditAuditError(error);
+    await createCreditAuditEvent(tx, {
+      userId: wallet ? job.userId : null,
+      jobId,
+      traceId: createCreditTraceId(`job:${jobId}`),
+      referenceId: `job:${jobId}`,
+      operation: "usage",
+      direction: "neutral",
+      status: "failure",
+      source: job.kind,
+      units: job.creditUnits || 0,
+      balanceBefore: wallet?.credits,
+      balanceAfter: wallet?.credits,
+      reasonCode: auditError.reasonCode,
+      summary: "AI 생성 작업 실패",
+      errorMessage: auditError.message,
+      metadata: { provider: job.provider, model: job.model },
+    });
     await refundJobCredit(jobId, safeMessage, tx);
   });
 }

@@ -601,7 +601,10 @@ export async function POST(req: NextRequest) {
           completedAt: new Date(),
         },
       });
-      return NextResponse.json({ error: creditResult.error }, { status: 402 });
+      return NextResponse.json(
+        { error: creditResult.error, traceId: creditResult.traceId },
+        { status: 402 }
+      );
     }
 
     try {

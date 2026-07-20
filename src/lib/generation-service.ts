@@ -19,6 +19,11 @@ import {
 import { updateJobProgress } from "./generation-jobs";
 import { generatePlatformTextContent } from "./platform-ai";
 import { pruneCanvasVersions } from "./canvas-versions";
+import {
+  createCreditAuditEvent,
+  createCreditLedgerWithAudit,
+  createCreditTraceId,
+} from "./credit-audit";
 
 export type GenerationMode = "text" | "sketch" | "edit" | "transform";
 
@@ -542,6 +547,9 @@ export async function generate(input: GenerateInput) {
           cutId: true,
           creditUnits: true,
           creditSource: true,
+          kind: true,
+          provider: true,
+          model: true,
         },
       })
     : null;
@@ -672,6 +680,10 @@ export async function generate(input: GenerateInput) {
           where: { referenceKey: partialKey },
         });
         if (refundUnits > 0 && !already) {
+          const walletBefore = await tx.user.findUniqueOrThrow({
+            where: { id: input.userId },
+            select: { credits: true },
+          });
           if (job.creditSource === "tier") {
             await tx.user.updateMany({
               where: { id: input.userId, tierUsedThisMonth: { gte: refundUnits } },
@@ -687,17 +699,39 @@ export async function generate(input: GenerateInput) {
             where: { id: input.userId },
             select: { credits: true },
           });
-          await tx.creditLedger.create({
-            data: {
-              userId: input.userId,
-              jobId: job.id,
-              referenceKey: partialKey,
-              action: "refund",
-              source: job.creditSource,
-              units: refundUnits,
-              balanceAfter: wallet.credits,
-              note: `${requestedCount - deliveredCount}장 미생성 부분 환불`,
-            },
+          const traceId = createCreditTraceId(`job:${job.id}`);
+          await createCreditAuditEvent(tx, {
+            userId: input.userId,
+            jobId: job.id,
+            traceId,
+            referenceId: `job:${job.id}`,
+            operation: "usage",
+            direction: "neutral",
+            status: "failure",
+            source: job.kind,
+            units: refundUnits,
+            balanceBefore: walletBefore.credits,
+            balanceAfter: walletBefore.credits,
+            reasonCode: "PARTIAL_RESULT",
+            summary: "요청 수량 일부 생성 실패",
+            errorMessage: `${requestedCount}장 중 ${deliveredCount}장 생성 완료`,
+            metadata: { requestedCount, deliveredCount, provider: job.provider, model: job.model },
+          });
+          await createCreditLedgerWithAudit(tx, {
+            userId: input.userId,
+            jobId: job.id,
+            referenceKey: partialKey,
+            referenceId: `job:${job.id}`,
+            traceId,
+            action: "refund",
+            direction: job.creditSource === "tier" ? "neutral" : "credit",
+            source: job.creditSource,
+            units: refundUnits,
+            balanceBefore: walletBefore.credits,
+            balanceAfter: wallet.credits,
+            note: `${requestedCount - deliveredCount}장 미생성 부분 환불`,
+            reasonCode: "PARTIAL_RESULT_REFUND",
+            metadata: { requestedCount, deliveredCount },
           });
         }
       }

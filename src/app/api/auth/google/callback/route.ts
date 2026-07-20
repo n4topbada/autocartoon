@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAppUrl } from "@/lib/app-url";
 import { addReturnTo, normalizeReturnTo } from "@/lib/auth-navigation";
 import { AuthError, requireAuth } from "@/lib/auth";
+import { createCreditLedgerWithAudit } from "@/lib/credit-audit";
 import { WELCOME_CREDITS } from "@/lib/credit-products";
 import {
   getGoogleUser,
@@ -180,16 +181,18 @@ export async function GET(req: NextRequest) {
             welcomeCreditsGrantedAt: new Date(),
           },
         });
-        await tx.creditLedger.create({
-          data: {
-            userId: created.id,
-            referenceKey: "welcome:" + created.id + ":grant",
-            action: "grant",
-            source: "welcome",
-            units: WELCOME_CREDITS,
-            balanceAfter: WELCOME_CREDITS,
-            note: "Google 신규 가입 웰컴 크레딧",
-          },
+        await createCreditLedgerWithAudit(tx, {
+          userId: created.id,
+          referenceKey: `welcome:${created.id}:grant`,
+          referenceId: `welcome:${created.id}`,
+          action: "grant",
+          source: "welcome",
+          units: WELCOME_CREDITS,
+          balanceBefore: 0,
+          balanceAfter: WELCOME_CREDITS,
+          note: "Google 신규 가입 웰컴 크레딧",
+          reasonCode: "WELCOME_CREDITS_GRANTED",
+          metadata: { authProvider: "google" },
         });
         return created;
       });

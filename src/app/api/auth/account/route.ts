@@ -6,6 +6,7 @@ import {
   hasOAuthIdentity,
 } from "@/lib/account-auth";
 import { AuthError, requireAuth } from "@/lib/auth";
+import { createCreditLedgerWithAudit } from "@/lib/credit-audit";
 import { prisma } from "@/lib/prisma";
 
 export async function DELETE(req: NextRequest) {
@@ -100,6 +101,21 @@ export async function DELETE(req: NextRequest) {
           temporaryPasswordIssuedAt: null,
           passwordChangedAt: now,
         },
+      });
+      const referenceId = `account-withdrawal:${user.id}:${now.getTime()}`;
+      await createCreditLedgerWithAudit(tx, {
+        userId: user.id,
+        actorUserId: user.id,
+        referenceKey: `${referenceId}:adjustment`,
+        referenceId,
+        action: "adjustment",
+        direction: user.credits > 0 ? "debit" : "neutral",
+        source: "account-withdrawal",
+        units: user.credits,
+        balanceBefore: user.credits,
+        balanceAfter: 0,
+        note: "회원 탈퇴에 따른 잔액 정리",
+        reasonCode: "ACCOUNT_WITHDRAWAL_BALANCE_CLOSED",
       });
     });
 

@@ -29,6 +29,8 @@ test("provider identities and welcome grants keep database uniqueness", async ()
   assert.match(schema, /kakaoId\s+String\?\s+@unique/);
   assert.match(schema, /googleId\s+String\?\s+@unique/);
   assert.match(kakaoCallback, /referenceKey:\s*`welcome:\$\{created\.id\}:grant`/);
-  assert.match(googleCallback, /referenceKey:\s*"welcome:" \+ created\.id \+ ":grant"/);
+  assert.match(googleCallback, /referenceKey:\s*`welcome:\$\{created\.id\}:grant`/);
+  assert.match(kakaoCallback, /createCreditLedgerWithAudit\(tx/);
+  assert.match(googleCallback, /createCreditLedgerWithAudit\(tx/);
   assert.match(schema, /referenceKey\s+String\s+@unique/);
 });

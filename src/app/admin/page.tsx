@@ -34,6 +34,7 @@ import {
   getProductTotalCredits,
 } from "@/lib/credit-products";
 import CouponAdminPanel from "@/components/CouponAdminPanel";
+import CreditAuditAdminPanel from "@/components/CreditAuditAdminPanel";
 import styles from "./page.module.css";
 
 interface UserRow {
@@ -62,6 +63,7 @@ interface CreditGrantResult {
   grantedCredits: number;
   grantMode: "preset" | "custom";
   creditProductCode: string | null;
+  traceId: string | null;
 }
 
 interface PasswordResetResult {
@@ -158,6 +160,7 @@ export default function AdminPage() {
   const [editingAnnouncementId, setEditingAnnouncementId] = useState<string | null>(null);
   const [announcementSaving, setAnnouncementSaving] = useState(false);
   const [couponRefreshKey, setCouponRefreshKey] = useState(0);
+  const [creditAuditRefreshKey, setCreditAuditRefreshKey] = useState(0);
 
   const visibleUsers = useMemo(() => {
     const query = userSearch.trim().toLocaleLowerCase("ko-KR");
@@ -300,6 +303,7 @@ export default function AdminPage() {
         ? { ...user, credits: result.credits }
         : user));
       setCreditGrantResult(result);
+      setCreditAuditRefreshKey((current) => current + 1);
       if (creditGrantMode === "custom") setCustomCreditAmount("");
     } catch (grantError) {
       setError(grantError instanceof Error ? grantError.message : "크레딧 지급에 실패했습니다.");
@@ -396,6 +400,7 @@ export default function AdminPage() {
     void loadUsers();
     void loadAnnouncements();
     setCouponRefreshKey((current) => current + 1);
+    setCreditAuditRefreshKey((current) => current + 1);
   };
 
   return (
@@ -676,9 +681,11 @@ export default function AdminPage() {
         )}
       </section>
 
+      <CreditAuditAdminPanel refreshKey={creditAuditRefreshKey} />
+
       <section className={styles.policySection}>
         <h2>운영 정책</h2>
-        <p>신규 가입 {WELCOME_CREDITS}크레딧, 외부 AI 호출 전 차감, 실패 작업 자동 환불이 기본입니다. 수동 지급도 크레딧 원장에 관리자 ID와 함께 기록됩니다.</p>
+        <p>신규 가입 {WELCOME_CREDITS}크레딧, 외부 AI 호출 전 차감, 실패 작업 자동 환불이 기본입니다. 모든 잔액 변경과 실패 시도는 잔액 검증 및 추적 코드와 함께 감사 기록에 보존됩니다.</p>
         <Link href="/credits" className={styles.walletLink}>사용자 지갑 화면 보기</Link>
       </section>
 

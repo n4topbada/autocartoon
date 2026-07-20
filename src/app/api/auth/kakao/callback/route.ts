@@ -15,6 +15,7 @@ import {
   validateKakaoOAuthState,
 } from "@/lib/kakao-auth";
 import { AuthError, requireAuth } from "@/lib/auth";
+import { createCreditLedgerWithAudit } from "@/lib/credit-audit";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { createUserSession } from "@/lib/user-sessions";
@@ -141,16 +142,18 @@ async function linkKakaoToCurrentAccount(kakaoId: string) {
           credits: 0,
         },
       });
-      await tx.creditLedger.create({
-        data: {
-          userId: linked.id,
-          referenceKey: `account-link:${linked.id}:deactivate`,
-          action: "adjustment",
-          source: "account-link",
-          units: linked.credits,
-          balanceAfter: 0,
-          note: "빈 카카오 계정을 기존 이메일 계정에 연결하며 비활성화",
-        },
+      await createCreditLedgerWithAudit(tx, {
+        userId: linked.id,
+        referenceKey: `account-link:${linked.id}:deactivate`,
+        referenceId: `account-link:${linked.id}`,
+        action: "adjustment",
+        direction: "debit",
+        source: "account-link",
+        units: linked.credits,
+        balanceBefore: linked.credits,
+        balanceAfter: 0,
+        note: "빈 카카오 계정을 기존 이메일 계정에 연결하며 비활성화",
+        reasonCode: "EMPTY_OAUTH_ACCOUNT_DEACTIVATED",
       });
     }
 
@@ -276,16 +279,18 @@ export async function GET(req: NextRequest) {
             welcomeCreditsGrantedAt: new Date(),
           },
         });
-        await tx.creditLedger.create({
-          data: {
-            userId: created.id,
-            referenceKey: `welcome:${created.id}:grant`,
-            action: "grant",
-            source: "welcome",
-            units: WELCOME_CREDITS,
-            balanceAfter: WELCOME_CREDITS,
-            note: "카카오 신규 가입 웰컴 크레딧",
-          },
+        await createCreditLedgerWithAudit(tx, {
+          userId: created.id,
+          referenceKey: `welcome:${created.id}:grant`,
+          referenceId: `welcome:${created.id}`,
+          action: "grant",
+          source: "welcome",
+          units: WELCOME_CREDITS,
+          balanceBefore: 0,
+          balanceAfter: WELCOME_CREDITS,
+          note: "카카오 신규 가입 웰컴 크레딧",
+          reasonCode: "WELCOME_CREDITS_GRANTED",
+          metadata: { authProvider: "kakao" },
         });
         return created;
       });

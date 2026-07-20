@@ -1,5 +1,13 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import {
+  createCreditAuditEvent,
+  createCreditLedgerWithAudit,
+  createCreditTraceId,
+  recordCreditAuditSafely,
+  sanitizeCreditAuditError,
+} from "./credit-audit";
 import { prisma } from "./prisma";
 import {
   COUPON_STATUS_MESSAGES,
@@ -21,6 +29,7 @@ export class CouponRedeemError extends Error {
     public readonly code: "invalid" | "not_found" | Exclude<CouponAvailability, "available">,
     message: string,
     public readonly status: number,
+    public traceId?: string,
   ) {
     super(message);
     this.name = "CouponRedeemError";
@@ -36,16 +45,48 @@ function availabilityError(status: Exclude<CouponAvailability, "available">) {
 }
 
 export async function redeemCoupon(userId: string, rawCode: unknown): Promise<CouponRedemptionResult> {
+  let referenceId = `coupon-attempt:${userId}:${randomUUID()}`;
+  let traceId = createCreditTraceId(referenceId);
+  let auditCampaign: { id: string; credits: number; title: string } | null = null;
   const code = normalizeCouponCode(rawCode);
-  if (!code) throw new CouponRedeemError("invalid", "쿠폰 코드를 확인해주세요.", 400);
+  if (!code) {
+    await recordCreditAuditSafely({
+      userId,
+      traceId,
+      referenceId,
+      operation: "coupon_redeem",
+      direction: "credit",
+      status: "failure",
+      source: "coupon",
+      reasonCode: "COUPON_INVALID",
+      summary: "쿠폰 코드 형식 오류",
+      errorMessage: "쿠폰 코드를 확인해주세요.",
+    });
+    throw new CouponRedeemError("invalid", "쿠폰 코드를 확인해주세요.", 400, traceId);
+  }
 
   const campaignIdentity = await prisma.couponCampaign.findUnique({
     where: { code },
-    select: { id: true },
+    select: { id: true, credits: true, title: true },
   });
   if (!campaignIdentity) {
-    throw new CouponRedeemError("not_found", "존재하지 않는 쿠폰입니다.", 404);
+    await recordCreditAuditSafely({
+      userId,
+      traceId,
+      referenceId,
+      operation: "coupon_redeem",
+      direction: "credit",
+      status: "failure",
+      source: "coupon",
+      reasonCode: "COUPON_NOT_FOUND",
+      summary: "존재하지 않는 쿠폰 등록 시도",
+      errorMessage: "존재하지 않는 쿠폰입니다.",
+    });
+    throw new CouponRedeemError("not_found", "존재하지 않는 쿠폰입니다.", 404, traceId);
   }
+  auditCampaign = campaignIdentity;
+  referenceId = `coupon:${campaignIdentity.id}:${userId}`;
+  traceId = createCreditTraceId(referenceId);
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -59,6 +100,21 @@ export async function redeemCoupon(userId: string, rawCode: unknown): Promise<Co
       });
       if (existing) {
         const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { credits: true } });
+        await createCreditAuditEvent(tx, {
+          userId,
+          traceId,
+          referenceId,
+          operation: "coupon_redeem",
+          direction: "neutral",
+          status: "success",
+          source: "coupon",
+          units: existing.credits,
+          balanceBefore: user.credits,
+          balanceAfter: user.credits,
+          reasonCode: "COUPON_ALREADY_REDEEMED",
+          summary: "이미 지급된 쿠폰을 재확인",
+          metadata: { campaignId: campaign.id, campaignTitle: campaign.title, idempotent: true },
+        });
         return {
           status: "already_redeemed" as const,
           credits: existing.credits,
@@ -89,6 +145,21 @@ export async function redeemCoupon(userId: string, rawCode: unknown): Promise<Co
         });
         if (concurrentRedemption) {
           const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { credits: true } });
+          await createCreditAuditEvent(tx, {
+            userId,
+            traceId,
+            referenceId,
+            operation: "coupon_redeem",
+            direction: "neutral",
+            status: "success",
+            source: "coupon",
+            units: concurrentRedemption.credits,
+            balanceBefore: user.credits,
+            balanceAfter: user.credits,
+            reasonCode: "COUPON_CONCURRENT_REPLAY",
+            summary: "동시에 처리된 쿠폰 지급을 재확인",
+            metadata: { campaignId: campaign.id, campaignTitle: campaign.title, idempotent: true },
+          });
           return {
             status: "already_redeemed" as const,
             credits: concurrentRedemption.credits,
@@ -120,16 +191,19 @@ export async function redeemCoupon(userId: string, rawCode: unknown): Promise<Co
           balanceAfter: user.credits,
         },
       });
-      await tx.creditLedger.create({
-        data: {
-          userId,
-          referenceKey: `coupon:${campaign.id}:${userId}:grant`,
-          action: "grant",
-          source: "coupon",
-          units: campaign.credits,
-          balanceAfter: user.credits,
-          note: `쿠폰 지급: ${campaign.title}`,
-        },
+      await createCreditLedgerWithAudit(tx, {
+        userId,
+        referenceKey: `${referenceId}:grant`,
+        referenceId,
+        traceId,
+        action: "grant",
+        source: "coupon",
+        units: campaign.credits,
+        balanceBefore: user.credits - campaign.credits,
+        balanceAfter: user.credits,
+        note: `쿠폰 지급: ${campaign.title}`,
+        reasonCode: "COUPON_REDEEMED",
+        metadata: { campaignId: campaign.id, campaignTitle: campaign.title },
       });
 
       return {
@@ -141,13 +215,27 @@ export async function redeemCoupon(userId: string, rawCode: unknown): Promise<Co
       };
     });
   } catch (error) {
-    if (error instanceof CouponRedeemError) throw error;
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       const existing = await prisma.couponRedemption.findUnique({
         where: { campaignId_userId: { campaignId: campaignIdentity.id, userId } },
         include: { campaign: { select: { id: true, code: true, title: true } }, user: { select: { credits: true } } },
       });
       if (existing) {
+        await recordCreditAuditSafely({
+          userId,
+          traceId,
+          referenceId,
+          operation: "coupon_redeem",
+          direction: "neutral",
+          status: "success",
+          source: "coupon",
+          units: existing.credits,
+          balanceBefore: existing.user.credits,
+          balanceAfter: existing.user.credits,
+          reasonCode: "COUPON_CONCURRENT_REPLAY",
+          summary: "동시에 완료된 쿠폰 지급을 재확인",
+          metadata: { campaignId: existing.campaign.id, campaignTitle: existing.campaign.title, idempotent: true },
+        });
         return {
           status: "already_redeemed",
           credits: existing.credits,
@@ -157,6 +245,29 @@ export async function redeemCoupon(userId: string, rawCode: unknown): Promise<Co
         };
       }
     }
+    const safe = sanitizeCreditAuditError(error);
+    if (error instanceof CouponRedeemError && !error.traceId) error.traceId = traceId;
+    const wallet = await prisma.user.findUnique({ where: { id: userId }, select: { credits: true } }).catch(() => null);
+    await recordCreditAuditSafely({
+      userId: wallet ? userId : null,
+      traceId,
+      referenceId,
+      operation: "coupon_redeem",
+      direction: "credit",
+      status: "failure",
+      source: "coupon",
+      units: auditCampaign?.credits || 0,
+      balanceBefore: wallet?.credits,
+      balanceAfter: wallet?.credits,
+      reasonCode: error instanceof CouponRedeemError
+        ? `COUPON_${error.code.toUpperCase()}`
+        : safe.reasonCode,
+      summary: "쿠폰 크레딧 지급 실패",
+      errorMessage: error instanceof Error ? error.message : safe.message,
+      metadata: auditCampaign
+        ? { campaignId: auditCampaign.id, campaignTitle: auditCampaign.title }
+        : undefined,
+    });
     throw error;
   }
 }

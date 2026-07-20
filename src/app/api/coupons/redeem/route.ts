@@ -15,7 +15,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message, code: "auth_required" }, { status: error.status });
     }
     if (error instanceof CouponRedeemError) {
-      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status });
+      return NextResponse.json(
+        { error: error.message, code: error.code, traceId: error.traceId },
+        { status: error.status }
+      );
     }
     console.error("Coupon redemption error:", error);
     return NextResponse.json({ error: "쿠폰을 지급하지 못했습니다." }, { status: 500 });

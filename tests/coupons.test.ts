@@ -74,7 +74,9 @@ test("coupon redemption has database and ledger idempotency boundaries", async (
   assert.match(redemptionSource, /prisma\.\$transaction/);
   assert.match(redemptionSource, /redeemedCount:\s*\{ increment: 1 \}/);
   assert.match(redemptionSource, /credits:\s*\{ increment: campaign\.credits \}/);
-  assert.match(redemptionSource, /referenceKey: `coupon:\$\{campaign\.id\}:\$\{userId\}:grant`/);
+  assert.match(redemptionSource, /createCreditLedgerWithAudit\(tx/);
+  assert.match(redemptionSource, /referenceKey: `\$\{referenceId\}:grant`/);
+  assert.match(redemptionSource, /reasonCode: "COUPON_REDEEMED"/);
   assert.match(landingSource, /authLoading \|\| !user \|\| !lookup \|\| attempted\.current/);
   assert.doesNotMatch(landingSource, /lookup\?\.status !== "available"/);
   assert.match(migration, /CouponCampaign_credits_check/);

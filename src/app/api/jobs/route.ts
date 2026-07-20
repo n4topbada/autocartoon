@@ -230,7 +230,7 @@ export async function POST(req: NextRequest) {
         where: { id: job.id },
         data: { status: "failed", stage: "credit_rejected", error: credit.error, completedAt: new Date() },
       });
-      return NextResponse.json({ error: credit.error }, { status: 402 });
+      return NextResponse.json({ error: credit.error, traceId: credit.traceId }, { status: 402 });
     }
 
     try {
