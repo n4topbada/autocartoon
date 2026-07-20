@@ -525,6 +525,56 @@
   font-size: 9px;
 }
 
+.bubbleLibrary {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bubbleLibraryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 6px;
+}
+
+.bubbleLibraryItem {
+  position: relative;
+}
+
+.bubbleLibraryApply {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  cursor: pointer;
+}
+
+.bubbleLibraryApply:hover {
+  border-color: var(--accent, #3182f6);
+}
+
+.bubbleLibraryRemove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface, #fff);
+  color: var(--text-sub);
+  cursor: pointer;
+  padding: 0;
+}
+
 .twoColumnFields,
 .objectFieldGrid {
   display: grid;

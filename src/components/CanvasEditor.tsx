@@ -953,6 +953,13 @@ export default function CanvasEditor({
   const [toolPanelCollapsed, setToolPanelCollapsed] = useState(false);
   const [directDrawOpen, setDirectDrawOpen] = useState(false);
   const [textSizeMenuOpen, setTextSizeMenuOpen] = useState(false);
+  // 텍스트 부분 선택 길이(0이면 전체 적용, >0이면 선택 범위에만 부분 서식 적용)
+  const [textSelectionLen, setTextSelectionLen] = useState(0);
+  // 다른 객체로 선택이 바뀌면 이전 텍스트의 선택 범위가 남지 않도록 초기화한다.
+  useEffect(() => {
+    textSelectionRef.current = { start: 0, end: 0 };
+    setTextSelectionLen(0);
+  }, [selectedBubbleId]);
   const [zoom, setZoom] = useState(100);
   const [fitScale, setFitScale] = useState(1);
   const [ocrOpen, setOcrOpen] = useState(false);
@@ -999,6 +1006,8 @@ export default function CanvasEditor({
   const [captionApplying, setCaptionApplying] = useState(false);
   const [exportingPages, setExportingPages] = useState(false);
   const [customBubbleOpen, setCustomBubbleOpen] = useState(false);
+  // 커스텀 말풍선 라이브러리: 생성기에서 저장한 모양을 재사용한다(이 브라우저 로컬 저장).
+  const [bubbleLibrary, setBubbleLibrary] = useState<SpeechBubble[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyVersions, setHistoryVersions] = useState<CanvasVersionSummary[]>([]);
@@ -2333,6 +2342,14 @@ export default function CanvasEditor({
     updateBubble(selectedBubble.id, bubbleUpdates);
   };
 
+  // 텍스트 서식(색/굵기/기울임/밑줄): 텍스트 객체가 선택돼 있으면 부분 문자열 서식을
+  // 지원하는 applySelectedTextStyle(선택 범위 있으면 그 구간, 없으면 전체)을 쓰고,
+  // 객체 선택 전이면 다음에 생성할 텍스트의 기본값(updateTextTool)을 갱신한다.
+  const applyTextStyle = (run: Partial<TextStyleRun>, whole: Partial<TextToolDefaults>) => {
+    if (selectedTextBubble) applySelectedTextStyle(run);
+    else updateTextTool(whole);
+  };
+
   const updateShapeTool = (updates: Partial<ShapeToolDefaults>) => {
     if (!selectedShapeBubble) {
       setShapeToolDefaults((current) => ({ ...current, ...updates }));
@@ -2898,6 +2915,87 @@ export default function CanvasEditor({
     setSelectedBubbleId(bubble.id);
     setTool("bubble");
     setCustomBubbleOpen(true);
+  };
+
+  const BUBBLE_LIBRARY_KEY = "wony-canvas-bubble-library";
+  const LEGACY_BUBBLE_KEY = "wony-canvas-custom-bubble";
+
+  // 라이브러리 로드 + 구버전 단일 저장(write-only였던 키) 마이그레이션.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(BUBBLE_LIBRARY_KEY);
+      let list: SpeechBubble[] = raw ? (JSON.parse(raw) as SpeechBubble[]) : [];
+      if (!Array.isArray(list)) list = [];
+      const legacy = window.localStorage.getItem(LEGACY_BUBBLE_KEY);
+      if (legacy) {
+        try {
+          const one = JSON.parse(legacy) as SpeechBubble;
+          if (one && one.type) list = [one, ...list];
+        } catch {}
+        window.localStorage.removeItem(LEGACY_BUBBLE_KEY);
+        window.localStorage.setItem(BUBBLE_LIBRARY_KEY, JSON.stringify(list.slice(0, 24)));
+      }
+      setBubbleLibrary(list.slice(0, 24));
+    } catch {
+      setBubbleLibrary([]);
+    }
+  }, []);
+
+  const persistBubbleLibrary = (list: SpeechBubble[]) => {
+    const capped = list.slice(0, 24);
+    setBubbleLibrary(capped);
+    try {
+      window.localStorage.setItem(BUBBLE_LIBRARY_KEY, JSON.stringify(capped));
+    } catch {}
+  };
+
+  // 현재 말풍선의 모양·스타일만 저장(위치·꼬리 절대좌표·본문 텍스트는 제외).
+  const saveBubbleToLibrary = (bubble: SpeechBubble) => {
+    const preset: SpeechBubble = {
+      ...bubble,
+      id: `bubblelib_${bubble.type}_${bubbleLibrary.length}_${bubble.width}x${bubble.height}`,
+      x: 0,
+      y: 0,
+      tailTipX: 0,
+      tailTipY: 0,
+      text: "",
+      textRuns: [],
+    };
+    persistBubbleLibrary([preset, ...bubbleLibrary]);
+    setEditorMessage("말풍선 모양을 라이브러리에 저장했습니다. 아래 목록에서 다시 불러올 수 있어요.");
+  };
+
+  const removeBubbleFromLibrary = (index: number) => {
+    persistBubbleLibrary(bubbleLibrary.filter((_, i) => i !== index));
+  };
+
+  // 라이브러리 모양을 캔버스 중앙에 새 말풍선으로 추가하고 편집 상태로 선택한다.
+  const applyBubbleFromLibrary = (preset: SpeechBubble) => {
+    const bubble: SpeechBubble = {
+      ...preset,
+      id: `bubble_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      x: canvasW / 2,
+      y: canvasH / 2,
+      tailTipX: canvasW / 2 - 80,
+      tailTipY: canvasH / 2 + Math.max(120, preset.height / 2 + 60),
+      text: "대사를 입력하세요",
+      textRuns: [],
+    };
+    const currentLayer = layers.find((layer) => layer.id === activeLayerId && !layer.locked);
+    saveUndo();
+    if (currentLayer) {
+      setLayers((current) => current.map((layer) => layer.id === currentLayer.id
+        ? { ...layer, bubbles: [...layer.bubbles, bubble] }
+        : layer));
+    } else {
+      const layer = { ...createLayer(undefined, canvasW, canvasH), name: "커스텀 말풍선", bubbles: [bubble] };
+      setLayers((current) => [...current, layer]);
+      setActiveLayerId(layer.id);
+    }
+    setSelectedBubbleId(bubble.id);
+    setTool("bubble");
+    setCustomBubbleOpen(true);
+    setEditorMessage("라이브러리 말풍선을 캔버스에 추가했습니다.");
   };
 
   const downloadBubblePng = async (bubble: SpeechBubble) => {
@@ -4132,7 +4230,8 @@ export default function CanvasEditor({
                   <section className={styles.optionSection}>
                     <button className={styles.primaryOptionButton} onClick={() => { setSelectedBubbleId(null); activateTool("text"); }}><LuPlus /> 텍스트 추가 (드래그)</button>
                     <p className={styles.toolHint}>캔버스에서 원하는 크기로 드래그하세요.</p>
-                    {selectedTextBubble && <textarea rows={4} value={selectedTextBubble.text || ""} onSelect={(event) => { textSelectionRef.current = { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd }; }} onChange={(event) => updateBubble(selectedTextBubble.id, { text: event.target.value, textRuns: [] })} />}
+                    {selectedTextBubble && <textarea rows={4} value={selectedTextBubble.text || ""} onSelect={(event) => { const start = event.currentTarget.selectionStart; const end = event.currentTarget.selectionEnd; textSelectionRef.current = { start, end }; setTextSelectionLen(Math.max(0, end - start)); }} onChange={(event) => { textSelectionRef.current = { start: 0, end: 0 }; setTextSelectionLen(0); updateBubble(selectedTextBubble.id, { text: event.target.value, textRuns: [] }); }} />}
+                    {selectedTextBubble && <p className={styles.toolHint}>{textSelectionLen > 0 ? `선택한 ${textSelectionLen}자에 색·굵기·기울임·밑줄이 적용됩니다.` : "글자 일부를 드래그해 선택하면 그 부분만 서식을 바꿀 수 있어요. 선택하지 않으면 전체에 적용됩니다."}</p>}
                   </section>
                   <section className={styles.optionSection}>
                     <label className={styles.optionLabel}>글자 크기</label>
@@ -4147,8 +4246,8 @@ export default function CanvasEditor({
                   </section>
                   <section className={styles.optionSection}>
                     <label className={styles.optionLabel}>글자색</label>
-                    <div className={styles.colorPalette}>{BRUSH_COLORS.map((color) => <button key={color} className={textToolValues.textColor.toLowerCase() === color.toLowerCase() ? styles.colorActive : ""} style={{ backgroundColor: color }} onClick={() => updateTextTool({ textColor: color })} title={color} />)}</div>
-                    <div className={styles.colorFieldRow}><input type="color" value={textToolValues.textColor} onChange={(event) => updateTextTool({ textColor: event.target.value })} /><span>#</span><input value={textToolValues.textColor.slice(1).toUpperCase()} onChange={(event) => { const value = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6); if (value.length === 6) updateTextTool({ textColor: `#${value}` }); }} /></div>
+                    <div className={styles.colorPalette}>{BRUSH_COLORS.map((color) => <button key={color} className={textToolValues.textColor.toLowerCase() === color.toLowerCase() ? styles.colorActive : ""} style={{ backgroundColor: color }} onClick={() => applyTextStyle({ textColor: color }, { textColor: color })} title={color} />)}</div>
+                    <div className={styles.colorFieldRow}><input type="color" value={textToolValues.textColor} onChange={(event) => applyTextStyle({ textColor: event.target.value }, { textColor: event.target.value })} /><span>#</span><input value={textToolValues.textColor.slice(1).toUpperCase()} onChange={(event) => { const value = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6); if (value.length === 6) applyTextStyle({ textColor: `#${value}` }, { textColor: `#${value}` }); }} /></div>
                   </section>
                   <section className={styles.optionSection}>
                     <label className={styles.optionLabel}>외곽선</label>
@@ -4158,12 +4257,12 @@ export default function CanvasEditor({
                   <section className={styles.optionSection}>
                     <label className={styles.optionLabel}>문자 서식</label>
                     <div className={styles.inlineButtonRow}>
-                      {([300, 400, 700, 900] as const).map((weight) => <button key={weight} className={textToolValues.fontWeight === weight ? styles.optionActive : ""} onClick={() => updateTextTool({ fontWeight: weight })}>{weight}</button>)}
+                      {([300, 400, 700, 900] as const).map((weight) => <button key={weight} className={textToolValues.fontWeight === weight ? styles.optionActive : ""} onClick={() => applyTextStyle({ fontWeight: weight }, { fontWeight: weight })}>{weight}</button>)}
                     </div>
                     <div className={styles.inlineButtonRow}>
                       {([['left', '좌'], ['center', '중'], ['right', '우']] as const).map(([align, label]) => <button key={align} className={textToolValues.textAlign === align ? styles.optionActive : ""} onClick={() => updateTextTool({ textAlign: align })}>{label}</button>)}
-                      <button className={textToolValues.fontItalic ? styles.optionActive : ""} onClick={() => updateTextTool({ fontItalic: !textToolValues.fontItalic })} title="기울임"><i>I</i></button>
-                      <button className={textToolValues.underline ? styles.optionActive : ""} onClick={() => updateTextTool({ underline: !textToolValues.underline })} title="밑줄"><u>U</u></button>
+                      <button className={textToolValues.fontItalic ? styles.optionActive : ""} onClick={() => applyTextStyle({ fontItalic: !textToolValues.fontItalic }, { fontItalic: !textToolValues.fontItalic })} title={textSelectionLen > 0 ? "선택 글자 기울임" : "기울임"}><i>I</i></button>
+                      <button className={textToolValues.underline ? styles.optionActive : ""} onClick={() => applyTextStyle({ underline: !textToolValues.underline }, { underline: !textToolValues.underline })} title={textSelectionLen > 0 ? "선택 글자 밑줄" : "밑줄"}><u>U</u></button>
                       <button onClick={() => applySelectedTextStyle({ baselineOffset: -Math.max(2, textToolValues.fontSize * 0.18) })} disabled={!selectedTextBubble} title="기준선 위로">↑</button>
                       <button onClick={() => applySelectedTextStyle({ baselineOffset: Math.max(2, textToolValues.fontSize * 0.18) })} disabled={!selectedTextBubble} title="기준선 아래로">↓</button>
                     </div>
@@ -4254,15 +4353,41 @@ export default function CanvasEditor({
                         <label className={styles.checkboxLabel}><input type="checkbox" checked={selectedSpeechBubble.tailEnabled} onChange={(event) => updateBubble(selectedSpeechBubble.id, { tailEnabled: event.target.checked })} /> 꼬리</label>
                         {selectedSpeechBubble.tailEnabled && <><label className={styles.rangeLabel}><span>꼬리 폭</span><b>{selectedSpeechBubble.tailWidth}px</b></label><input type="range" min={8} max={96} value={selectedSpeechBubble.tailWidth} onChange={(event) => updateBubble(selectedSpeechBubble.id, { tailWidth: Number(event.target.value) })} /></>}
                         {customBubbleOpen ? (
-                          <div className={styles.customGeneratorActions}>
-                            <button onClick={() => {
-                              window.localStorage.setItem("wony-canvas-custom-bubble", JSON.stringify(selectedSpeechBubble));
-                              setEditorMessage("커스텀 말풍선 설정을 이 브라우저에 저장했습니다.");
-                            }}><LuSave /> 저장</button>
-                            <button onClick={() => void downloadBubblePng(selectedSpeechBubble)}><LuDownload /> PNG</button>
-                            <button onClick={() => { setCustomBubbleOpen(false); setEditorMessage("커스텀 말풍선을 캔버스에 추가했습니다."); }}><LuPlus /> 추가</button>
-                            <button onClick={() => { setCustomBubbleOpen(false); deleteBubble(selectedSpeechBubble.id); }}><LuX /> 닫기</button>
-                          </div>
+                          <>
+                            <div className={styles.customGeneratorActions}>
+                              <button onClick={() => saveBubbleToLibrary(selectedSpeechBubble)}><LuSave /> 라이브러리 저장</button>
+                              <button onClick={() => void downloadBubblePng(selectedSpeechBubble)}><LuDownload /> PNG</button>
+                              <button onClick={() => { setCustomBubbleOpen(false); setEditorMessage("커스텀 말풍선을 캔버스에 추가했습니다."); }}><LuPlus /> 추가</button>
+                              <button onClick={() => { setCustomBubbleOpen(false); deleteBubble(selectedSpeechBubble.id); }}><LuX /> 닫기</button>
+                            </div>
+                            {bubbleLibrary.length > 0 && (
+                              <div className={styles.bubbleLibrary}>
+                                <label className={styles.optionLabel}>내 말풍선 라이브러리 ({bubbleLibrary.length})</label>
+                                <div className={styles.bubbleLibraryGrid}>
+                                  {bubbleLibrary.map((preset, index) => (
+                                    <div key={preset.id} className={styles.bubbleLibraryItem}>
+                                      <button
+                                        type="button"
+                                        className={styles.bubbleLibraryApply}
+                                        title={`${preset.type} · ${Math.round(preset.width)}×${Math.round(preset.height)} 불러오기`}
+                                        onClick={() => applyBubbleFromLibrary(preset)}
+                                      >
+                                        <span style={{
+                                          display: "block",
+                                          width: 40,
+                                          height: 28,
+                                          borderRadius: preset.type === "roundedRectangle" ? 8 : preset.type === "classic" || preset.type === "ellipse" ? "50%" : 3,
+                                          border: `2px solid ${preset.strokeColor === "transparent" ? "#8b95a1" : preset.strokeColor}`,
+                                          background: preset.fillColor === "transparent" ? "transparent" : preset.fillColor,
+                                        }} />
+                                      </button>
+                                      <button type="button" className={styles.bubbleLibraryRemove} title="삭제" onClick={() => removeBubbleFromLibrary(index)}><LuX size={12} /></button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </>
                         ) : <button className={styles.secondaryOptionButton} onClick={() => void downloadBubblePng(selectedSpeechBubble)}><LuDownload /> 투명 PNG로 저장</button>}
                         <button className={styles.dangerOptionButton} onClick={() => deleteBubble(selectedSpeechBubble.id)}><LuTrash2 /> 말풍선 삭제</button>
                       </section>
