@@ -27,6 +27,7 @@ export async function GET() {
     return NextResponse.json(users.map((user) => ({
       id: user.id,
       email: user.email,
+      accountKey: user.kakaoId ? `kakao-${user.kakaoId}` : user.email,
       name: user.name,
       role: user.role,
       credits: user.credits,

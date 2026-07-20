@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   LuArrowLeft,
@@ -15,8 +15,10 @@ import {
   LuPlus,
   LuRefreshCw,
   LuSave,
+  LuSearch,
   LuShieldAlert,
   LuTrash2,
+  LuUserCheck,
   LuX,
 } from "react-icons/lu";
 import {
@@ -25,13 +27,19 @@ import {
   validateAdminTemporaryPassword,
 } from "@/lib/admin-password-reset";
 import { ANNOUNCEMENT_CATEGORY_LABELS, type AnnouncementCategory } from "@/lib/announcements";
-import { WELCOME_CREDITS } from "@/lib/credit-products";
+import {
+  CREDIT_PRODUCTS,
+  WELCOME_CREDITS,
+  getCreditProduct,
+  getProductTotalCredits,
+} from "@/lib/credit-products";
 import CouponAdminPanel from "@/components/CouponAdminPanel";
 import styles from "./page.module.css";
 
 interface UserRow {
   id: string;
   email: string;
+  accountKey: string;
   name: string | null;
   role: string;
   credits: number;
@@ -43,6 +51,17 @@ interface UserRow {
   isCurrentUser: boolean;
   paidPayments: number;
   createdAt: string;
+}
+
+interface CreditGrantResult {
+  id: string;
+  email: string;
+  name: string | null;
+  credits: number;
+  previousCredits: number;
+  grantedCredits: number;
+  grantMode: "preset" | "custom";
+  creditProductCode: string | null;
 }
 
 interface PasswordResetResult {
@@ -117,8 +136,13 @@ export default function AdminPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [creditInputs, setCreditInputs] = useState<Record<string, string>>({});
+  const [userSearch, setUserSearch] = useState("");
+  const [selectedCreditUserId, setSelectedCreditUserId] = useState<string | null>(null);
+  const [creditGrantMode, setCreditGrantMode] = useState<"preset" | "custom">("preset");
+  const [selectedProductCode, setSelectedProductCode] = useState<string>(CREDIT_PRODUCTS[0].code);
+  const [customCreditAmount, setCustomCreditAmount] = useState("");
   const [grantingUserId, setGrantingUserId] = useState<string | null>(null);
+  const [creditGrantResult, setCreditGrantResult] = useState<CreditGrantResult | null>(null);
   const [passwordResetTarget, setPasswordResetTarget] = useState<UserRow | null>(null);
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [passwordExpiry, setPasswordExpiry] = useState("1440");
@@ -134,6 +158,32 @@ export default function AdminPage() {
   const [editingAnnouncementId, setEditingAnnouncementId] = useState<string | null>(null);
   const [announcementSaving, setAnnouncementSaving] = useState(false);
   const [couponRefreshKey, setCouponRefreshKey] = useState(0);
+
+  const visibleUsers = useMemo(() => {
+    const query = userSearch.trim().toLocaleLowerCase("ko-KR");
+    if (!query) return users;
+
+    return users
+      .map((user) => {
+        const searchableValues = [user.accountKey, user.email, user.name || ""]
+          .map((value) => value.toLocaleLowerCase("ko-KR"));
+        const exactMatch = searchableValues.some((value) => value === query);
+        const partialMatch = searchableValues.some((value) => value.includes(query));
+        return { user, exactMatch, partialMatch };
+      })
+      .filter((item) => item.partialMatch)
+      .sort((left, right) => Number(right.exactMatch) - Number(left.exactMatch))
+      .map((item) => item.user);
+  }, [userSearch, users]);
+
+  const selectedCreditUser = useMemo(
+    () => users.find((user) => user.id === selectedCreditUserId) ?? null,
+    [selectedCreditUserId, users]
+  );
+  const selectedProduct = getCreditProduct(selectedProductCode) ?? CREDIT_PRODUCTS[0];
+  const selectedGrantAmount = creditGrantMode === "preset"
+    ? getProductTotalCredits(selectedProduct)
+    : Number(customCreditAmount);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
@@ -217,19 +267,40 @@ export default function AdminPage() {
     }
   };
 
-  const handleAddCredits = async (userId: string) => {
-    const amount = Number(creditInputs[userId]);
-    if (!Number.isSafeInteger(amount) || amount <= 0) return;
-    setGrantingUserId(userId);
+  const handleAddCredits = async () => {
+    if (!selectedCreditUser) return;
+    if (!Number.isSafeInteger(selectedGrantAmount) || selectedGrantAmount <= 0 || selectedGrantAmount > 1_000_000) {
+      setError("직접 지급 크레딧은 1에서 1,000,000 사이의 정수로 입력해주세요.");
+      return;
+    }
+
+    const grantDescription = creditGrantMode === "preset"
+      ? `${selectedProduct.amountKrw.toLocaleString("ko-KR")}원 ${selectedProduct.name} 상품 (${selectedGrantAmount.toLocaleString("ko-KR")}C)`
+      : `직접 입력 ${selectedGrantAmount.toLocaleString("ko-KR")}C`;
+    const confirmed = window.confirm(
+      `${selectedCreditUser.name || "이름 없음"} (${selectedCreditUser.accountKey})에게\n${grantDescription}을 지급할까요?\n\n현재 ${selectedCreditUser.credits.toLocaleString("ko-KR")}C → 지급 후 ${(selectedCreditUser.credits + selectedGrantAmount).toLocaleString("ko-KR")}C`
+    );
+    if (!confirmed) return;
+
+    setGrantingUserId(selectedCreditUser.id);
     setError("");
+    setCreditGrantResult(null);
     try {
-      await readJson(await fetch(`/api/admin/users/${userId}`, {
+      const result = await readJson<CreditGrantResult>(await fetch(
+        `/api/admin/users/${encodeURIComponent(selectedCreditUser.id)}`,
+        {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ addCredits: amount }),
-      }));
-      setCreditInputs((previous) => ({ ...previous, [userId]: "" }));
-      await loadUsers();
+        body: JSON.stringify(creditGrantMode === "preset"
+          ? { creditProductCode: selectedProduct.code }
+          : { addCredits: selectedGrantAmount }),
+        }
+      ));
+      setUsers((current) => current.map((user) => user.id === result.id
+        ? { ...user, credits: result.credits }
+        : user));
+      setCreditGrantResult(result);
+      if (creditGrantMode === "custom") setCustomCreditAmount("");
     } catch (grantError) {
       setError(grantError instanceof Error ? grantError.message : "크레딧 지급에 실패했습니다.");
     } finally {
@@ -411,59 +482,197 @@ export default function AdminPage() {
       <CouponAdminPanel refreshKey={couponRefreshKey} />
 
       <section className={styles.userSection} aria-labelledby="user-heading">
-        <div className={styles.sectionHeader}><div><LuCoins /><span><h2 id="user-heading">사용자 및 크레딧</h2><p>잔액, 로그인 복구와 결제 연결 상태를 관리합니다.</p></span></div></div>
+        <div className={styles.sectionHeader}>
+          <div><LuCoins /><span><h2 id="user-heading">사용자 및 크레딧</h2><p>계정을 검색해 결제 상품 단위 또는 직접 입력으로 크레딧을 지급합니다.</p></span></div>
+          <strong>{users.length.toLocaleString("ko-KR")}명</strong>
+        </div>
         {error && <div className={styles.error} role="alert">{error}</div>}
         {loading ? (
           <div className={styles.loading}><LuLoaderCircle className={styles.spin} /> 사용자 목록을 불러오는 중</div>
         ) : (
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead><tr><th>이메일</th><th>이름</th><th>권한</th><th>크레딧</th><th>로그인</th><th>결제</th><th>가입일</th><th>수동 지급</th><th>계정 복구</th></tr></thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr key={user.id}>
-                    <td className={styles.email}>{user.email}{user.isCurrentUser && <small>현재 계정</small>}</td>
-                    <td>{user.name || "-"}</td>
-                    <td><span className={user.role === "admin" ? styles.adminBadge : styles.userBadge}>{user.role}</span></td>
-                    <td className={styles.creditCell}>{user.credits.toLocaleString()}</td>
-                    <td>
-                      <span className={styles.loginMethods}>
-                        {!user.kakaoLinked && !user.googleLinked && <span>이메일</span>}
-                        {user.kakaoLinked && <span>카카오</span>}
-                        {user.googleLinked && <span>구글</span>}
+          <>
+            <div className={styles.userManagementTools}>
+              <div className={styles.userSearchPanel}>
+                <label htmlFor="admin-user-search"><LuSearch /> 사용자 검색</label>
+                <div className={styles.userSearchInput}>
+                  <LuSearch aria-hidden="true" />
+                  <input
+                    id="admin-user-search"
+                    type="search"
+                    value={userSearch}
+                    onChange={(event) => setUserSearch(event.target.value)}
+                    placeholder="kakao-4995225948, 전체 이메일 또는 이름"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  {userSearch && (
+                    <button type="button" onClick={() => setUserSearch("")} title="검색어 지우기" aria-label="검색어 지우기"><LuX /></button>
+                  )}
+                </div>
+                <p>{userSearch.trim()
+                  ? `${visibleUsers.length.toLocaleString("ko-KR")}명 검색됨 · 정확한 계정 키가 먼저 표시됩니다.`
+                  : `전체 ${users.length.toLocaleString("ko-KR")}명 · 계정 키, 이메일, 이름으로 검색할 수 있습니다.`}</p>
+              </div>
+
+              <div id="credit-grant-panel" className={styles.creditGrantPanel}>
+                <div className={styles.creditGrantHeader}>
+                  <span><LuUserCheck /> 지급 대상</span>
+                  {selectedCreditUser && <button type="button" onClick={() => {
+                    setSelectedCreditUserId(null);
+                    setCreditGrantResult(null);
+                  }}>선택 해제</button>}
+                </div>
+
+                {!selectedCreditUser ? (
+                  <div className={styles.creditGrantEmpty}>아래 검색 결과에서 지급할 계정을 선택하세요.</div>
+                ) : (
+                  <>
+                    <div className={styles.creditGrantTarget}>
+                      <span>
+                        <strong>{selectedCreditUser.name || "이름 없음"}</strong>
+                        <code>{selectedCreditUser.accountKey}</code>
+                        {selectedCreditUser.email !== selectedCreditUser.accountKey && <small>{selectedCreditUser.email}</small>}
                       </span>
-                    </td>
-                    <td>{user.paidPayments.toLocaleString()}건</td>
-                    <td className={styles.date}>{new Date(user.createdAt).toLocaleDateString("ko-KR")}</td>
-                    <td>
-                      <div className={styles.creditAction}>
-                        <input className={styles.creditInput} type="number" min="1" max="1000000" aria-label={`${user.email} 크레딧 지급량`} placeholder="수량" value={creditInputs[user.id] || ""} onChange={(event) => setCreditInputs((previous) => ({ ...previous, [user.id]: event.target.value }))} />
-                        <button className={styles.creditBtn} type="button" onClick={() => void handleAddCredits(user.id)} disabled={grantingUserId !== null || !creditInputs[user.id] || Number(creditInputs[user.id]) <= 0}>
-                          {grantingUserId === user.id ? <LuLoaderCircle className={styles.spin} /> : <LuCoins />} 지급
-                        </button>
+                      <span><small>현재 잔액</small><strong>{selectedCreditUser.credits.toLocaleString("ko-KR")} C</strong></span>
+                    </div>
+
+                    <div className={styles.creditPresetList} role="group" aria-label="크레딧 지급 방식">
+                      {CREDIT_PRODUCTS.map((product) => {
+                        const totalCredits = getProductTotalCredits(product);
+                        const active = creditGrantMode === "preset" && selectedProductCode === product.code;
+                        return (
+                          <button
+                            key={product.code}
+                            type="button"
+                            className={active ? styles.creditPresetActive : styles.creditPreset}
+                            aria-pressed={active}
+                            onClick={() => {
+                              setCreditGrantMode("preset");
+                              setSelectedProductCode(product.code);
+                              setCreditGrantResult(null);
+                            }}
+                          >
+                            <strong>{product.amountKrw.toLocaleString("ko-KR")}원</strong>
+                            <span>{totalCredits.toLocaleString("ko-KR")} C</span>
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        className={creditGrantMode === "custom" ? styles.creditPresetActive : styles.creditPreset}
+                        aria-pressed={creditGrantMode === "custom"}
+                        onClick={() => {
+                          setCreditGrantMode("custom");
+                          setCreditGrantResult(null);
+                        }}
+                      >
+                        <strong>직접 입력</strong>
+                        <span>최대 1,000,000 C</span>
+                      </button>
+                    </div>
+
+                    {creditGrantMode === "custom" && (
+                      <label className={styles.customCreditField}>직접 지급할 크레딧
+                        <input
+                          type="number"
+                          min="1"
+                          max="1000000"
+                          step="1"
+                          inputMode="numeric"
+                          value={customCreditAmount}
+                          onChange={(event) => {
+                            setCustomCreditAmount(event.target.value);
+                            setCreditGrantResult(null);
+                          }}
+                          placeholder="예: 10000"
+                        />
+                      </label>
+                    )}
+
+                    <button
+                      className={styles.creditGrantButton}
+                      type="button"
+                      onClick={() => void handleAddCredits()}
+                      disabled={grantingUserId !== null || !Number.isSafeInteger(selectedGrantAmount) || selectedGrantAmount <= 0 || selectedGrantAmount > 1_000_000}
+                    >
+                      {grantingUserId === selectedCreditUser.id ? <LuLoaderCircle className={styles.spin} /> : <LuCoins />}
+                      {selectedGrantAmount > 0 && Number.isSafeInteger(selectedGrantAmount)
+                        ? `${selectedGrantAmount.toLocaleString("ko-KR")} C 지급`
+                        : "지급량을 입력하세요"}
+                    </button>
+
+                    {creditGrantResult && (
+                      <div className={styles.creditGrantSuccess} role="status">
+                        <strong>{creditGrantResult.grantedCredits.toLocaleString("ko-KR")} C 지급 완료</strong>
+                        <span>{creditGrantResult.previousCredits.toLocaleString("ko-KR")} C → {creditGrantResult.credits.toLocaleString("ko-KR")} C · 원장 기록 완료</span>
                       </div>
-                    </td>
-                    <td>
-                      <div className={styles.passwordResetAction}>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead><tr><th>계정</th><th>이름</th><th>권한</th><th>크레딧</th><th>로그인</th><th>결제</th><th>가입일</th><th>크레딧 지급</th><th>계정 복구</th></tr></thead>
+                <tbody>
+                  {visibleUsers.length === 0 ? (
+                    <tr><td className={styles.emptyUserResult} colSpan={9}>일치하는 계정이 없습니다.</td></tr>
+                  ) : visibleUsers.map((user) => (
+                    <tr key={user.id} className={selectedCreditUserId === user.id ? styles.selectedUserRow : undefined}>
+                      <td className={styles.accountCell}>
+                        <strong>{user.accountKey}</strong>
+                        {user.email !== user.accountKey && <small>{user.email}</small>}
+                        {user.isCurrentUser && <small>현재 관리자 계정</small>}
+                      </td>
+                      <td>{user.name || "-"}</td>
+                      <td><span className={user.role === "admin" ? styles.adminBadge : styles.userBadge}>{user.role}</span></td>
+                      <td className={styles.creditCell}>{user.credits.toLocaleString()}</td>
+                      <td>
+                        <span className={styles.loginMethods}>
+                          {!user.kakaoLinked && !user.googleLinked && <span>이메일</span>}
+                          {user.kakaoLinked && <span>카카오</span>}
+                          {user.googleLinked && <span>구글</span>}
+                        </span>
+                      </td>
+                      <td>{user.paidPayments.toLocaleString()}건</td>
+                      <td className={styles.date}>{new Date(user.createdAt).toLocaleDateString("ko-KR")}</td>
+                      <td>
                         <button
-                          className={styles.passwordResetButton}
+                          className={styles.creditSelectButton}
                           type="button"
-                          onClick={() => openPasswordReset(user)}
-                          disabled={!user.passwordResetEligible}
-                          title={user.passwordResetEligible ? `${user.email} 비밀번호 재설정` : "소셜 로그인 전용 계정"}
+                          disabled={grantingUserId !== null}
+                          onClick={() => {
+                            setSelectedCreditUserId(user.id);
+                            setCreditGrantResult(null);
+                            document.getElementById("credit-grant-panel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                          }}
                         >
-                          <LuKeyRound /> {user.passwordResetEligible ? "재설정" : "OAuth 전용"}
+                          <LuUserCheck /> {selectedCreditUserId === user.id ? "선택됨" : "지급 선택"}
                         </button>
-                        {user.temporaryPasswordExpiresAt && new Date(user.temporaryPasswordExpiresAt) > new Date() && (
-                          <small>{new Date(user.temporaryPasswordExpiresAt).toLocaleString("ko-KR")}까지</small>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      </td>
+                      <td>
+                        <div className={styles.passwordResetAction}>
+                          <button
+                            className={styles.passwordResetButton}
+                            type="button"
+                            onClick={() => openPasswordReset(user)}
+                            disabled={!user.passwordResetEligible}
+                            title={user.passwordResetEligible ? `${user.email} 비밀번호 재설정` : "소셜 로그인 전용 계정"}
+                          >
+                            <LuKeyRound /> {user.passwordResetEligible ? "재설정" : "OAuth 전용"}
+                          </button>
+                          {user.temporaryPasswordExpiresAt && new Date(user.temporaryPasswordExpiresAt) > new Date() && (
+                            <small>{new Date(user.temporaryPasswordExpiresAt).toLocaleString("ko-KR")}까지</small>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
 

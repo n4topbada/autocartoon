@@ -82,7 +82,7 @@ export default function UserAvatar({ onOpenSettings }: { onOpenSettings: () => v
           {user.role === "admin" && (
             <>
               <div className={styles.divider} />
-              <a className={styles.menuItem} href="/admin" onClick={() => setOpen(false)}>
+              <a className={styles.menuItem} href="/admin">
                 <LuSettings size={14} /> 관리자 페이지
               </a>
             </>
