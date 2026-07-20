@@ -26,9 +26,9 @@ Client
 
 ## Data Model
 
-Prisma 모델 34개:
+Prisma 모델 33개:
 
-- 인증: `User`, `UserSession`, `RegistrationIp`
+- 인증: `User`, `UserSession`
 - 캐릭터: `CharacterGroup`, `CharacterPreset`, `PresetImage`, `PurchasedPreset`
 - 생성: `GenerationRequest`, `GeneratedImage`, `SavedBackground`, `GenerationJob`, `GenerationArtifact`
 - 과금: `CreditLedger`, `CreditPayment`

@@ -194,15 +194,6 @@ model AnnouncementRead {
   @@index([userId, readAt])
 }
 
-// Privacy-preserving, lifetime cap for newly created OAuth accounts from the
-// same network. The application stores an HMAC of the IP address, never the IP.
-model RegistrationIp {
-  ipHash       String   @id
-  accountCount Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
-
 model UserSession {
   id         String   @id @default(cuid())
   userId     String

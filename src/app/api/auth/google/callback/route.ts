@@ -15,7 +15,6 @@ import {
 } from "@/lib/google-auth";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
-import { SignupLimitError, reserveNewAccountSlot } from "@/lib/signup-guard";
 import { createUserSession } from "@/lib/user-sessions";
 
 export const dynamic = "force-dynamic";
@@ -170,7 +169,6 @@ export async function GET(req: NextRequest) {
     if (!user) {
       const passwordHash = await bcrypt.hash(randomBytes(32).toString("base64url"), 12);
       user = await prisma.$transaction(async (tx) => {
-        await reserveNewAccountSlot(tx, req.headers);
         const created = await tx.user.create({
           data: {
             googleId: google.id,
@@ -217,12 +215,6 @@ export async function GET(req: NextRequest) {
 
     return redirectAndClearState(req, returnTo);
   } catch (error) {
-    if (error instanceof SignupLimitError) {
-      return redirectAndClearState(
-        req,
-        addReturnTo("/login?google=signup_limit", returnTo),
-      );
-    }
     console.error("Google login callback error:", { host: req.nextUrl.host, error });
     return redirectAndClearState(
       req,

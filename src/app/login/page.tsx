@@ -53,7 +53,6 @@ export default function LoginPage() {
       failed: provider + " 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.",
       already_linked: "이 이메일은 다른 " + provider + " 계정에 이미 연결되어 있습니다.",
       link_login_required: provider + " 계정을 연결하려면 기존 계정으로 먼저 로그인해주세요.",
-      signup_limit: "이 네트워크에서는 새 계정을 최대 2개까지만 만들 수 있습니다.",
     };
     setError(messages[status] || messages.failed);
   }, []);

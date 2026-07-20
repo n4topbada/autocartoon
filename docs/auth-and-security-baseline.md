@@ -1,6 +1,6 @@
 # Authentication and Security Baseline
 
-Last verified: 2026-07-18 KST
+Last verified: 2026-07-20 KST
 
 This document records the current prototype posture, the changes already implemented, and the intentionally staged GCP hardening work. It is written so that a later agent can make the next change without treating a short development spike as a production incident.
 
@@ -10,11 +10,16 @@ This document records the current prototype posture, the changes already impleme
 - Existing email/password members remain able to sign in, reset a password, and change a password only while no OAuth identity is linked.
 - Linking Kakao or Google converts a legacy account to OAuth-only: the known password and temporary password are invalidated and other device sessions are revoked.
 - POST /api/auth/register returns 403; it no longer creates password-only accounts.
-- A new OAuth account consumes one signup slot only after its User record and welcome-credit ledger entry are committed.
-- A source network can create at most two new OAuth accounts. Existing account sign-ins and email-matched provider linking do not consume a slot.
-- RegistrationIp stores a SHA-256 HMAC of the source IP, not the raw IP. The key is SIGNUP_IP_HASH_SECRET, falling back to SESSION_SECRET only when the dedicated key is absent. Production has a dedicated Secret Manager secret named signup-ip-hash-secret attached to Cloud Run.
+- Shared source networks are not an account-creation boundary. Classrooms, offices, homes, and carrier NAT users can create accounts without an IP-based lifetime cap.
+- `User.kakaoId` and `User.googleId` are unique. A provider identity therefore cannot create a second local account, and a verified matching email links to the existing local account instead of creating another one.
+- User creation and the 100-credit welcome ledger entry remain in one transaction. The unique `welcome:{userId}:grant` ledger reference and `welcomeCreditsGrantedAt` prevent a welcome grant from being repeated for the same local account.
 
-The cap is lifetime-based. It is deliberately simple anti-abuse protection for welcome credits, not an identity system: a home, office, school, or carrier NAT can share one public IP. A legitimate exception requires an administrator to adjust the HMAC-keyed counter in the database; no public bypass exists.
+OAuth proves control of a provider account, not that one human owns only one provider account. A determined person can still create multiple Google or Kakao accounts, so IP blocking has been replaced with benefit-level controls:
+
+1. Free credits are not transferable between users, and every grant or spend is recorded in `CreditLedger`.
+2. Coupon campaigns must enforce one redemption per local user and campaign with a database unique constraint, an atomic campaign quota, and an idempotent ledger reference.
+3. Expensive AI routes retain server-side credit reservation and request controls, so repeated accounts cannot generate without a recorded balance deduction.
+4. Add phone or stronger identity verification only if observed abuse justifies the added signup friction. Device fingerprints and raw IP identity matching are not treated as reliable person identifiers.
 
 ## Google OAuth Production Status
 
