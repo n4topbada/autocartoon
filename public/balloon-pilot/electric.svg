@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 250" role="img" aria-labelledby="title desc">
+  <title id="title">전자음 말풍선</title>
+  <desc id="desc">불규칙한 각진 외곽으로 로봇과 기계 음성을 나타내는 말풍선</desc>
+  <path d="M65 40 L100 40 L112 24 L126 40 L160 40 L175 24 L190 40 L230 40 L244 24 L258 40 L298 40
+    L298 70 L316 82 L298 96 L298 130 L316 142 L298 154 L298 180
+    L250 180 L236 198 L222 180 L170 180 L155 198 L140 180 L116 180
+    L84 230 L96 180 L62 180 L62 150 L44 138 L62 126 L62 92 L44 80 L62 68Z"
+    fill="#fff" stroke="#171717" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+</svg>

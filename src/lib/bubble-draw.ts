@@ -4,10 +4,16 @@
 
 export type BubbleType =
   | "classic"
+  | "soft"
+  | "whisper"
+  | "wavy"
   | "thought"
   | "spiky"
   | "angry"
   | "needle"
+  | "electric"
+  | "broadcast"
+  | "double"
   | "text"
   | "rectangle"
   | "roundedRectangle"
@@ -74,6 +80,43 @@ export interface SpeechBubble {
   watermarkMargin?: number;
 }
 
+export const SPEECH_BUBBLE_PRESETS = [
+  { type: "classic", label: "기본", description: "일반적인 대사", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.5 },
+  { type: "soft", label: "부드러운 말", description: "친근하고 차분한 대사", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.5 },
+  { type: "whisper", label: "속삭임", description: "작고 조용한 목소리", tailEnabled: true, strokeStyle: "dashed", strokeWidth: 2 },
+  { type: "wavy", label: "떨리는 말", description: "불안하거나 힘없는 목소리", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.25 },
+  { type: "thought", label: "생각", description: "말하지 않은 속마음", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.5 },
+  { type: "cloud", label: "구름 대사", description: "들뜨거나 몽글한 대사", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.5 },
+  { type: "spiky", label: "외침", description: "크게 외치는 목소리", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.75 },
+  { type: "angry", label: "비명", description: "격한 비명과 충격", tailEnabled: true, strokeStyle: "solid", strokeWidth: 3 },
+  { type: "electric", label: "전자음", description: "로봇과 기계 음성", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.5 },
+  { type: "broadcast", label: "방송음", description: "전화·라디오·스피커 음성", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.5 },
+  { type: "double", label: "메아리", description: "텔레파시와 울리는 목소리", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.25 },
+] as const satisfies ReadonlyArray<{
+  type: BubbleType;
+  label: string;
+  description: string;
+  tailEnabled: boolean;
+  strokeStyle: BubbleStrokeStyle;
+  strokeWidth: number;
+}>;
+
+export type SpeechBubblePresetType = (typeof SPEECH_BUBBLE_PRESETS)[number]["type"];
+
+export function getSpeechBubblePreset(type: BubbleType) {
+  return SPEECH_BUBBLE_PRESETS.find((preset) => preset.type === type);
+}
+
+export function getSpeechBubblePresetPatch(type: SpeechBubblePresetType): Partial<SpeechBubble> {
+  const preset = getSpeechBubblePreset(type)!;
+  return {
+    type,
+    tailEnabled: preset.tailEnabled,
+    strokeStyle: preset.strokeStyle,
+    strokeWidth: preset.strokeWidth,
+  };
+}
+
 export const BUBBLE_FONT_FAMILIES = [
   { id: "'Pretendard', 'Malgun Gothic', sans-serif", label: "프리텐다드 · 기본 · 대사" },
   { id: "'Noto Sans KR', 'Malgun Gothic', sans-serif", label: "노토 산스 · 차분한 대사" },
@@ -131,7 +174,8 @@ export const BUBBLE_FONT_FAMILIES = [
 ] as const;
 
 export function createBubble(type: BubbleType, x: number, y: number): SpeechBubble {
-  const hasTail = type === "classic" || type === "thought";
+  const speechPreset = getSpeechBubblePreset(type);
+  const hasTail = speechPreset?.tailEnabled ?? false;
   const isText = type === "text";
   const isShape = ["rectangle", "roundedRectangle", "ellipse", "line", "arrow", "star"].includes(type);
   const isLine = type === "line" || type === "arrow";
@@ -142,7 +186,7 @@ export function createBubble(type: BubbleType, x: number, y: number): SpeechBubb
     height: isText ? 90 : isLine ? 40 : isShape ? 120 : 140,
     fillColor: isText || isLine ? "transparent" : "#ffffff",
     strokeColor: isText ? "transparent" : "#000000",
-    strokeWidth: type === "needle" ? 2 : isText ? 0 : isShape ? 3 : 2.5,
+    strokeWidth: type === "needle" ? 2 : isText ? 0 : isShape ? 3 : speechPreset?.strokeWidth ?? 2.5,
     opacity: 1,
     tailEnabled: hasTail,
     tailTipX: x,
@@ -153,7 +197,7 @@ export function createBubble(type: BubbleType, x: number, y: number): SpeechBubb
     fontSize: 24,
     fontWeight: "normal",
     textAlign: "center",
-    strokeStyle: "solid",
+    strokeStyle: speechPreset?.strokeStyle ?? "solid",
     cornerRadius: 24,
     gradientStop: 50,
     gradientAngle: 0,
@@ -175,10 +219,16 @@ export function drawBubble(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   }
   switch (b.type) {
     case "classic": drawClassic(ctx, b); break;
+    case "soft": drawSoft(ctx, b); break;
+    case "whisper": drawClassic(ctx, b); break;
+    case "wavy": drawWavy(ctx, b); break;
     case "thought": drawThought(ctx, b); break;
     case "spiky":   drawSpiky(ctx, b); break;
     case "angry":   drawAngry(ctx, b); break;
     case "needle":  drawNeedle(ctx, b); break;
+    case "electric": drawElectric(ctx, b); break;
+    case "broadcast": drawBroadcast(ctx, b); break;
+    case "double": drawDouble(ctx, b); break;
     case "text": break;
     case "rectangle": drawRectangle(ctx, b); break;
     case "roundedRectangle": drawRoundedRectangle(ctx, b); break;
@@ -298,59 +348,347 @@ function drawArrow(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
   doStroke(ctx, bubble);
 }
 
-function drawCloud(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
+type BubblePoint = { x: number; y: number };
+
+const ORGANIC_RADII = [
+  0.98, 1.01, 0.99, 1.02, 1, 0.98, 1.01, 0.97,
+  1.02, 1, 0.98, 1.01, 0.97, 1, 1.02, 0.98,
+  1, 1.02, 0.97, 1.01, 0.99, 1.02, 0.98, 1,
+] as const;
+
+const WAVY_RADII = [
+  0.94, 1.04, 0.91, 1.06, 0.95, 1.03, 0.9, 1.07,
+  0.93, 1.05, 0.89, 1.04, 0.94, 1.08, 0.91, 1.03,
+  0.95, 1.06, 0.9, 1.04,
+] as const;
+
+const CLOUD_MASTER_START = [180, 36] as const;
+const CLOUD_MASTER_SEGMENTS = [
+  [[192, 8], [224, 12], [232, 42]],
+  [[251, 22], [285, 37], [277, 67]],
+  [[313, 56], [334, 89], [302, 105]],
+  [[334, 117], [321, 153], [282, 145]],
+  [[292, 183], [253, 198], [238, 168]],
+  [[226, 205], [193, 207], [188, 173]],
+  [[169, 205], [139, 194], [139, 167]],
+  [[120, 182], [98, 169], [80, 144]],
+  [[45, 166], [18, 131], [54, 105]],
+  [[24, 93], [42, 51], [75, 67]],
+  [[73, 30], [111, 18], [124, 47]],
+  [[137, 15], [170, 12], [180, 36]],
+] as const;
+
+const SHOUT_RADII = [
+  1.08, 0.72, 0.98, 0.68, 1.12, 0.75, 1.02, 0.69,
+  1.09, 0.73, 1.01, 0.67, 1.11, 0.76, 0.99, 0.7,
+  1.08, 0.74, 1.03, 0.69, 1.1, 0.72, 0.97, 0.68,
+] as const;
+
+const SCREAM_RADII = [
+  1.22, 0.58, 0.98, 0.64, 1.18, 0.55, 1.08, 0.62,
+  1.25, 0.57, 1.02, 0.65, 1.2, 0.54, 1.1, 0.6,
+  1.24, 0.56, 0.99, 0.64, 1.19, 0.55, 1.07, 0.61,
+] as const;
+
+const ELECTRIC_POINTS = [
+  [0.077, 0.092], [0.206, 0.092], [0.25, 0], [0.301, 0.092], [0.426, 0.092],
+  [0.482, 0], [0.537, 0.092], [0.684, 0.092], [0.735, 0], [0.787, 0.092], [0.934, 0.092],
+  [0.934, 0.264], [1, 0.333], [0.934, 0.414], [0.934, 0.609], [1, 0.678],
+  [0.934, 0.747], [0.934, 0.897], [0.757, 0.897], [0.706, 1], [0.654, 0.897],
+  [0.463, 0.897], [0.408, 1], [0.353, 0.897], [0.191, 0.897], [0.066, 0.897],
+  [0.066, 0.724], [0, 0.655], [0.066, 0.586], [0.066, 0.391], [0, 0.322], [0.066, 0.253],
+] as const;
+
+function midpoint(a: BubblePoint, b: BubblePoint): BubblePoint {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+function lerpPoint(a: BubblePoint, b: BubblePoint, amount: number): BubblePoint {
+  return { x: a.x + (b.x - a.x) * amount, y: a.y + (b.y - a.y) * amount };
+}
+
+function quadraticPoint(a: BubblePoint, control: BubblePoint, b: BubblePoint, amount: number): BubblePoint {
+  const first = lerpPoint(a, control, amount);
+  const second = lerpPoint(control, b, amount);
+  return lerpPoint(first, second, amount);
+}
+
+function cubicPoint(
+  start: BubblePoint,
+  firstControl: BubblePoint,
+  secondControl: BubblePoint,
+  end: BubblePoint,
+  amount: number
+) {
+  const first = lerpPoint(start, firstControl, amount);
+  const second = lerpPoint(firstControl, secondControl, amount);
+  const third = lerpPoint(secondControl, end, amount);
+  const fourth = lerpPoint(first, second, amount);
+  const fifth = lerpPoint(second, third, amount);
+  return lerpPoint(fourth, fifth, amount);
+}
+
+function mapCloudMasterPoint(
+  bubble: SpeechBubble,
+  point: readonly [number, number],
+  seed: number
+): BubblePoint {
   const roughness = Math.max(0, Math.min(1, bubble.roughness ?? 0));
   const wobble = Math.max(0, Math.min(1, bubble.wobble ?? 0));
-  const lobes = Math.max(10, Math.round(12 + roughness * 8));
-  const points = Array.from({ length: lobes }, (_, index) => {
-    const angle = (index / lobes) * Math.PI * 2 - Math.PI / 2;
-    const wave = 1 + Math.sin(index * 7.31 + 0.7) * roughness * 0.04;
+  const radialScale = 1
+    + Math.sin(seed * 2.17 + 0.7) * roughness * 0.035
+    + Math.sin(seed * 1.31 + 1.9) * wobble * 0.025;
+  const normalizedX = (point[0] - 176) / 316;
+  const normalizedY = (point[1] - 107.5) / 199;
+  return {
+    x: bubble.x + normalizedX * bubble.width * radialScale,
+    y: bubble.y + normalizedY * bubble.height * radialScale,
+  };
+}
+
+function traceCloudMasterOutline(
+  ctx: CanvasRenderingContext2D,
+  bubble: SpeechBubble,
+  tailEnabled = bubble.tailEnabled
+) {
+  const start = mapCloudMasterPoint(bubble, CLOUD_MASTER_START, 0);
+  const segments = CLOUD_MASTER_SEGMENTS.map(([firstControl, secondControl, end], index) => ({
+    firstControl: mapCloudMasterPoint(bubble, firstControl, index * 3 + 1),
+    secondControl: mapCloudMasterPoint(bubble, secondControl, index * 3 + 2),
+    end: mapCloudMasterPoint(bubble, end, index * 3 + 3),
+  }));
+
+  let tailSegment = -1;
+  if (tailEnabled) {
+    const targetAngle = normalizedTailAngle(bubble);
+    let closestDistance = Number.POSITIVE_INFINITY;
+    let segmentStart = start;
+    segments.forEach((segment, index) => {
+      const center = cubicPoint(segmentStart, segment.firstControl, segment.secondControl, segment.end, 0.5);
+      const angle = Math.atan2(
+        (center.y - bubble.y) / Math.max(1, bubble.height),
+        (center.x - bubble.x) / Math.max(1, bubble.width)
+      );
+      const distance = Math.abs(Math.atan2(Math.sin(angle - targetAngle), Math.cos(angle - targetAngle)));
+      if (distance < closestDistance) {
+        tailSegment = index;
+        closestDistance = distance;
+      }
+      segmentStart = segment.end;
+    });
+  }
+
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  let segmentStart = start;
+  segments.forEach((segment, index) => {
+    if (index !== tailSegment) {
+      ctx.bezierCurveTo(
+        segment.firstControl.x,
+        segment.firstControl.y,
+        segment.secondControl.x,
+        segment.secondControl.y,
+        segment.end.x,
+        segment.end.y
+      );
+      segmentStart = segment.end;
+      return;
+    }
+
+    const approximateLength = Math.hypot(segment.firstControl.x - segmentStart.x, segment.firstControl.y - segmentStart.y)
+      + Math.hypot(segment.secondControl.x - segment.firstControl.x, segment.secondControl.y - segment.firstControl.y)
+      + Math.hypot(segment.end.x - segment.secondControl.x, segment.end.y - segment.secondControl.y);
+    const halfSpan = Math.max(0.16, Math.min(0.42, bubble.tailWidth / Math.max(18, approximateLength * 2)));
+    const startAmount = 0.5 - halfSpan;
+    const endAmount = 0.5 + halfSpan;
+
+    const firstA = lerpPoint(segmentStart, segment.firstControl, startAmount);
+    const firstB = lerpPoint(segment.firstControl, segment.secondControl, startAmount);
+    const firstC = lerpPoint(segment.secondControl, segment.end, startAmount);
+    const firstD = lerpPoint(firstA, firstB, startAmount);
+    const firstE = lerpPoint(firstB, firstC, startAmount);
+    const baseStart = lerpPoint(firstD, firstE, startAmount);
+
+    const lastA = lerpPoint(segmentStart, segment.firstControl, endAmount);
+    const lastB = lerpPoint(segment.firstControl, segment.secondControl, endAmount);
+    const lastC = lerpPoint(segment.secondControl, segment.end, endAmount);
+    const lastD = lerpPoint(lastA, lastB, endAmount);
+    const lastE = lerpPoint(lastB, lastC, endAmount);
+    const baseEnd = lerpPoint(lastD, lastE, endAmount);
+
+    ctx.bezierCurveTo(firstA.x, firstA.y, firstD.x, firstD.y, baseStart.x, baseStart.y);
+    ctx.lineTo(bubble.tailTipX, bubble.tailTipY);
+    ctx.lineTo(baseEnd.x, baseEnd.y);
+    ctx.bezierCurveTo(lastE.x, lastE.y, lastC.x, lastC.y, segment.end.x, segment.end.y);
+    segmentStart = segment.end;
+  });
+  ctx.closePath();
+}
+
+function normalizedTailAngle(bubble: SpeechBubble) {
+  return Math.atan2(
+    (bubble.tailTipY - bubble.y) / Math.max(1, bubble.height),
+    (bubble.tailTipX - bubble.x) / Math.max(1, bubble.width)
+  );
+}
+
+function closestAngleIndex(count: number, targetAngle: number) {
+  let closest = 0;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < count; index += 1) {
+    const angle = -Math.PI / 2 + (index / count) * Math.PI * 2;
+    const distance = Math.abs(Math.atan2(Math.sin(angle - targetAngle), Math.cos(angle - targetAngle)));
+    if (distance < closestDistance) {
+      closest = index;
+      closestDistance = distance;
+    }
+  }
+  return closest;
+}
+
+function radialPoints(bubble: SpeechBubble, radii: readonly number[]) {
+  return radii.map((radius, index) => {
+    const angle = -Math.PI / 2 + (index / radii.length) * Math.PI * 2;
     return {
-      angle,
-      x: bubble.x + Math.cos(angle) * bubble.width * 0.5 * wave,
-      y: bubble.y + Math.sin(angle) * bubble.height * 0.5 * wave,
+      x: bubble.x + Math.cos(angle) * bubble.width * 0.5 * radius,
+      y: bubble.y + Math.sin(angle) * bubble.height * 0.5 * radius,
     };
   });
-  const tailSegmentIndex = bubble.tailEnabled
-    ? points.reduce((closest, point, index) => {
-        const next = points[(index + 1) % points.length];
-        const nextAngle = index === points.length - 1 ? next.angle + Math.PI * 2 : next.angle;
-        const middleAngle = (point.angle + nextAngle) / 2;
-        const targetAngle = Math.atan2(
-          (bubble.tailTipY - bubble.y) / Math.max(1, bubble.height),
-          (bubble.tailTipX - bubble.x) / Math.max(1, bubble.width)
-        );
-        const distance = Math.abs(Math.atan2(
-          Math.sin(middleAngle - targetAngle),
-          Math.cos(middleAngle - targetAngle)
-        ));
-        return distance < closest.distance ? { index, distance } : closest;
-      }, { index: -1, distance: Number.POSITIVE_INFINITY }).index
-    : -1;
+}
+
+function traceSmoothRadialOutline(
+  ctx: CanvasRenderingContext2D,
+  bubble: SpeechBubble,
+  radii: readonly number[],
+  tailEnabled = bubble.tailEnabled
+) {
+  const points = radialPoints(bubble, radii);
+  const tailIndex = tailEnabled ? closestAngleIndex(points.length, normalizedTailAngle(bubble)) : -1;
+  let segmentStart = midpoint(points[points.length - 1], points[0]);
+  ctx.beginPath();
+  ctx.moveTo(segmentStart.x, segmentStart.y);
+
+  for (let index = 0; index < points.length; index += 1) {
+    const control = points[index];
+    const segmentEnd = midpoint(control, points[(index + 1) % points.length]);
+    if (index === tailIndex) {
+      const approximateLength = Math.hypot(control.x - segmentStart.x, control.y - segmentStart.y)
+        + Math.hypot(segmentEnd.x - control.x, segmentEnd.y - control.y);
+      const halfSpan = Math.max(0.2, Math.min(0.46, bubble.tailWidth / Math.max(12, approximateLength * 2)));
+      const startAmount = 0.5 - halfSpan;
+      const endAmount = 0.5 + halfSpan;
+      const baseStart = quadraticPoint(segmentStart, control, segmentEnd, startAmount);
+      const baseEnd = quadraticPoint(segmentStart, control, segmentEnd, endAmount);
+      const firstControl = lerpPoint(segmentStart, control, startAmount);
+      const lastControl = lerpPoint(control, segmentEnd, endAmount);
+      ctx.quadraticCurveTo(firstControl.x, firstControl.y, baseStart.x, baseStart.y);
+      ctx.lineTo(bubble.tailTipX, bubble.tailTipY);
+      ctx.lineTo(baseEnd.x, baseEnd.y);
+      ctx.quadraticCurveTo(lastControl.x, lastControl.y, segmentEnd.x, segmentEnd.y);
+    } else {
+      ctx.quadraticCurveTo(control.x, control.y, segmentEnd.x, segmentEnd.y);
+    }
+    segmentStart = segmentEnd;
+  }
+  ctx.closePath();
+}
+
+function traceAngularRadialOutline(
+  ctx: CanvasRenderingContext2D,
+  bubble: SpeechBubble,
+  radii: readonly number[]
+) {
+  const points = radialPoints(bubble, radii);
+  tracePolygonWithTail(ctx, bubble, points);
+}
+
+function tracePolygonWithTail(ctx: CanvasRenderingContext2D, bubble: SpeechBubble, points: readonly BubblePoint[]) {
+  const targetAngle = normalizedTailAngle(bubble);
+  let tailEdge = -1;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  if (bubble.tailEnabled) {
+    for (let index = 0; index < points.length; index += 1) {
+      const center = midpoint(points[index], points[(index + 1) % points.length]);
+      const angle = Math.atan2(
+        (center.y - bubble.y) / Math.max(1, bubble.height),
+        (center.x - bubble.x) / Math.max(1, bubble.width)
+      );
+      const distance = Math.abs(Math.atan2(Math.sin(angle - targetAngle), Math.cos(angle - targetAngle)));
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        tailEdge = index;
+      }
+    }
+  }
+
   ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);
   for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
     const next = points[(index + 1) % points.length];
-    if (index === tailSegmentIndex) {
+    if (index === tailEdge) {
+      const edgeLength = Math.max(1, Math.hypot(next.x - current.x, next.y - current.y));
+      const halfSpan = Math.max(0.18, Math.min(0.46, bubble.tailWidth / edgeLength / 2));
+      const baseStart = lerpPoint(current, next, 0.5 - halfSpan);
+      const baseEnd = lerpPoint(current, next, 0.5 + halfSpan);
+      ctx.lineTo(baseStart.x, baseStart.y);
       ctx.lineTo(bubble.tailTipX, bubble.tailTipY);
-      ctx.lineTo(next.x, next.y);
-      continue;
+      ctx.lineTo(baseEnd.x, baseEnd.y);
     }
-    const nextAngle = index === points.length - 1 ? points[0].angle + Math.PI * 2 : next.angle;
-    const middleAngle = (points[index].angle + nextAngle) / 2;
-    const lobeDepth = 1.18
-      + Math.sin(index * 5.17 + 0.4) * roughness * 0.08
-      + Math.sin(middleAngle * 3 + 1.17) * wobble * 0.08;
-    ctx.quadraticCurveTo(
-      bubble.x + Math.cos(middleAngle) * bubble.width * 0.5 * lobeDepth,
-      bubble.y + Math.sin(middleAngle) * bubble.height * 0.5 * lobeDepth,
-      next.x,
-      next.y
-    );
+    ctx.lineTo(next.x, next.y);
   }
   ctx.closePath();
+}
+
+function drawSoft(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
+  const radius = Math.min(bubble.width, bubble.height) * 0.43;
+  traceRectangleWithTail(ctx, bubble, radius);
   doFill(ctx, bubble);
   doStroke(ctx, bubble);
+}
+
+function drawWavy(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
+  traceSmoothRadialOutline(ctx, bubble, WAVY_RADII);
+  doFill(ctx, bubble);
+  doStroke(ctx, bubble);
+}
+
+function drawCloud(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
+  traceCloudMasterOutline(ctx, bubble);
+  doFill(ctx, bubble);
+  doStroke(ctx, bubble);
+}
+
+function drawElectric(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
+  const points = ELECTRIC_POINTS.map(([x, y]) => ({
+    x: bubble.x + (x - 0.5) * bubble.width,
+    y: bubble.y + (y - 0.5) * bubble.height,
+  }));
+  tracePolygonWithTail(ctx, bubble, points);
+  doFill(ctx, bubble);
+  doStroke(ctx, bubble);
+}
+
+function drawBroadcast(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
+  traceEllipseWithTail(ctx, bubble, true);
+  doFill(ctx, bubble);
+  doStroke(ctx, bubble);
+}
+
+function drawDouble(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
+  traceEllipseWithTail(ctx, bubble, false);
+  doFill(ctx, bubble);
+  doStroke(ctx, bubble);
+
+  const inset = Math.max(5, bubble.strokeWidth * 2.2);
+  if (bubble.width <= inset * 2 || bubble.height <= inset * 2) return;
+  ctx.beginPath();
+  ctx.ellipse(bubble.x, bubble.y, bubble.width / 2 - inset, bubble.height / 2 - inset, 0, 0, Math.PI * 2);
+  doStroke(ctx, {
+    ...bubble,
+    strokeWidth: Math.max(1, bubble.strokeWidth * 0.62),
+    strokeOpacity: Math.min(1, (bubble.strokeOpacity ?? 1) * 0.72),
+  });
 }
 
 function drawStar(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
@@ -685,6 +1023,8 @@ function doStroke(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   ctx.strokeStyle = b.strokeColor;
   ctx.lineWidth = b.strokeWidth;
   ctx.lineCap = b.strokeStyle === "dotted" ? "round" : "butt";
+  ctx.lineJoin = "round";
+  ctx.miterLimit = 2.5;
   if (b.strokeStyle === "dashed") ctx.setLineDash([b.strokeWidth * 4, b.strokeWidth * 2.5]);
   if (b.strokeStyle === "dotted") ctx.setLineDash([0, b.strokeWidth * 2.5]);
   ctx.stroke();
@@ -700,27 +1040,58 @@ function doStroke(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
 // ═══════════════ 1. classic (타원 + 꼬리, 연결부 선 없음) ═══════════════
 
 function drawClassic(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
-  const rx = b.width / 2;
-  const ry = b.height / 2;
+  traceSmoothRadialOutline(ctx, b, ORGANIC_RADII);
+  doFill(ctx, b);
+  doStroke(ctx, b);
+}
 
-  if (b.tailEnabled) {
-    const angle = Math.atan2(b.tailTipY - b.y, b.tailTipX - b.x);
-    const spread = Math.atan2(b.tailWidth, Math.hypot(b.tailTipX - b.x, b.tailTipY - b.y)) * 1.2;
-    const a1 = angle - spread;
-    const a2 = angle + spread;
-
-    ctx.beginPath();
-    ctx.ellipse(b.x, b.y, rx, ry, 0, a2, a1 + Math.PI * 2);
-    ctx.lineTo(b.tailTipX, b.tailTipY);
+function traceEllipseWithTail(
+  ctx: CanvasRenderingContext2D,
+  bubble: SpeechBubble,
+  lightningTail: boolean
+) {
+  const rx = Math.max(1, bubble.width / 2);
+  const ry = Math.max(1, bubble.height / 2);
+  ctx.beginPath();
+  if (!bubble.tailEnabled) {
+    ctx.ellipse(bubble.x, bubble.y, rx, ry, 0, 0, Math.PI * 2);
     ctx.closePath();
-    doFill(ctx, b);
-    doStroke(ctx, b);
-  } else {
-    ctx.beginPath();
-    ctx.ellipse(b.x, b.y, rx, ry, 0, 0, Math.PI * 2);
-    doFill(ctx, b);
-    doStroke(ctx, b);
+    return;
   }
+
+  const dx = bubble.tailTipX - bubble.x;
+  const dy = bubble.tailTipY - bubble.y;
+  const angle = Math.atan2(dy / ry, dx / rx);
+  const spread = Math.max(0.07, Math.min(0.42, bubble.tailWidth / Math.max(24, Math.min(bubble.width, bubble.height))));
+  const startAngle = angle + spread;
+  const endAngle = angle - spread;
+  ctx.ellipse(bubble.x, bubble.y, rx, ry, 0, startAngle, endAngle + Math.PI * 2);
+
+  if (lightningTail) {
+    const baseStart = {
+      x: bubble.x + Math.cos(endAngle) * rx,
+      y: bubble.y + Math.sin(endAngle) * ry,
+    };
+    const baseEnd = {
+      x: bubble.x + Math.cos(startAngle) * rx,
+      y: bubble.y + Math.sin(startAngle) * ry,
+    };
+    const baseMiddle = midpoint(baseStart, baseEnd);
+    const distance = Math.max(1, Math.hypot(bubble.tailTipX - baseMiddle.x, bubble.tailTipY - baseMiddle.y));
+    const perpendicular = {
+      x: -(bubble.tailTipY - baseMiddle.y) / distance,
+      y: (bubble.tailTipX - baseMiddle.x) / distance,
+    };
+    const zigzag = Math.max(3, Math.min(bubble.tailWidth * 0.22, distance * 0.16));
+    const first = lerpPoint(baseMiddle, { x: bubble.tailTipX, y: bubble.tailTipY }, 0.32);
+    const second = lerpPoint(baseMiddle, { x: bubble.tailTipX, y: bubble.tailTipY }, 0.55);
+    const third = lerpPoint(baseMiddle, { x: bubble.tailTipX, y: bubble.tailTipY }, 0.76);
+    ctx.lineTo(first.x + perpendicular.x * zigzag, first.y + perpendicular.y * zigzag);
+    ctx.lineTo(second.x - perpendicular.x * zigzag, second.y - perpendicular.y * zigzag);
+    ctx.lineTo(third.x + perpendicular.x * zigzag * 0.7, third.y + perpendicular.y * zigzag * 0.7);
+  }
+  ctx.lineTo(bubble.tailTipX, bubble.tailTipY);
+  ctx.closePath();
 }
 
 // ═══════════════ 2. thought (타원 + 원 3개 꼬리, 바운딩 박스 바깥) ═══════════════
@@ -729,13 +1100,11 @@ function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   const rx = b.width / 2;
   const ry = b.height / 2;
 
-  // 본체: 타원
-  ctx.beginPath();
-  ctx.ellipse(b.x, b.y, rx, ry, 0, 0, Math.PI * 2);
+  // 구름 본체와 생각 방울은 의도적으로 분리된 만화 문법이다.
+  traceCloudMasterOutline(ctx, b, false);
   doFill(ctx, b);
   doStroke(ctx, b);
 
-  // 꼬리: 작은 원 3개 (바운딩 박스 바깥에서 시작)
   if (b.tailEnabled) {
     const dx = b.tailTipX - b.x;
     const dy = b.tailTipY - b.y;
@@ -744,25 +1113,15 @@ function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
       const nx = dx / dist;
       const ny = dy / dist;
 
-      // 바운딩 박스 경계에서 시작 (타원이 아닌 사각형 경계)
-      const halfW = b.width / 2;
-      const halfH = b.height / 2;
-      // 방향 벡터가 사각형 경계와 만나는 점 계산
-      const tx = nx !== 0 ? Math.abs(halfW / nx) : Infinity;
-      const ty = ny !== 0 ? Math.abs(halfH / ny) : Infinity;
-      const tEdge = Math.min(tx, ty);
-      const gap = Math.max(12, Math.min(rx, ry) * 0.15); // 크기 비례 간격
-      const startDist = tEdge + gap; // 바운딩 박스 바깥 + 간격
-
       const baseSize = Math.min(rx, ry);
-      // 원 크기: 메인 타원의 10% / 7% / 5% (최소 6/4/3px)
       const sizes = [
-        Math.max(6, baseSize * 0.10),
-        Math.max(4, baseSize * 0.07),
-        Math.max(3, baseSize * 0.05),
+        Math.max(6, baseSize * 0.13),
+        Math.max(4.5, baseSize * 0.09),
+        Math.max(3.5, baseSize * 0.065),
       ];
 
-      let currentDist = startDist;
+      const boundaryDistance = 1 / Math.sqrt((nx * nx) / (rx * rx) + (ny * ny) / (ry * ry));
+      let currentDist = boundaryDistance + sizes[0] * 1.45;
       for (let i = 0; i < 3; i++) {
         const cx = b.x + nx * currentDist;
         const cy = b.y + ny * currentDist;
@@ -770,7 +1129,8 @@ function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
         ctx.arc(cx, cy, sizes[i], 0, Math.PI * 2);
         doFill(ctx, b);
         doStroke(ctx, b);
-        currentDist += sizes[i] * 2 + Math.max(3, sizes[i]);
+        const nextSize = sizes[i + 1] ?? 0;
+        currentDist += sizes[i] + nextSize + Math.max(4, baseSize * 0.055);
       }
     }
   }
@@ -779,24 +1139,7 @@ function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
 // ═══════════════ 3. spiky (비대칭 뾰족 외침) ═══════════════
 
 function drawSpiky(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
-  const spikes = 14;
-  const rx = b.width / 2;
-  const ry = b.height / 2;
-
-  ctx.beginPath();
-  for (let i = 0; i < spikes * 2; i++) {
-    const angle = (i / (spikes * 2)) * Math.PI * 2 - Math.PI / 2;
-    const isOuter = i % 2 === 0;
-    const seed = Math.sin(i * 73.1 + 17.3) * 0.5 + 0.5;
-    const outerR = 0.95 + seed * 0.15;
-    const innerR = 0.55 + seed * 0.15;
-    const ratio = isOuter ? outerR : innerR;
-    const px = b.x + Math.cos(angle) * rx * ratio;
-    const py = b.y + Math.sin(angle) * ry * ratio;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
+  traceAngularRadialOutline(ctx, b, SHOUT_RADII);
   doFill(ctx, b);
   doStroke(ctx, b);
 }
@@ -804,50 +1147,7 @@ function drawSpiky(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
 // ═══════════════ 4. angry (화남 — 모든 선이 안쪽 오목 곡선, 꼭지점 뾰족) ═══════════════
 
 function drawAngry(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
-  const spikes = 12;
-  const rx = b.width / 2;
-  const ry = b.height / 2;
-
-  // 뾰족 점과 골짜기 점을 교대로 배치
-  const points: { x: number; y: number; isTip: boolean }[] = [];
-  for (let i = 0; i < spikes; i++) {
-    const seed = Math.sin(i * 91.7 + 43.1) * 0.5 + 0.5;
-    // 뾰족 끝 (바깥)
-    const tipAngle = ((i + 0.5) / spikes) * Math.PI * 2 - Math.PI / 2;
-    const tipR = 1.0 + seed * 0.15;
-    points.push({
-      x: b.x + Math.cos(tipAngle) * rx * tipR,
-      y: b.y + Math.sin(tipAngle) * ry * tipR,
-      isTip: true,
-    });
-    // 골짜기 (안쪽)
-    const valleyAngle = ((i + 1) / spikes) * Math.PI * 2 - Math.PI / 2;
-    const valleyR = 0.65 + seed * 0.1;
-    points.push({
-      x: b.x + Math.cos(valleyAngle) * rx * valleyR,
-      y: b.y + Math.sin(valleyAngle) * ry * valleyR,
-      isTip: false,
-    });
-  }
-
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
-
-  for (let i = 0; i < points.length; i++) {
-    const curr = points[i];
-    const next = points[(i + 1) % points.length];
-
-    // control point: 중심 쪽으로 당김 → 안쪽 오목 곡선
-    const midX = (curr.x + next.x) / 2;
-    const midY = (curr.y + next.y) / 2;
-    const pullStrength = 0.35;
-    const cpX = midX + (b.x - midX) * pullStrength;
-    const cpY = midY + (b.y - midY) * pullStrength;
-
-    ctx.quadraticCurveTo(cpX, cpY, next.x, next.y);
-  }
-
-  ctx.closePath();
+  traceAngularRadialOutline(ctx, b, SCREAM_RADII);
   doFill(ctx, b);
   doStroke(ctx, b);
 }

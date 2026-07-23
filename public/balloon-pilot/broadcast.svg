@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 250" role="img" aria-labelledby="title desc">
+  <title id="title">방송음 말풍선</title>
+  <desc id="desc">매끈한 몸체와 번개 형태의 꼬리로 전화와 방송 음성을 나타내는 말풍선</desc>
+  <path d="M180 20
+    C265 20 327 50 332 99
+    C337 143 298 179 233 190
+    C190 197 148 191 130 183
+    L110 206 L99 195 L70 238 L82 195 L66 202 L106 165
+    C57 160 27 134 28 99
+    C31 50 94 20 180 20Z"
+    fill="#fff" stroke="#171717" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+</svg>

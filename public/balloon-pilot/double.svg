@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 250" role="img" aria-labelledby="title desc">
+  <title id="title">메아리 말풍선</title>
+  <desc id="desc">일체형 외곽선 안쪽에 의도적인 두 번째 선을 둔 메아리와 텔레파시 말풍선</desc>
+  <g fill="#fff" stroke="#171717" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke">
+    <path d="M180 20
+      C264 18 324 49 332 97
+      C339 140 304 176 244 188
+      C202 197 157 193 124 180
+      C112 193 97 213 79 229
+      C75 233 71 229 73 221
+      C78 199 79 179 76 160
+      C43 146 25 123 28 96
+      C34 48 94 22 180 20Z" stroke-width="5.5" />
+    <path d="M180 39 C252 38 303 61 309 99 C314 132 279 158 229 166 C184 174 132 166 100 145 C75 129 66 108 73 88 C86 54 126 40 180 39Z" fill="none" stroke-width="3.2" opacity=".72" />
+  </g>
+</svg>

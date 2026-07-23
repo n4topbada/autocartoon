@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 250" role="img" aria-labelledby="title desc">
+  <title id="title">속삭임 말풍선</title>
+  <desc id="desc">유기적인 몸체와 꼬리를 가는 파선으로 표현한 속삭임 말풍선</desc>
+  <path d="M180 20
+    C264 18 324 49 332 97
+    C339 140 304 176 244 188
+    C202 197 157 193 124 180
+    C112 193 97 213 79 229
+    C75 233 71 229 73 221
+    C78 199 79 179 76 160
+    C43 146 25 123 28 96
+    C34 48 94 22 180 20Z"
+    fill="#fff" stroke="#171717" stroke-width="4" stroke-dasharray="12 10" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+</svg>

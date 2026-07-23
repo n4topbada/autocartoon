@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 250" role="img" aria-labelledby="title desc">
+  <title id="title">떨리는 말풍선</title>
+  <desc id="desc">힘없거나 불안한 목소리를 나타내는 불규칙한 파형과 일체형 꼬리</desc>
+  <path d="M180 25
+    C195 16 205 35 221 27
+    C239 18 246 39 263 35
+    C282 31 283 54 300 59
+    C319 65 306 84 321 96
+    C335 108 316 122 322 139
+    C328 157 305 160 300 175
+    C294 193 273 181 259 191
+    C244 202 228 184 211 191
+    C193 199 182 182 165 190
+    C148 198 136 179 121 184
+    C111 196 98 214 80 231
+    C76 235 72 231 75 223
+    C80 208 82 192 80 177
+    C61 179 59 157 43 151
+    C25 144 40 124 31 111
+    C20 96 43 86 43 71
+    C44 52 65 58 76 45
+    C88 31 105 45 120 35
+    C136 24 148 41 163 31
+    C169 27 174 26 180 25Z"
+    fill="#fff" stroke="#171717" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+</svg>

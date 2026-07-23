@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 270" role="img" aria-labelledby="title desc">
+  <title id="title">생각 말풍선</title>
+  <desc id="desc">비대칭 구름 본체와 점점 작아지는 생각방울 세 개로 구성된 말풍선</desc>
+  <g fill="#fff" stroke="#171717" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke">
+    <path
+      d="M177 36
+         C195 7 225 13 229 43
+         C252 21 282 36 265 63
+         C298 47 325 69 294 91
+         C332 101 331 130 292 132
+         C311 163 281 184 259 159
+         C255 193 220 201 210 169
+         C190 198 158 196 164 169
+         C136 189 105 177 112 150
+         C79 169 51 150 65 124
+         C28 122 24 91 57 82
+         C32 57 62 34 88 53
+         C88 22 121 15 139 43
+         C149 37 162 35 177 36Z"
+    />
+    <circle cx="112" cy="201" r="16" />
+    <circle cx="88" cy="232" r="11.5" />
+    <circle cx="68" cy="258" r="8.5" />
+  </g>
+</svg>

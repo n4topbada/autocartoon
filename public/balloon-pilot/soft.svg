@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 250" role="img" aria-labelledby="title desc">
+  <title id="title">부드러운 대사 말풍선</title>
+  <desc id="desc">큰 곡률의 몸체와 짧고 부드러운 꼬리가 하나의 외곽선으로 이어진 말풍선</desc>
+  <path d="M92 28
+    L270 28
+    C305 28 328 51 328 85
+    L328 137
+    C328 171 305 194 270 194
+    L132 194
+    C119 208 102 223 84 234
+    C79 237 76 233 79 225
+    C85 208 88 195 87 186
+    C54 181 34 161 34 130
+    L34 92
+    C34 53 57 28 92 28Z"
+    fill="#fff" stroke="#171717" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+</svg>

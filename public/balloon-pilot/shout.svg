@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 250" role="img" aria-labelledby="title desc">
+  <title id="title">외침 말풍선</title>
+  <desc id="desc">짧고 균형 잡힌 돌기로 큰 목소리를 나타내는 일체형 외침 말풍선</desc>
+  <path d="M180 17 L196 42 L226 21 L230 48 L270 29 L263 59 L310 52 L291 79
+    L337 91 L303 108 L337 128 L298 139 L323 171 L280 166 L287 203 L244 184
+    L230 220 L199 190 L175 222 L157 188 L118 180 L78 235 L96 170
+    L93 160 L49 161 L70 132 L26 121 L64 102 L28 80 L76 77 L61 43 L106 54
+    L108 22 L145 46Z"
+    fill="#fff" stroke="#171717" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+</svg>

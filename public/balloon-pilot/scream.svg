@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 250" role="img" aria-labelledby="title desc">
+  <title id="title">비명 말풍선</title>
+  <desc id="desc">길고 날카로운 돌기로 비명과 충격을 표현하는 일체형 말풍선</desc>
+  <path d="M180 8 L188 45 L215 14 L216 50 L252 20 L244 57 L291 31 L272 68
+    L326 57 L294 87 L348 91 L304 112 L345 133 L297 137 L331 177 L281 164
+    L294 213 L249 179 L239 231 L207 187 L180 239 L165 188 L125 228 L128 181
+    L77 237 L99 170 L48 191 L76 151 L20 148 L65 122 L14 96 L71 96
+    L34 56 L87 71 L76 24 L119 58 L126 12 L153 50Z"
+    fill="#fff" stroke="#171717" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+</svg>

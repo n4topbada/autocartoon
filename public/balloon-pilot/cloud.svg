@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 250" role="img" aria-labelledby="title desc">
+  <title id="title">구름 대화 말풍선</title>
+  <desc id="desc">크기와 간격이 다른 둥근 돌기와 부드러운 꼬리가 하나의 외곽선으로 이어진 말풍선</desc>
+  <path
+    d="M180 36
+       C192 8 224 12 232 42
+       C251 22 285 37 277 67
+       C313 56 334 89 302 105
+       C334 117 321 153 282 145
+       C292 183 253 198 238 168
+       C226 205 193 207 188 173
+       C169 205 139 194 139 167
+       C126 181 112 204 97 220
+       C93 225 89 221 91 213
+       C96 194 101 177 107 160
+       C96 165 87 157 80 144
+       C45 166 18 131 54 105
+       C24 93 42 51 75 67
+       C73 30 111 18 124 47
+       C137 15 170 12 180 36Z"
+    fill="#fff"
+    stroke="#171717"
+    stroke-width="5.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    vector-effect="non-scaling-stroke"
+  />
+</svg>

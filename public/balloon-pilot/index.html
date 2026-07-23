@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>말풍선 형태 시제품</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Pretendard, "Noto Sans KR", "Malgun Gothic", sans-serif;
+      color: #171717;
+      background: #eef1ed;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; }
+    header {
+      padding: 30px clamp(20px, 5vw, 72px) 22px;
+      border-bottom: 1px solid #cdd4cf;
+      background: #f7f8f5;
+    }
+    h1 { margin: 0; font-size: 24px; font-weight: 750; letter-spacing: 0; }
+    header p { margin: 8px 0 0; color: #59625d; font-size: 14px; }
+    main { padding: 0 clamp(20px, 5vw, 72px) 52px; }
+    section {
+      display: grid;
+      grid-template-columns: minmax(130px, 190px) minmax(0, 1fr);
+      gap: 28px;
+      align-items: center;
+      padding: 34px 0;
+      border-bottom: 1px solid #cdd4cf;
+    }
+    h2 { margin: 0; font-size: 17px; letter-spacing: 0; }
+    .label p { margin: 8px 0 0; color: #68716c; font-size: 13px; line-height: 1.55; }
+    .samples {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      min-width: 0;
+    }
+    .sample {
+      display: grid;
+      place-items: center;
+      min-height: 210px;
+      overflow: hidden;
+      border: 1px solid rgba(23, 23, 23, 0.14);
+      background: #fff;
+    }
+    .sample:nth-child(2) { background: #dce7ee; }
+    .sample:nth-child(3) {
+      background-color: #f3dfdf;
+      background-image:
+        linear-gradient(45deg, rgba(255,255,255,.42) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(255,255,255,.42) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, rgba(255,255,255,.42) 75%),
+        linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.42) 75%);
+      background-size: 26px 26px;
+      background-position: 0 0, 0 13px, 13px -13px, -13px 0;
+    }
+    .sample img { display: block; width: min(92%, 360px); height: auto; }
+    .sample.small img { width: min(62%, 220px); }
+    .sample.mirrored img { transform: scaleX(-1); }
+    footer { padding: 22px clamp(20px, 5vw, 72px); color: #68716c; font-size: 12px; }
+    @media (max-width: 820px) {
+      section { grid-template-columns: 1fr; gap: 18px; }
+      .samples { grid-template-columns: 1fr; }
+      .sample { min-height: 190px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>말풍선 형태 시제품</h1>
+    <p>실제 웹툰 대사 의미가 겹치지 않는 11종의 외곽선, 축소 가독성, 꼬리 방향 확인</p>
+  </header>
+  <main id="gallery"></main>
+  <footer>SVG 원본은 확대·축소 시에도 외곽선 굵기를 유지합니다.</footer>
+  <script>
+    const balloons = [
+      ["dialogue", "기본 대화", "유기적인 몸체와 본체에 완전히 합쳐진 기본 꼬리"],
+      ["soft", "부드러운 말", "큰 곡률과 짧은 꼬리로 친근하고 차분한 대사 표현"],
+      ["whisper", "속삭임", "가는 파선 외곽으로 작고 조용한 목소리 표현"],
+      ["wavy", "떨리는 말", "불규칙한 파형으로 불안하거나 힘없는 목소리 표현"],
+      ["thought", "생각", "구름 본체와 머리 방향으로 줄어드는 세 개의 생각방울"],
+      ["cloud", "구름 대사", "서로 다른 크기와 간격의 돌기, 본체에 합쳐진 꼬리"],
+      ["shout", "외침", "짧고 균형 잡힌 돌기로 큰 목소리 표현"],
+      ["scream", "비명", "길고 날카로운 돌기로 비명과 강한 충격 표현"],
+      ["electric", "전자음", "불규칙한 각진 외곽으로 로봇과 기계 음성 표현"],
+      ["broadcast", "방송음", "매끈한 본체와 번개 꼬리로 전화와 방송 음성 표현"],
+      ["double", "메아리", "의도적인 이중선으로 울림과 텔레파시 표현"],
+    ];
+
+    document.querySelector("#gallery").replaceChildren(...balloons.map(([file, label, description]) => {
+      const section = document.createElement("section");
+      section.innerHTML = `
+        <div class="label"><h2>${label}</h2><p>${description}</p></div>
+        <div class="samples">
+          <div class="sample"><img src="${file}.svg" alt="${label} 말풍선" /></div>
+          <div class="sample small"><img src="${file}.svg" alt="작은 ${label} 말풍선" /></div>
+          <div class="sample mirrored"><img src="${file}.svg" alt="반대 방향 ${label} 말풍선" /></div>
+        </div>`;
+      return section;
+    }));
+  </script>
+</body>
+</html>

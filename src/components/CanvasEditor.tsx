@@ -90,8 +90,10 @@ import {
   type BubbleType,
   type TextStyleRun,
   BUBBLE_FONT_FAMILIES,
+  SPEECH_BUBBLE_PRESETS,
   createBubble,
   drawBubble,
+  getSpeechBubblePresetPatch,
   drawBubbleSelection,
   hitTestBubble,
   bubblePointToCanvas,
@@ -4320,8 +4322,18 @@ export default function CanvasEditor({
                     <button className={styles.primaryOptionButton} onClick={() => { setSelectedBubbleId(null); activateTool("bubble"); }}><LuPlus /> 말풍선 추가 (드래그)</button>
                     <p className={styles.toolHint}>캔버스에서 원하는 크기로 드래그하세요.</p>
                     <button className={styles.secondaryOptionButton} onClick={addCustomBubble}><LuSlidersHorizontal /> 말풍선 생성기 열기 (모양 커스텀)</button>
-                    <div className={styles.bubblePresetRow}>
-                      {([['classic', '💬'], ['thought', '💭'], ['spiky', '💥']] as const).map(([type, label]) => <button key={type} className={bubbleType === type ? styles.optionActive : ""} onClick={() => { setBubbleType(type); setSelectedBubbleId(null); }}>{label}</button>)}
+                    <div className={styles.bubblePresetGrid}>
+                      {SPEECH_BUBBLE_PRESETS.map((preset) => (
+                        <button
+                          key={preset.type}
+                          className={bubbleType === preset.type ? styles.optionActive : ""}
+                          onClick={() => { setBubbleType(preset.type); setSelectedBubbleId(null); }}
+                          title={preset.description}
+                        >
+                          <span>{preset.label}</span>
+                          <small>{preset.description}</small>
+                        </button>
+                      ))}
                     </div>
                   </section>
                   {selectedSpeechBubble && (
@@ -4377,7 +4389,7 @@ export default function CanvasEditor({
                       </section>
                       <section className={styles.optionSection}>
                         <label className={styles.optionLabel}>모양</label>
-                        <div className={styles.choiceGrid}>{([['classic', '타원'], ['roundedRectangle', '둥근 사각'], ['spiky', '뾰족'], ['cloud', '구름']] as const).map(([type, label]) => <button key={type} className={selectedSpeechBubble.type === type ? styles.optionActive : ""} onClick={() => updateBubble(selectedSpeechBubble.id, { type })}>{label}</button>)}</div>
+                        <div className={styles.choiceGrid}>{SPEECH_BUBBLE_PRESETS.map((preset) => <button key={preset.type} className={selectedSpeechBubble.type === preset.type ? styles.optionActive : ""} title={preset.description} onClick={() => updateBubble(selectedSpeechBubble.id, getSpeechBubblePresetPatch(preset.type))}>{preset.label}</button>)}</div>
                         <div className={styles.twoColumnFields}><label>W<input type="number" min={40} value={Math.round(selectedSpeechBubble.width)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { width: Number(event.target.value) })} /></label><label>H<input type="number" min={30} value={Math.round(selectedSpeechBubble.height)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { height: Number(event.target.value) })} /></label></div>
                         <label className={styles.rangeLabel}><span>모불모불</span><b>{Math.round((selectedSpeechBubble.roughness || 0) * 100)}</b></label><input type="range" min={0} max={100} value={Math.round((selectedSpeechBubble.roughness || 0) * 100)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { roughness: Number(event.target.value) / 100 })} />
                         <label className={styles.rangeLabel}><span>구불구불</span><b>{Math.round((selectedSpeechBubble.wobble || 0) * 100)}</b></label><input type="range" min={0} max={100} value={Math.round((selectedSpeechBubble.wobble || 0) * 100)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { wobble: Number(event.target.value) / 100 })} />
@@ -5092,39 +5104,42 @@ export default function CanvasEditor({
               {tool === "bubble" && (
                 <div className={styles.bubblePopup}>
                   <div className={styles.bubblePopupGrid}>
-                    {(["classic", "thought", "spiky", "angry", "needle"] as const).map((bt) => (
+                    {SPEECH_BUBBLE_PRESETS.map((preset) => (
                       <button
-                        key={bt}
-                        className={`${styles.bubblePreviewBtn} ${bubbleType === bt ? styles.bubblePreviewBtnActive : ""}`}
-                        onClick={() => { setBubbleType(bt as BubbleType); setSelectedBubbleId(null); }}
-                        title={bt}
+                        key={preset.type}
+                        className={`${styles.bubblePreviewBtn} ${bubbleType === preset.type ? styles.bubblePreviewBtnActive : ""}`}
+                        onClick={() => { setBubbleType(preset.type); setSelectedBubbleId(null); }}
+                        title={`${preset.label}: ${preset.description}`}
                       >
                         <canvas
-                          width={48}
-                          height={36}
+                          width={70}
+                          height={52}
                           ref={(el) => {
                             if (!el) return;
                             const ctx = el.getContext("2d");
                             if (!ctx) return;
-                            ctx.clearRect(0, 0, 48, 36);
-                            const isThought = bt === "thought";
+                            ctx.clearRect(0, 0, 70, 52);
+                            const previewBase = createBubble(preset.type, 35, 18);
                             const preview: SpeechBubble = {
-                              id: "preview", type: bt,
-                              x: isThought ? 26 : 24,
-                              y: isThought ? 14 : 18,
-                              width: isThought ? 28 : 38,
-                              height: isThought ? 20 : 26,
+                              ...previewBase,
+                              id: "preview",
+                              x: 35,
+                              y: 18,
+                              width: 44,
+                              height: 27,
                               fillColor: "#ffffff", strokeColor: "#000000",
-                              strokeWidth: bt === "needle" ? 0.8 : 1.5,
+                              strokeWidth: Math.min(1.5, preset.strokeWidth),
                               opacity: 1,
-                              tailEnabled: bt === "classic" || bt === "thought",
-                              tailTipX: isThought ? 10 : 14,
-                              tailTipY: 34,
-                              tailWidth: 6,
+                              tailEnabled: preset.tailEnabled,
+                              tailTipX: 17,
+                              tailTipY: 48,
+                              tailWidth: 7,
+                              text: "",
                             };
                             drawBubble(ctx, preview);
                           }}
                         />
+                        <span>{preset.label}</span>
                       </button>
                     ))}
                   </div>
@@ -5138,11 +5153,9 @@ export default function CanvasEditor({
                       <div className={styles.bubblePopupProps}>
                         {customBubbleOpen && (
                           <div className={styles.customBubbleControls}>
-                            <div className={styles.segmentedControl}>
-                              {([[
-                                "classic", "타원"
-                              ], ["roundedRectangle", "둥근 사각"], ["spiky", "뾰족"], ["cloud", "구름"]] as const).map(([type, label]) => (
-                                <button key={type} className={selectedBubble.type === type ? styles.segmentActive : ""} onClick={() => updateBubble(selectedBubble.id, { type })}>{label}</button>
+                            <div className={styles.bubbleTypeChoiceGrid}>
+                              {SPEECH_BUBBLE_PRESETS.map((preset) => (
+                                <button key={preset.type} title={preset.description} className={selectedBubble.type === preset.type ? styles.segmentActive : ""} onClick={() => updateBubble(selectedBubble.id, getSpeechBubblePresetPatch(preset.type))}>{preset.label}</button>
                               ))}
                             </div>
                             <div className={styles.bubblePopupRow}>
