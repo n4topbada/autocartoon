@@ -220,7 +220,7 @@ npm run build
 
 PowerShell 명령에 쉼표가 든 `--update-env-vars` 값을 직접 인라인하지 않습니다. 위 스크립트가 URL을 먼저 검증하고 환경 변수 묶음을 단일 인자로 전달해 OAuth용 `APP_ORIGIN` 오염을 방지합니다.
 
-> **마이그레이션 기준선 주의:** 과거 마이그레이션 체인은 빈 DB에서 두 번째 단계부터 재생되지 않습니다. 개발 DB `autocartoon_dev`는 현재 Prisma 스키마를 `db push`한 뒤 22개 이력을 기준선 처리했으며 스키마 차이가 없음을 확인했습니다. 2026-07-23 확인 기준 운영 DB는 앞선 21개 이력이 적용되어 있고 `20260723230000_add_password_reset_tokens`만 배포 대기입니다. 이력이 복구되기 전에는 `prisma migrate dev`를 사용하지 않습니다.
+> **마이그레이션 기준선 주의:** 과거 마이그레이션 체인은 빈 DB에서 두 번째 단계부터 재생되지 않습니다. 개발 DB `autocartoon_dev`는 현재 Prisma 스키마를 `db push`한 뒤 22개 이력을 기준선 처리했으며 스키마 차이가 없음을 확인했습니다. 운영 DB `autocartoon`은 2026-07-24 Cloud Run Job `wony-prisma-migrate-gwgwh`에서 `20260723230000_add_password_reset_tokens`까지 총 22개 마이그레이션 적용을 완료했습니다. 이력이 복구되기 전에는 `prisma migrate dev`를 사용하지 않습니다.
 
 운영 리소스와 배포 후 점검은 [docs/project-handoff.md](./docs/project-handoff.md)를 따릅니다.
 

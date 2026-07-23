@@ -23,7 +23,7 @@ GitHub: `https://github.com/n4topbada/autocartoon`
 | 항목 | 현재 값 |
 | --- | --- |
 | GCP project | `wonybananabot` |
-| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-20 검증 리비전 `wonybananabot-00041-5w6` |
+| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-24 검증 리비전 `wonybananabot-00050-b6t`, 트래픽 100% |
 | Cloud SQL | `wony-postgres`, PostgreSQL 16; 운영 `autocartoon`, 개발 `autocartoon_dev` |
 | Cloud Tasks | `wony-jobs`, `asia-northeast3`; 동시 10, 초당 5, 최대 5회 재시도 |
 | GCS | `wonybananabot-media`, private. 브라우저 직접 업로드 CORS는 `scripts/gcs-cors.json` 기준 |
@@ -138,7 +138,7 @@ flowchart LR
 - 비활성 제스처·배경·보관함 패널의 조회·폴링을 중단해 숨은 네트워크 비용 제거
 - 전체 화면을 톤다운된 밝은 파스텔 팔레트와 현대적인 도구형 버튼으로 전환하고 390px에서 5개 메뉴를 모두 검증
 
-운영 반영 상태: 기존 마이그레이션 실행 `wony-prisma-migrate-99klj`는 성공 상태다. 모델 선택·공식 가격표·서버 차감을 포함한 리비전 `wonybananabot-00040-bcf`가 트래픽 100%를 받고 있으며 운영 로그인 화면은 200, 배포 직후 오류 로그는 0건이다. Cloud SQL 연결, 서비스 계정, 최대 4 인스턴스, 동시성 80, 600초 제한을 그대로 유지했다. 로컬 테스트 `93/93`, TypeScript, ESLint, 프로덕션 빌드를 통과했고 Nano Banana 2 Lite 1K(7크레딧)와 Pro 1K(26크레딧)를 실제 Vertex로 생성했다. Pro의 Flash 전용 thinking 옵션 호환 문제를 실호출에서 수정했으며 첫 실패분 26크레딧 자동 환불과 최종 순사용 33크레딧을 확인했다. 카카오페이 사이트 도메인만 외부 설정 대기 상태다. 모델별 원가와 검증 기록은 [ai-model-pricing.md](./ai-model-pricing.md), 기존 전체 운영 E2E는 [production-e2e-2026-07-18.md](./production-e2e-2026-07-18.md)에 있다. 이번 변경에는 DB 마이그레이션이 없다.
+운영 반영 상태: Cloud Run Job 실행 `wony-prisma-migrate-gwgwh`가 `20260723230000_add_password_reset_tokens`까지 총 22개 마이그레이션을 운영 DB `autocartoon`에 적용하고 exit 0으로 완료했다. 리비전 `wonybananabot-00050-b6t`가 트래픽 100%를 받고 있으며, 로그인·비밀번호 재설정·약관/개인정보/환불 페이지는 200, 비인증 API는 401, 운영 비활성 E2E 경로는 404를 반환했다. 카카오·Google·이메일 로그인과 해시 토큰 기반 비밀번호 재설정 폼을 브라우저에서 확인했고, 배포 직후 Cloud Run ERROR 로그와 브라우저 콘솔 오류는 0건이다. 로컬 자동 테스트 `125/125`, TypeScript, ESLint, Prisma 상태 검사와 76개 페이지 프로덕션 빌드를 통과했다. 배포 소스 커밋은 `d2cc114`다.
 
 ## 5. 레퍼런스 대비 기능상 남은 항목
 
