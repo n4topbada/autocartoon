@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   IMAGE_MODEL_IDS,
   IMAGE_MODEL_PRICING,
@@ -32,6 +33,21 @@ export default function ImageModelSelector({
   compact = false,
   className = "",
 }: ImageModelSelectorProps) {
+  const [configuredModels, setConfiguredModels] = useState<Partial<Record<ImageModelId, boolean>>>({});
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/ai/image-models", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = await response.json() as { models?: Array<{ id: ImageModelId; configured: boolean }> };
+        if (!active || !Array.isArray(data.models)) return;
+        setConfiguredModels(Object.fromEntries(data.models.map((model) => [model.id, model.configured])));
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+
   const changeModel = (nextModelId: ImageModelId) => {
     onModelChange(nextModelId);
     if (!isImageResolutionSupported(nextModelId, resolution)) {
@@ -51,9 +67,12 @@ export default function ImageModelSelector({
           {IMAGE_MODEL_IDS.map((id) => {
             const model = IMAGE_MODEL_PRICING[id];
             const minCredits = getImageGenerationCredits(id, model.supportedResolutions[0], count);
+            const configured = configuredModels[id];
+            const unavailable = model.availability !== "available" || configured === false;
             return (
-              <option key={id} value={id} disabled={model.availability !== "available"}>
-                {model.label} · {minCredits}C부터{model.availability === "planned" ? " · 연결 예정" : ""}
+              <option key={id} value={id} disabled={unavailable}>
+                {model.label} · {minCredits}C부터
+                {model.availability === "planned" ? " · 연결 예정" : configured === false ? " · API 설정 필요" : ""}
               </option>
             );
           })}

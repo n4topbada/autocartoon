@@ -1,22 +1,21 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { parseEnv } from "node:util";
+import {
+  assertWonyLocalEnvironment,
+  loadWonyProjectEnvironment,
+} from "./wony-environment.mjs";
 
 const projectRoot = process.cwd();
-const environment = { ...process.env };
-const environmentFiles = [
-  ".env",
-  ".env.development",
-  ".env.local",
-  ".env.development.local",
-];
-
-for (const file of environmentFiles) {
-  const filePath = path.join(projectRoot, file);
-  if (!existsSync(filePath)) continue;
-  Object.assign(environment, parseEnv(readFileSync(filePath, "utf8")));
-}
+const nextEnvironmentTypesPath = path.join(projectRoot, "next-env.d.ts");
+const nextEnvironmentTypes = existsSync(nextEnvironmentTypesPath)
+  ? readFileSync(nextEnvironmentTypesPath, "utf8")
+  : null;
+const environment = loadWonyProjectEnvironment({
+  root: projectRoot,
+  nodeEnv: "development",
+});
+assertWonyLocalEnvironment(environment);
 
 // Keep development output separate so a browser session cannot corrupt a
 // concurrent production build's .next directory.
@@ -36,6 +35,26 @@ const child = spawn(process.execPath, [nextCli, "dev", ...process.argv.slice(2)]
   stdio: "inherit",
 });
 
+function restoreNextEnvironmentTypes() {
+  if (nextEnvironmentTypes === null) return;
+  try {
+    const current = readFileSync(nextEnvironmentTypesPath, "utf8");
+    if (current !== nextEnvironmentTypes) {
+      writeFileSync(nextEnvironmentTypesPath, nextEnvironmentTypes, "utf8");
+    }
+  } catch {
+    // Next.js can briefly replace this generated file during startup.
+  }
+}
+
+let restoreAttempts = 0;
+const restoreTimer = setInterval(() => {
+  restoreNextEnvironmentTypes();
+  restoreAttempts += 1;
+  if (restoreAttempts >= 20) clearInterval(restoreTimer);
+}, 500);
+restoreTimer.unref();
+
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => child.kill(signal));
 }
@@ -46,5 +65,7 @@ child.on("error", (error) => {
 });
 
 child.on("exit", (code) => {
+  clearInterval(restoreTimer);
+  restoreNextEnvironmentTypes();
   process.exitCode = code ?? 1;
 });

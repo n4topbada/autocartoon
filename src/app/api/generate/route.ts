@@ -9,7 +9,10 @@ import {
   jobToResponse,
   type StoredImageJobInput,
 } from "@/lib/generation-jobs";
-import { getPlatformAIProvider } from "@/lib/platform-ai";
+import {
+  getImageGenerationProvider,
+  isImageModelConfigured,
+} from "@/lib/image-generation";
 import {
   DEFAULT_IMAGE_MODEL_ID,
   DEFAULT_IMAGE_RESOLUTION,
@@ -43,7 +46,7 @@ const MAX_PROMPT_LENGTH = 10_000;
 const MAX_BACKGROUND_LENGTH = 2_000;
 const MAX_INPUT_IMAGES = 4;
 const MAX_REFERENCE_ASSETS = 3;
-const MAX_INPUT_IMAGE_BYTES = 4 * 1024 * 1024;
+const MAX_INPUT_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_BASE64_LENGTH = Math.ceil(MAX_INPUT_IMAGE_BYTES / 3) * 4;
 const ALLOWED_ASPECT_RATIOS = new Set(["1:1", "4:5", "9:16", "16:9"]);
 const JOB_KINDS = new Set(["image", "gesture", "character", "background"] as const);
@@ -68,6 +71,7 @@ interface ValidatedGenerationRequest {
   jobKind: ImageJobKind;
   inputImage?: InputImage;
   inputImages?: InputImage[];
+  styleReferenceFirst?: boolean;
   sourceArtifactId?: string;
   referenceAssetIds?: string[];
   editRegionMode?: "all" | "auto" | "manual";
@@ -130,7 +134,7 @@ function parseInputImage(value: unknown, field: string): InputImage {
     Buffer.byteLength(base64, "base64") > MAX_INPUT_IMAGE_BYTES
   ) {
     throw new RequestValidationError(
-      `${field} 이미지는 4MB 이하의 올바른 base64 데이터여야 합니다.`
+      `${field} 이미지는 5MB 이하의 올바른 base64 데이터여야 합니다.`
     );
   }
 
@@ -284,6 +288,13 @@ function parseGenerationRequest(value: unknown): ValidatedGenerationRequest {
       parseInputImage(image, `inputImages[${index}]`)
     );
   }
+  if (value.styleReferenceFirst !== undefined && typeof value.styleReferenceFirst !== "boolean") {
+    throw new RequestValidationError("styleReferenceFirst 값이 올바르지 않습니다.");
+  }
+  const styleReferenceFirst = value.styleReferenceFirst === true;
+  if (styleReferenceFirst && !inputImages?.length) {
+    throw new RequestValidationError("그림체 참고 이미지가 필요합니다.");
+  }
 
   if (
     jobKind === "gesture" &&
@@ -338,6 +349,7 @@ function parseGenerationRequest(value: unknown): ValidatedGenerationRequest {
     jobKind,
     inputImage,
     inputImages,
+    ...(styleReferenceFirst ? { styleReferenceFirst: true } : {}),
     sourceArtifactId,
     referenceAssetIds,
     ...(editRegionMode !== "all" ? { editRegionMode } : {}),
@@ -465,6 +477,17 @@ export async function POST(req: NextRequest) {
         { status: 503 }
       );
     }
+    if (!isImageModelConfigured(input.imageModel)) {
+      return NextResponse.json(
+        {
+          error: input.imageModel === "gpt-image-2"
+            ? "GPT Image API가 아직 설정되지 않았습니다."
+            : "이미지 AI 연결 설정을 확인해주세요.",
+          code: "provider_not_configured",
+        },
+        { status: 503 }
+      );
+    }
 
     const accessError = await validateResourceAccess(
       session.userId,
@@ -541,6 +564,7 @@ export async function POST(req: NextRequest) {
       ...(input.backgroundImageId ? { backgroundImageId: input.backgroundImageId } : {}),
       ...(storedInputImage ? { inputImage: storedInputImage } : {}),
       ...(storedInputImages ? { inputImages: storedInputImages } : {}),
+      ...(input.styleReferenceFirst ? { styleReferenceFirst: true } : {}),
       ...(input.editRegionMode && input.editRegionMode !== "all" ? { editRegionMode: input.editRegionMode } : {}),
       ...(storedEditMask ? { editMask: storedEditMask } : {}),
       ...(input.preserveOutsideMask ? { preserveOutsideMask: true } : {}),
@@ -566,7 +590,7 @@ export async function POST(req: NextRequest) {
           projectId: input.projectId,
           cutId: input.cutId,
           kind: input.jobKind || "image",
-          provider: getPlatformAIProvider(),
+          provider: getImageGenerationProvider(input.imageModel),
           model: selectedModel.apiModel,
           estimatedCostUsdMicros: Math.round(
             getImageApiCostUsd(input.imageModel, input.imageSize, input.count) * 1_000_000

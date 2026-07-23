@@ -42,7 +42,7 @@ test("보호 화면의 내부 API 세션 만료만 로그인 전환 대상으로
     true,
   );
   assert.equal(
-    shouldRedirectForUnauthorizedApi(401, "/api/auth/change-password", page),
+    shouldRedirectForUnauthorizedApi(401, "/api/auth/sessions", page),
     true,
   );
   assert.equal(

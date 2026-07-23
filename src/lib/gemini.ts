@@ -10,6 +10,8 @@ export interface GeminiRequest {
   model?: string;
   aspectRatio?: "1:1" | "4:5" | "9:16" | "16:9";
   imageSize?: "1K" | "2K";
+  /** 반드시 전체 입력보다 먼저 전달할 이미지 (예: 그림체 1번 참조) */
+  priorityImages?: { label: string; base64: string; mimeType: string }[];
   referenceImages?: { base64: string; mimeType: string }[];
   /** 번호 라벨이 붙은 이미지 (transform 모드용) */
   labeledImages?: { label: string; base64: string; mimeType: string }[];
@@ -59,6 +61,18 @@ export async function generateContent(
   req: GeminiRequest
 ): Promise<GeminiResult> {
   const parts: Part[] = [];
+
+  if (req.priorityImages) {
+    for (const img of req.priorityImages) {
+      parts.push({ text: img.label });
+      parts.push({
+        inlineData: {
+          data: img.base64,
+          mimeType: img.mimeType,
+        },
+      });
+    }
+  }
 
   if (req.referenceImages) {
     for (const img of req.referenceImages) {

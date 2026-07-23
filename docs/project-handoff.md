@@ -1,6 +1,6 @@
 # WONY AutoCartoon 프로젝트 인수인계
 
-작성 기준: 2026-07-18 KST
+작성 기준: 2026-07-24 KST
 
 브랜치: `main`
 
@@ -24,14 +24,18 @@ GitHub: `https://github.com/n4topbada/autocartoon`
 | --- | --- |
 | GCP project | `wonybananabot` |
 | Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-20 검증 리비전 `wonybananabot-00041-5w6` |
-| Cloud SQL | `wony-postgres`, PostgreSQL 16 |
+| Cloud SQL | `wony-postgres`, PostgreSQL 16; 운영 `autocartoon`, 개발 `autocartoon_dev` |
 | Cloud Tasks | `wony-jobs`, `asia-northeast3`; 동시 10, 초당 5, 최대 5회 재시도 |
 | GCS | `wonybananabot-media`, private. 브라우저 직접 업로드 CORS는 `scripts/gcs-cors.json` 기준 |
 | Runtime service account | `wony-run@wonybananabot.iam.gserviceaccount.com` |
-| DB secret | Secret Manager `database-url` 참조 |
+| DB secrets | 운영 `database-url`, 개발 `database-url-dev` |
 | AI | Vertex Gemini, Veo, Google Cloud TTS |
 
 Cloud Run 배포에는 항상 `--project=wonybananabot --region=asia-northeast3`를 명시한다. `APP_ORIGIN`과 카카오 Redirect URI는 현재 Cloud Run URL을 사용하고, 자체 도메인 연결 시 새 도메인을 추가한 뒤 기존 URI를 안정화 기간 동안 함께 유지한다.
+
+Cynder는 별도 GCP 프로젝트이자 별도 저장소다. 워니 로컬 앱과 Prisma는 `wony_dev@127.0.0.1:5433/autocartoon_dev`만 허용하고, Cloud Run은 `wony` 사용자의 `autocartoon` 소켓 URL만 허용한다. 환경 파일 로더와 런타임/Prisma 대상 검사가 상위 프로세스의 Cynder URL, Neon, 타 프로젝트, 로컬의 운영 DB 직접 접속을 차단한다. 로컬 프록시는 `npm run db:proxy`, 상태 확인은 `npm run db:status`를 사용한다.
+
+개발 DB는 현재 스키마를 적용하고 22개 마이그레이션을 기준선 처리해 drift가 없음을 확인했다. 과거 체인은 빈 DB에서 순서대로 재생되지 않으므로 이력 복구 전에는 `prisma migrate dev`를 사용하지 않는다. 운영 마이그레이션은 `scripts/run-cloud-sql-migrations.ps1`의 Cloud Run Job 경로만 사용한다.
 
 ## 3. 현재 제품 기능
 

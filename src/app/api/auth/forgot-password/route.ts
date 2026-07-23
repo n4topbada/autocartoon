@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { issueTemporaryPassword } from "@/lib/password-reset";
+import { issuePasswordResetLink } from "@/lib/password-reset";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GENERIC_MESSAGE =
-  "복구 대상인 기존 이메일 계정이면 새 임시 비밀번호를 보냈습니다. 가장 최근 메일을 확인해주세요.";
+  "등록된 이메일 계정이면 비밀번호 재설정 링크를 보냈습니다. 메일함을 확인해주세요.";
 
-function developmentError(status: Awaited<ReturnType<typeof issueTemporaryPassword>>) {
+function developmentError(status: Awaited<ReturnType<typeof issuePasswordResetLink>>) {
   if (process.env.NODE_ENV === "production") return null;
 
   if (status === "email_unavailable") {
@@ -22,7 +22,7 @@ function developmentError(status: Awaited<ReturnType<typeof issueTemporaryPasswo
   }
   if (status === "rate_limited") {
     return NextResponse.json(
-      { error: "임시 비밀번호는 1분에 한 번 발급할 수 있습니다. 잠시 후 다시 시도해주세요." },
+      { error: "재설정 메일은 1분에 한 번 보낼 수 있습니다. 잠시 후 다시 시도해주세요." },
       {
         status: 429,
         headers: { "Cache-Control": "no-store", "Retry-After": "60" },
@@ -45,8 +45,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const status = await issueTemporaryPassword(email);
-    console.info("Temporary password request completed", { status });
+    const status = await issuePasswordResetLink(email);
+    console.info("Password reset request completed", { status });
 
     const localError = developmentError(status);
     if (localError) return localError;
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     console.error("Forgot password error:", error);
     if (process.env.NODE_ENV !== "production") {
       return NextResponse.json(
-        { error: "임시 비밀번호 처리 중 서버 오류가 발생했습니다. 서버 로그를 확인해주세요." },
+        { error: "비밀번호 재설정 처리 중 서버 오류가 발생했습니다. 서버 로그를 확인해주세요." },
         { status: 500, headers: { "Cache-Control": "no-store" } }
       );
     }

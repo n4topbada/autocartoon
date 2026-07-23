@@ -16,6 +16,7 @@ interface ImageDropZoneProps {
   label?: string;
   disabled?: boolean;
   placeholderText?: string;
+  maxBytes?: number;
 }
 
 export default function ImageDropZone({
@@ -24,6 +25,7 @@ export default function ImageDropZone({
   label,
   disabled,
   placeholderText = "이미지 업로드\n(클릭, 드래그, 붙여넣기)",
+  maxBytes = 5 * 1024 * 1024,
 }: ImageDropZoneProps) {
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,8 +37,9 @@ export default function ImageDropZone({
         setError("PNG, JPG, WebP 이미지만 사용할 수 있습니다.");
         return;
       }
-      if (file.size > 4 * 1024 * 1024) {
-        setError("이미지 크기는 4MB 이하여야 합니다.");
+      if (file.size > maxBytes) {
+        const maxMegabytes = Math.floor(maxBytes / (1024 * 1024));
+        setError(`이미지 크기는 ${maxMegabytes}MB 이하여야 합니다.`);
         return;
       }
       setError(null);
@@ -49,7 +52,7 @@ export default function ImageDropZone({
       };
       reader.readAsDataURL(file);
     },
-    [onImageSelect]
+    [maxBytes, onImageSelect]
   );
 
   const handleClick = () => {
@@ -116,6 +119,14 @@ export default function ImageDropZone({
       onDrop={handleDrop}
       onPaste={handlePaste}
       tabIndex={0}
+      role="button"
+      aria-disabled={disabled || undefined}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          handleClick();
+        }
+      }}
     >
       {currentImage ? (
         <>

@@ -1,134 +1,150 @@
 import "server-only";
 
-import { randomInt } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { Resend } from "resend";
-import { getAppOrigin } from "./app-url";
+import { sendPasswordResetEmail, isAuthEmailConfigured } from "./auth-email";
+import { createAuthToken, hashAuthToken, isAuthTokenShape } from "./auth-tokens";
 import { prisma } from "./prisma";
 
-const TEMPORARY_PASSWORD_TTL_MS = 30 * 60 * 1000;
+const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
 const ISSUE_COOLDOWN_MS = 60 * 1000;
-const DEFAULT_FROM = "워니바나나봇 <onboarding@resend.dev>";
-const TEMPORARY_PASSWORD_LENGTH = 12;
-const TEMPORARY_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-export type TemporaryPasswordIssueStatus =
+export type PasswordResetIssueStatus =
   | "sent"
   | "not_found"
   | "rate_limited"
   | "email_unavailable"
   | "email_failed";
 
-function createTemporaryPassword(): string {
-  let password = "";
+export type PasswordResetStatus = "reset" | "invalid" | "expired";
 
-  do {
-    password = Array.from(
-      { length: TEMPORARY_PASSWORD_LENGTH },
-      () => TEMPORARY_PASSWORD_ALPHABET[randomInt(TEMPORARY_PASSWORD_ALPHABET.length)]
-    ).join("");
-  } while (!/[A-Z]/.test(password) || !/[0-9]/.test(password));
-
-  return password;
-}
-
-export async function issueTemporaryPassword(
+export async function issuePasswordResetLink(
   email: string
-): Promise<TemporaryPasswordIssueStatus> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return "email_unavailable";
+): Promise<PasswordResetIssueStatus> {
+  if (!isAuthEmailConfigured()) return "email_unavailable";
 
   const user = await prisma.user.findFirst({
     where: {
       email: { equals: email, mode: "insensitive" },
+      emailVerified: true,
       kakaoId: null,
       googleId: null,
     },
     select: {
       id: true,
       email: true,
-      name: true,
-      temporaryPasswordHash: true,
-      temporaryPasswordExpiresAt: true,
-      temporaryPasswordIssuedAt: true,
+      passwordResetTokenHash: true,
+      passwordResetTokenExpiresAt: true,
+      passwordResetRequestedAt: true,
     },
   });
   if (!user) return "not_found";
 
-  const issuedAt = new Date();
-  const cooldownCutoff = new Date(issuedAt.getTime() - ISSUE_COOLDOWN_MS);
+  const requestedAt = new Date();
+  const cooldownCutoff = new Date(requestedAt.getTime() - ISSUE_COOLDOWN_MS);
   const claimed = await prisma.user.updateMany({
     where: {
       id: user.id,
-      kakaoId: null,
-      googleId: null,
       OR: [
-        { temporaryPasswordIssuedAt: null },
-        { temporaryPasswordIssuedAt: { lt: cooldownCutoff } },
+        { passwordResetRequestedAt: null },
+        { passwordResetRequestedAt: { lt: cooldownCutoff } },
       ],
     },
-    data: { temporaryPasswordIssuedAt: issuedAt },
+    data: { passwordResetRequestedAt: requestedAt },
   });
   if (claimed.count === 0) return "rate_limited";
 
-  const temporaryPassword = createTemporaryPassword();
-  const temporaryPasswordHash = await bcrypt.hash(temporaryPassword, 12);
-  const temporaryPasswordExpiresAt = new Date(
-    issuedAt.getTime() + TEMPORARY_PASSWORD_TTL_MS
-  );
-
+  const token = createAuthToken();
+  const tokenHash = hashAuthToken(token);
+  const expiresAt = new Date(requestedAt.getTime() + RESET_TOKEN_TTL_MS);
   const stored = await prisma.user.updateMany({
     where: {
       id: user.id,
       kakaoId: null,
       googleId: null,
-      temporaryPasswordIssuedAt: issuedAt,
+      passwordResetRequestedAt: requestedAt,
     },
-    data: { temporaryPasswordHash, temporaryPasswordExpiresAt },
+    data: {
+      passwordResetTokenHash: tokenHash,
+      passwordResetTokenExpiresAt: expiresAt,
+    },
   });
   if (stored.count === 0) return "not_found";
 
   try {
-    const resend = new Resend(apiKey);
-    const appUrl = getAppOrigin();
-    const issueReference = issuedAt.getTime().toString(36).toUpperCase();
-    const result = await resend.emails.send({
-      from: process.env.PASSWORD_EMAIL_FROM || DEFAULT_FROM,
-      to: user.email,
-      subject: `[워니바나나봇] 임시 비밀번호 발급 [${issueReference}]`,
-      text: `${user.name || user.email}님,
-
-아래 한 줄만 선택해 복사하세요.
-
-${temporaryPassword}
-
-요청 번호: ${issueReference}
-이 비밀번호는 30분 동안 사용할 수 있습니다.
-여러 번 요청했다면 가장 최근에 받은 비밀번호만 유효합니다.
-로그인 후 계정 설정에서 새 비밀번호로 변경하거나 카카오·Google 계정을 연결해주세요.
-
-로그인: ${appUrl}/login
-
-본인이 요청하지 않았다면 기존 비밀번호는 그대로 유지되므로 이 메일을 무시하세요.`,
-    });
-
-    if (result.error) {
-      throw new Error(result.error.message);
-    }
-    console.info("Temporary password email accepted by Resend", {
-      emailId: result.data?.id ?? null,
-    });
+    const emailId = await sendPasswordResetEmail({ email: user.email, token });
+    console.info("Password reset email accepted", { emailId });
     return "sent";
   } catch (error) {
     await prisma.user.updateMany({
-      where: { id: user.id, temporaryPasswordIssuedAt: issuedAt },
+      where: { id: user.id, passwordResetRequestedAt: requestedAt },
       data: {
-        temporaryPasswordHash: user.temporaryPasswordHash,
-        temporaryPasswordExpiresAt: user.temporaryPasswordExpiresAt,
-        temporaryPasswordIssuedAt: user.temporaryPasswordIssuedAt,
+        passwordResetTokenHash: user.passwordResetTokenHash,
+        passwordResetTokenExpiresAt: user.passwordResetTokenExpiresAt,
+        passwordResetRequestedAt: user.passwordResetRequestedAt,
       },
     });
-    console.error("Temporary password email failed:", error);
+    console.error("Password reset email failed:", error);
     return "email_failed";
   }
+}
+
+export async function resetPasswordWithToken(
+  token: unknown,
+  newPassword: string
+): Promise<PasswordResetStatus> {
+  if (!isAuthTokenShape(token)) return "invalid";
+
+  const tokenHash = hashAuthToken(token);
+  const user = await prisma.user.findUnique({
+    where: { passwordResetTokenHash: tokenHash },
+    select: {
+      id: true,
+      passwordResetTokenExpiresAt: true,
+      kakaoId: true,
+      googleId: true,
+    },
+  });
+  if (!user || user.kakaoId || user.googleId) return "invalid";
+
+  const now = new Date();
+  if (!user.passwordResetTokenExpiresAt || user.passwordResetTokenExpiresAt <= now) {
+    await prisma.user.updateMany({
+      where: { id: user.id, passwordResetTokenHash: tokenHash },
+      data: {
+        passwordResetTokenHash: null,
+        passwordResetTokenExpiresAt: null,
+        passwordResetRequestedAt: null,
+      },
+    });
+    return "expired";
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  const reset = await prisma.$transaction(async (tx) => {
+    const changed = await tx.user.updateMany({
+      where: {
+        id: user.id,
+        kakaoId: null,
+        googleId: null,
+        passwordResetTokenHash: tokenHash,
+        passwordResetTokenExpiresAt: { gt: now },
+      },
+      data: {
+        passwordHash,
+        passwordChangedAt: now,
+        emailVerified: true,
+        passwordResetTokenHash: null,
+        passwordResetTokenExpiresAt: null,
+        passwordResetRequestedAt: null,
+        temporaryPasswordHash: null,
+        temporaryPasswordExpiresAt: null,
+        temporaryPasswordIssuedAt: null,
+      },
+    });
+    if (changed.count !== 1) return false;
+    await tx.userSession.deleteMany({ where: { userId: user.id } });
+    return true;
+  });
+
+  return reset ? "reset" : "invalid";
 }

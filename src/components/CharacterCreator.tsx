@@ -17,6 +17,7 @@ import {
 import { getGenerationCreditCost } from "@/lib/credit-products";
 import { DEFAULT_IMAGE_MODEL_ID, type ImageModelId } from "@/lib/ai-pricing";
 import CreditCostBadge from "@/components/CreditCostBadge";
+import ImageDropZone, { type ImageData } from "@/components/ImageDropZone";
 import ImageModelSelector from "@/components/ImageModelSelector";
 import styles from "./CharacterCreator.module.css";
 
@@ -102,6 +103,7 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
   const [saving, setSaving] = useState(false);
   const [imageModel, setImageModel] = useState<ImageModelId>(DEFAULT_IMAGE_MODEL_ID);
   const [imageSize, setImageSize] = useState<"1K" | "2K">("1K");
+  const [styleReference, setStyleReference] = useState<ImageData | null>(null);
   const completedRef = useRef<Set<string>>(new Set());
 
   const loadJobs = useCallback(async () => {
@@ -166,7 +168,17 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
     setError(null);
     setMessage(null);
     try {
-      const prompt = promptOverride || buildOriginalCharacterPrompt(settings);
+      const basePrompt = promptOverride || buildOriginalCharacterPrompt(settings);
+      const styleGuide = [
+        "[그림체 참조 이미지 1번]",
+        "첨부한 첫 번째 이미지는 그림체 전용 참조다.",
+        "이 이미지의 선화, 채색법, 색감, 명암, 질감, 렌더링 밀도를 따라 새 캐릭터를 만든다.",
+        "참조 이미지의 인물 외형, 포즈, 의상, 소품, 배경, 구도는 복제하지 않고 아래 캐릭터 설정을 따른다.",
+        "이미지로 지정한 그림체가 텍스트 스타일 설명보다 우선한다.",
+      ].join("\n");
+      const prompt = styleReference && !basePrompt.includes("[그림체 참조 이미지 1번]")
+        ? `${styleGuide}\n\n${basePrompt}`
+        : basePrompt;
       const data = await readJson<{ job: CharacterJob }>(
         await fetch("/api/generate", {
           method: "POST",
@@ -177,11 +189,17 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
           body: JSON.stringify({
             presetIds: [],
             jobKind: "character",
-            mode: "text",
+            mode: styleReference ? "transform" : "text",
             aspectRatio: "1:1",
             imageModel,
             imageSize,
             prompt,
+            ...(styleReference?.base64
+              ? {
+                  inputImages: [{ base64: styleReference.base64, mimeType: styleReference.mimeType }],
+                  styleReferenceFirst: true,
+                }
+              : {}),
           }),
         })
       );
@@ -270,6 +288,7 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
   const resetSettings = () => {
     setSettings(DEFAULT_SETTINGS);
     setImageSize("1K");
+    setStyleReference(null);
     setError(null);
     setMessage(null);
   };
@@ -280,7 +299,7 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
         <div className={styles.headingRow}>
           <div>
             <h2>캐릭터 만들기</h2>
-            <span>Vertex AI</span>
+            <span>Nano Banana · GPT Image</span>
           </div>
           <LuSparkles size={19} aria-hidden />
         </div>
@@ -350,6 +369,27 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
             {STYLES.map((value) => <option key={value}>{value}</option>)}
           </select>
         </label>
+
+        <div className={styles.styleReferenceField}>
+          <div className={styles.styleReferenceHeading}>
+            <div>
+              <strong>그림체 참고 이미지</strong>
+              <span>첫 번째 참조로 전달 · 최대 5MB</span>
+            </div>
+            {styleReference && (
+              <button type="button" onClick={() => setStyleReference(null)} title="그림체 참고 이미지 제거">
+                <LuX />
+              </button>
+            )}
+          </div>
+          <ImageDropZone
+            currentImage={styleReference?.preview}
+            onImageSelect={setStyleReference}
+            label="그림체 1번"
+            placeholderText="그림체 이미지 1장을 추가하세요\nPNG, JPG, WebP · 최대 5MB"
+            disabled={starting || Boolean(trackedJobId)}
+          />
+        </div>
 
         <div className={styles.field}>
           <span>배경</span>

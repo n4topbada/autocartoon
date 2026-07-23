@@ -1,38 +1,110 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import sharp from "sharp";
 import { AuthError, requireAuth } from "@/lib/auth";
+import { IMAGE_MODEL_PRICING } from "@/lib/ai-pricing";
 import { AI_CREDIT_COSTS } from "@/lib/credit-products";
 import { isCreditError, withCreditCharge } from "@/lib/credit-service";
+import { generateContent, type GeminiRequest } from "@/lib/gemini";
+import { isGoogleImageConfigured } from "@/lib/image-generation";
+import { getPublicPlatformAIError } from "@/lib/platform-ai";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 180;
 
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const CUTOUT_MODEL = IMAGE_MODEL_PRICING["nano-banana-2"].apiModel;
+const CHROMA_CANDIDATES = [
+  { hex: "#00FF00", rgb: [0, 255, 0] as const },
+  { hex: "#FF00FF", rgb: [255, 0, 255] as const },
+  { hex: "#00FFFF", rgb: [0, 255, 255] as const },
+] as const;
 
-function getApiKey() {
-  return process.env.REMOVE_BG_API_KEY?.trim() || "";
+type CutoutAspectRatio = NonNullable<GeminiRequest["aspectRatio"]>;
+
+function colorDistance(r: number, g: number, b: number, target: readonly number[]) {
+  return Math.hypot(r - target[0], g - target[1], b - target[2]);
 }
 
-function providerErrorMessage(raw: string, status: number) {
-  try {
-    const parsed = JSON.parse(raw) as { errors?: Array<{ title?: string }> };
-    const title = parsed.errors?.find((item) => typeof item.title === "string")?.title;
-    if (title) return `누끼 API 오류: ${title.slice(0, 180)}`;
-  } catch {
-    // Provider may return plain text.
+async function chooseChromaKey(source: Buffer) {
+  const sample = await sharp(source)
+    .resize(96, 96, { fit: "inside", withoutEnlargement: true })
+    .ensureAlpha()
+    .raw()
+    .toBuffer();
+  return CHROMA_CANDIDATES
+    .map((candidate) => ({
+      candidate,
+      score: Array.from({ length: Math.floor(sample.length / 4) }, (_, index) => index * 4)
+        .reduce((count, offset) => {
+          if (sample[offset + 3] < 32) return count;
+          return count + (colorDistance(sample[offset], sample[offset + 1], sample[offset + 2], candidate.rgb) < 105 ? 1 : 0);
+        }, 0),
+    }))
+    .sort((a, b) => a.score - b.score)[0].candidate;
+}
+
+function closestAspectRatio(width: number, height: number): CutoutAspectRatio {
+  const ratio = width / height;
+  const options: Array<[CutoutAspectRatio, number]> = [
+    ["1:1", 1],
+    ["4:5", 4 / 5],
+    ["9:16", 9 / 16],
+    ["16:9", 16 / 9],
+  ];
+  return options.sort((a, b) => Math.abs(a[1] - ratio) - Math.abs(b[1] - ratio))[0][0];
+}
+
+async function makeChromaTransparent(
+  generated: Buffer,
+  width: number,
+  height: number,
+  chromaRgb: readonly number[]
+) {
+  const normalized = await sharp(generated)
+    .resize(width, height, {
+      fit: "contain",
+      background: {
+        r: chromaRgb[0],
+        g: chromaRgb[1],
+        b: chromaRgb[2],
+        alpha: 1,
+      },
+    })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const pixels = normalized.data;
+  let transparentPixels = 0;
+
+  for (let offset = 0; offset < pixels.length; offset += 4) {
+    if (pixels[offset + 3] < 245) {
+      transparentPixels += 1;
+      continue;
+    }
+    const distance = colorDistance(pixels[offset], pixels[offset + 1], pixels[offset + 2], chromaRgb);
+    if (distance <= 42) {
+      pixels[offset + 3] = 0;
+      transparentPixels += 1;
+    } else if (distance < 115) {
+      pixels[offset + 3] = Math.min(255, Math.round(((distance - 42) / 73) * 255));
+      transparentPixels += 1;
+    }
   }
-  if (status === 402) return "누끼 API 크레딧이 부족합니다.";
-  if (status === 429) return "누끼 API 요청이 많습니다. 잠시 후 다시 시도해주세요.";
-  return "누끼 API가 이미지를 처리하지 못했습니다.";
+
+  if (transparentPixels < width * height * 0.005) {
+    throw new Error("AI가 배경을 충분히 분리하지 못했습니다. 다시 시도해주세요.");
+  }
+  return sharp(pixels, { raw: { width, height, channels: 4 } }).png().toBuffer();
 }
 
 export async function GET() {
   try {
     await requireAuth();
     return NextResponse.json({
-      provider: "remove.bg",
-      configured: Boolean(getApiKey()),
+      provider: "nano-banana-2",
+      configured: isGoogleImageConfigured(),
       credits: AI_CREDIT_COSTS.cutout,
       maxBytes: MAX_IMAGE_BYTES,
     });
@@ -47,10 +119,9 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireAuth();
-    const apiKey = getApiKey();
-    if (!apiKey) {
+    if (!isGoogleImageConfigured()) {
       return NextResponse.json(
-        { error: "누끼 API가 아직 연결되지 않았습니다.", code: "provider_not_configured" },
+        { error: "Nano Banana 이미지 API가 아직 연결되지 않았습니다.", code: "provider_not_configured" },
         { status: 503 }
       );
     }
@@ -60,6 +131,12 @@ export async function POST(req: NextRequest) {
     if (!(image instanceof File) || !ALLOWED_TYPES.has(image.type) || image.size <= 0 || image.size > MAX_IMAGE_BYTES) {
       return NextResponse.json({ error: "12MB 이하 PNG, JPG, WEBP 이미지를 선택해주세요." }, { status: 400 });
     }
+    const source = Buffer.from(await image.arrayBuffer());
+    const metadata = await sharp(source).metadata();
+    if (!metadata.width || !metadata.height) {
+      return NextResponse.json({ error: "이미지 크기를 읽지 못했습니다." }, { status: 400 });
+    }
+    const chroma = await chooseChromaKey(source);
 
     const output = await withCreditCharge(
       session.userId,
@@ -67,36 +144,39 @@ export async function POST(req: NextRequest) {
         units: AI_CREDIT_COSTS.cutout,
         source: "cutout",
         referenceId: `cutout:${session.userId}:${randomUUID()}`,
-        note: "remove.bg 고화질 누끼",
+        note: "Nano Banana AI 누끼",
       },
       async () => {
-        const providerForm = new FormData();
-        providerForm.append("image_file", image, image.name || "canvas.png");
-        providerForm.append("size", "auto");
-        providerForm.append("format", "png");
-        providerForm.append("type", "auto");
-        providerForm.append("crop", "false");
-        const response = await fetch("https://api.remove.bg/v1.0/removebg", {
-          method: "POST",
-          headers: { "X-Api-Key": apiKey },
-          body: providerForm,
-          signal: AbortSignal.timeout(55_000),
+        const result = await generateContent({
+          model: CUTOUT_MODEL,
+          aspectRatio: closestAspectRatio(metadata.width!, metadata.height!),
+          imageSize: "1K",
+          modalities: ["IMAGE"],
+          referenceImages: [{ base64: source.toString("base64"), mimeType: image.type }],
+          prompt: [
+            "배경 제거 전용 이미지 편집 작업이다. 첫 번째 입력 이미지의 전경 피사체만 정확히 분리한다.",
+            "인물이나 물체의 얼굴, 신체, 외곽선, 색, 글자, 의상, 소품, 그림체와 해상도를 바꾸거나 새로 그리지 않는다.",
+            "원래 배경, 그림자, 반사, 바닥, 주변 사물은 모두 제거한다.",
+            `제거된 모든 배경은 단 하나의 완전 균일한 크로마키 색 ${chroma.hex}로 채운다. 그라데이션, 무늬, 그림자, 테두리는 금지한다.`,
+            "피사체 가장자리와 머리카락·반투명 부분은 깨끗하고 자연스럽게 보존한다.",
+            "결과 이미지는 설명 없이 한 장만 반환한다.",
+          ].join("\n"),
         });
-        if (!response.ok) {
-          const detail = await response.text().catch(() => "");
-          throw new Error(providerErrorMessage(detail, response.status));
-        }
-        return {
-          data: await response.arrayBuffer(),
-          contentType: response.headers.get("content-type") || "image/png",
-        };
+        const generated = result.images[0];
+        if (!generated) throw new Error("AI가 누끼 결과 이미지를 반환하지 않았습니다.");
+        return makeChromaTransparent(
+          Buffer.from(generated.base64, "base64"),
+          metadata.width!,
+          metadata.height!,
+          chroma.rgb
+        );
       }
     );
 
-    return new NextResponse(output.data, {
+    return new NextResponse(new Uint8Array(output), {
       status: 200,
       headers: {
-        "Content-Type": output.contentType,
+        "Content-Type": "image/png",
         "Cache-Control": "private, no-store",
       },
     });
@@ -109,7 +189,7 @@ export async function POST(req: NextRequest) {
     }
     console.error("Canvas remove-background error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "이미지 배경을 제거하지 못했습니다." },
+      { error: getPublicPlatformAIError(error, "이미지 배경을 제거하지 못했습니다.") },
       { status: 502 }
     );
   }

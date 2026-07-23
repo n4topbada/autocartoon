@@ -25,7 +25,7 @@ test("image price table converts every supported model and resolution", () => {
   assert.equal(getImageGenerationCredits("nano-banana-2-lite", "1K"), 7);
   assert.equal(getImageGenerationCredits("gpt-image-2", "1K"), 10);
   assert.equal(getImageGenerationCredits("gpt-image-2", "2K"), 21);
-  assert.equal(IMAGE_MODEL_PRICING["gpt-image-2"].availability, "planned");
+  assert.equal(IMAGE_MODEL_PRICING["gpt-image-2"].availability, "available");
   assert.equal(getImageModelPriceByApiModel("gemini-3.1-flash-image")?.thinkingLevel, "MINIMAL");
   assert.equal(getImageModelPriceByApiModel("gemini-3-pro-image")?.thinkingLevel, undefined);
 });

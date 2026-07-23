@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { assertWonyRuntimeDatabase } from "@/lib/database-target";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
@@ -19,6 +20,7 @@ function databaseUrlWithPoolLimits(value?: string) {
   }
 }
 
+assertWonyRuntimeDatabase();
 const datasourceUrl = databaseUrlWithPoolLimits(process.env.DATABASE_URL);
 
 export const prisma = globalForPrisma.prisma || new PrismaClient(

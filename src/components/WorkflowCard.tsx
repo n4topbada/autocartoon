@@ -114,6 +114,7 @@ function artifactToGeneratedImage(artifact: BackgroundJobArtifact): GeneratedIma
 async function runBackgroundJob(args: {
   inputImage?: ImageData;
   inputImages?: ImageData[];
+  styleReferenceFirst?: boolean;
   prompt: string;
   count: number;
   aspectRatio: "1:1" | "4:5" | "9:16" | "16:9";
@@ -149,6 +150,7 @@ async function runBackgroundJob(args: {
       ...(inputImages.length > 0
         ? { inputImages: inputImages.map((image) => ({ base64: image.base64, mimeType: image.mimeType })) }
         : {}),
+      ...(args.styleReferenceFirst ? { styleReferenceFirst: true } : {}),
     }),
   });
   const started = await safeFetchJson(response) as { job?: BackgroundJob; error?: string };
@@ -238,7 +240,7 @@ export default function WorkflowCard({ id, initialImage, onDelete, onPreview, on
     }));
 
     const referenceGuide = quickSource && quickStyle
-      ? "첨부 1번은 공간과 구도의 원본 사진이고, 첨부 2번은 색감·선·채색만 참고할 목표 그림체다. 원본의 구조를 목표 그림체로 변환한다."
+      ? "첨부 1번은 색감·선·채색만 참고할 목표 그림체이고, 첨부 2번은 공간과 구도의 원본 사진이다. 원본의 구조를 목표 그림체로 변환한다."
       : quickSource
         ? "첨부 이미지는 공간과 구도의 원본이다. 핵심 구조를 유지해 웹툰 배경으로 변환한다."
         : quickStyle
@@ -256,7 +258,8 @@ export default function WorkflowCard({ id, initialImage, onDelete, onPreview, on
 
     try {
       const images = await runBackgroundJob({
-        inputImages: [quickSource, quickStyle].filter((image): image is ImageData => Boolean(image)),
+        inputImages: [quickStyle, quickSource].filter((image): image is ImageData => Boolean(image)),
+        styleReferenceFirst: Boolean(quickStyle),
         prompt,
         count: quickCount,
         aspectRatio,

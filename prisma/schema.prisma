@@ -118,28 +118,31 @@ model GenerationRequest {
 }
 
 model User {
-  id                         String    @id @default(cuid())
-  email                      String    @unique
-  kakaoId                    String?   @unique
-  googleId                   String?   @unique
-  passwordHash               String
-  name                       String?
-  plazaNickname              String?   @unique
-  role                       String    @default("user")
-  tier                       String    @default("free")
-  credits                    Int       @default(0)
-  tierUsedThisMonth          Int       @default(0)
-  tierResetAt                DateTime  @default(now())
-  emailVerified              Boolean   @default(false)
-  verifyToken                String?   @unique
-  verifyTokenExp             DateTime?
-  temporaryPasswordHash      String?
-  temporaryPasswordExpiresAt DateTime?
-  temporaryPasswordIssuedAt  DateTime?
-  passwordChangedAt          DateTime?
-  welcomeCreditsGrantedAt    DateTime?
-  createdAt                  DateTime  @default(now())
-  updatedAt                  DateTime  @updatedAt
+  id                          String    @id @default(cuid())
+  email                       String    @unique
+  kakaoId                     String?   @unique
+  googleId                    String?   @unique
+  passwordHash                String
+  name                        String?
+  plazaNickname               String?   @unique
+  role                        String    @default("user")
+  tier                        String    @default("free")
+  credits                     Int       @default(0)
+  tierUsedThisMonth           Int       @default(0)
+  tierResetAt                 DateTime  @default(now())
+  emailVerified               Boolean   @default(false)
+  verifyToken                 String?   @unique
+  verifyTokenExp              DateTime?
+  temporaryPasswordHash       String?
+  temporaryPasswordExpiresAt  DateTime?
+  temporaryPasswordIssuedAt   DateTime?
+  passwordResetTokenHash      String?   @unique
+  passwordResetTokenExpiresAt DateTime?
+  passwordResetRequestedAt    DateTime?
+  passwordChangedAt           DateTime?
+  welcomeCreditsGrantedAt     DateTime?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
 
   presets                CharacterPreset[]
   characterGroups        CharacterGroup[]
@@ -166,6 +169,8 @@ model User {
   announcementReads      AnnouncementRead[]
   couponCampaignsCreated CouponCampaign[]    @relation("CouponCreator")
   couponRedemptions      CouponRedemption[]
+
+  @@index([passwordResetTokenExpiresAt])
 }
 
 model Announcement {

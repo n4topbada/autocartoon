@@ -1038,11 +1038,21 @@
 
 .canvas {
   display: block;
-  cursor: crosshair;
+  cursor: default;
   width: 100%;
   height: 100%;
   touch-action: none;
 }
+
+.cursorMove { cursor: grab; }
+.cursorCrop { cursor: crosshair; }
+.cursorPipette { cursor: url("/cursors/pipette.svg") 3 29, crosshair; }
+.cursorBubble { cursor: url("/cursors/bubble.svg") 4 4, copy; }
+.cursorText { cursor: text; }
+.cursorShape { cursor: crosshair; }
+.cursorBrush { cursor: url("/cursors/brush.svg") 3 29, crosshair; }
+.cursorEraser { cursor: url("/cursors/eraser.svg") 4 27, cell; }
+.cursorMask { cursor: url("/cursors/mask.svg") 16 16, crosshair; }
 
 .directDrawBar,
 .utilityDock {
@@ -1055,6 +1065,13 @@
   border-radius: 6px;
   background: var(--surface);
   box-shadow: var(--shadow-sm);
+}
+
+.importLimit {
+  padding: 0 3px;
+  color: var(--text-dim);
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .directDrawBar {

@@ -30,6 +30,7 @@ export interface StoredImageJobInput {
   backgroundImageId?: string;
   inputImage?: StoredImageReference;
   inputImages?: StoredImageReference[];
+  styleReferenceFirst?: boolean;
   referenceAssets?: StoredLabeledImageReference[];
   editRegionMode?: "auto" | "manual";
   editMask?: StoredImageReference;

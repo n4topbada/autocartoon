@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 import { Prisma } from "@prisma/client";
 import sharp from "sharp";
-import { generateContent } from "./gemini";
+import { generateImageContent } from "./image-generation";
 import {
   deleteBlob,
   fetchBlobAsBase64,
@@ -77,6 +77,7 @@ export interface GenerateInput {
   /** 여러 이미지 (transform 모드) */
   inputImages?: { base64: string; mimeType: string }[];
   inputImageUrls?: { url: string; mimeType: string }[];
+  styleReferenceFirst?: boolean;
   /** 프로젝트에서 선택한 구도·분위기 참고 자산 */
   referenceAssetUrls?: { url: string; mimeType: string; label: string }[];
   editRegionMode?: "auto" | "manual";
@@ -352,7 +353,20 @@ export async function generate(input: GenerateInput) {
     referenceImages.push(inputImage);
   }
 
-  // transform 모드: 사용자 이미지들 (번호 라벨 포함)
+  // 그림체 참고 화면에서는 사용자 참조 1번만 전체 모델 입력보다 먼저 둔다.
+  // 일반 변환 입력은 기존 프롬프트의 캐릭터·배경 위치 규칙을 유지한다.
+  const storedInputImages = input.inputImageUrls
+    ? await loadStoredImages(input.inputImageUrls)
+    : [];
+  const inputImages = input.inputImages ?? storedInputImages;
+  const inputLabeledImages = inputImages.map((image, index) => ({
+    label: `=== 사용자 참조 이미지 ${index + 1}번 ===`,
+    base64: image.base64,
+    mimeType: image.mimeType,
+  }));
+  const priorityImages = input.styleReferenceFirst ? inputLabeledImages.slice(0, 1) : [];
+  const regularInputImages = input.styleReferenceFirst ? inputLabeledImages.slice(1) : inputLabeledImages;
+
   // 다중 캐릭터: 라벨 포함 이미지
   const characterLabeledImages = presets.length > 1
     ? characterReferences.flatMap((character) => character.images.map((image) => ({
@@ -379,19 +393,7 @@ export async function generate(input: GenerateInput) {
     );
     labeledImages.push(...loadedReferenceAssets);
   }
-  const storedInputImages = input.inputImageUrls
-    ? await loadStoredImages(input.inputImageUrls)
-    : [];
-  const inputImages = input.inputImages ?? storedInputImages;
-  if (inputImages.length > 0 && input.mode === "transform") {
-    for (let i = 0; i < inputImages.length; i++) {
-      labeledImages.push({
-        label: `=== 사용자 참조 이미지 ${i + 1}번 ===`,
-        base64: inputImages[i].base64,
-        mimeType: inputImages[i].mimeType,
-      });
-    }
-  }
+  labeledImages.push(...regularInputImages);
 
   // 4. 프롬프트 구성
   const characterNames = presets.map((p) => p.name);
@@ -427,8 +429,13 @@ export async function generate(input: GenerateInput) {
   // 첨부 이미지의 역할을 "위치"가 아니라 "라벨"로 구분하도록 안내한다.
   // 다중 캐릭터에서는 캐릭터 시트가 배경/편집 대상 뒤에 붙어, 모드 프롬프트의
   // "첫 번째=시트, 마지막=편집 대상" 위치 설명과 어긋나므로 라벨 기준으로 재정의한다.
-  if (labeledImages.length > 0) {
+  if (labeledImages.length > 0 || priorityImages.length > 0) {
     const guideLines: string[] = [];
+    if (priorityImages.length > 0) {
+      guideLines.push(
+        `전체 입력의 첫 번째 "=== 사용자 참조 이미지 1번 ==="은 그림체 전용 기준입니다. 선화·채색·색감·명암·질감만 따르고 인물이나 구도는 복제하지 마세요.`
+      );
+    }
     if (presets.length > 1) {
       guideLines.push(
         `"=== Character: 이름 / view: ... ===" 라벨이 붙은 이미지는 각 캐릭터(${characterNames
@@ -461,7 +468,7 @@ export async function generate(input: GenerateInput) {
 
   // 5. Gemini 호출
   const requestedCount = Math.max(1, Math.min(5, input.count || 1));
-  const generationResults: PromiseSettledResult<Awaited<ReturnType<typeof generateContent>>>[] = [];
+  const generationResults: PromiseSettledResult<Awaited<ReturnType<typeof generateImageContent>>>[] = [];
   // Image models have comparatively tight burst quotas. Batch requests are
   // intentionally serialized so a single user's multi-image request does not
   // throttle itself or the next queued job.
@@ -469,11 +476,12 @@ export async function generate(input: GenerateInput) {
     try {
       generationResults.push({
         status: "fulfilled",
-        value: await generateContent({
+        value: await generateImageContent({
           prompt,
           model: input.model,
           aspectRatio: input.aspectRatio,
           imageSize: input.imageSize,
+          priorityImages: priorityImages.length > 0 ? priorityImages : undefined,
           referenceImages,
           labeledImages: labeledImages.length > 0 ? labeledImages : undefined,
           modalities: ["IMAGE", "TEXT"],

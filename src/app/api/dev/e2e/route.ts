@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
+import { hashAuthToken } from "@/lib/auth-tokens";
 import { prisma } from "@/lib/prisma";
 
 // 로컬 E2E 전용 픽스처 관리 경로.
@@ -125,6 +126,8 @@ export async function POST(req: NextRequest) {
       credits?: unknown;
       emailVerified?: unknown;
       verifyToken?: unknown;
+      resetToken?: unknown;
+      resetTokenExpired?: unknown;
       kakaoId?: unknown;
       googleId?: unknown;
     };
@@ -142,6 +145,10 @@ export async function POST(req: NextRequest) {
       typeof extra.credits === "number" && Number.isFinite(extra.credits)
         ? Math.min(Math.max(Math.floor(extra.credits), 0), 10_000_000)
         : 0;
+    const resetToken = typeof extra.resetToken === "string" ? extra.resetToken : null;
+    const passwordResetTokenExpiresAt = resetToken
+      ? new Date(Date.now() + (extra.resetTokenExpired === true ? -60_000 : 60 * 60 * 1000))
+      : null;
     const user = await prisma.user.upsert({
       where: { email },
       update: {
@@ -151,6 +158,9 @@ export async function POST(req: NextRequest) {
         emailVerified: extra.emailVerified !== false,
         verifyToken: typeof extra.verifyToken === "string" ? extra.verifyToken : null,
         verifyTokenExp: typeof extra.verifyToken === "string" ? new Date(Date.now() + 60 * 60 * 1000) : null,
+        passwordResetTokenHash: resetToken ? hashAuthToken(resetToken) : null,
+        passwordResetTokenExpiresAt,
+        passwordResetRequestedAt: resetToken ? new Date() : null,
         kakaoId: typeof extra.kakaoId === "string" ? extra.kakaoId : null,
         googleId: typeof extra.googleId === "string" ? extra.googleId : null,
       },
@@ -164,6 +174,9 @@ export async function POST(req: NextRequest) {
         emailVerified: extra.emailVerified !== false,
         verifyToken: typeof extra.verifyToken === "string" ? extra.verifyToken : null,
         verifyTokenExp: typeof extra.verifyToken === "string" ? new Date(Date.now() + 60 * 60 * 1000) : null,
+        passwordResetTokenHash: resetToken ? hashAuthToken(resetToken) : null,
+        passwordResetTokenExpiresAt,
+        passwordResetRequestedAt: resetToken ? new Date() : null,
         kakaoId: typeof extra.kakaoId === "string" ? extra.kakaoId : null,
         googleId: typeof extra.googleId === "string" ? extra.googleId : null,
         welcomeCreditsGrantedAt: new Date(),

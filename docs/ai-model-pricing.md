@@ -23,9 +23,9 @@
 | Nano Banana 2 | `gemini-3.1-flash-image` | 사용 가능 | $0.067 / **13C** | $0.101 / **19C** |
 | Nano Banana Pro | `gemini-3-pro-image` | 사용 가능 | $0.134 / **26C** | $0.134 / **26C** |
 | Nano Banana 2 Lite | `gemini-3.1-flash-lite-image` | 사용 가능 | $0.034 / **7C** | 미지원 |
-| GPT Image 2, Medium | `gpt-image-2` | API 연결 예정 | $0.05268 / **10C** | $0.10704 / **21C** |
+| GPT Image 2, Medium | `gpt-image-2` | 연동 완료, 키 필요 | $0.05268 / **10C** | $0.10704 / **21C** |
 
-GPT Image 2는 공식 출력 단가 $30/백만 토큰과 공식 계산기의 Medium 출력량(1K 1,756토큰, 2K 3,568토큰)을 적용했다. OpenAI API 연결 전에는 선택지와 가격만 보이고 요청은 비활성화된다.
+GPT Image 2는 공식 출력 단가 $30/백만 토큰과 공식 계산기의 Medium 출력량(1K 1,756토큰, 2K 3,568토큰)을 적용했다. 생성·다중 이미지 편집 API 연동은 완료되었고, 서버에 `OPENAI_API_KEY`가 없으면 선택 단계와 요청 단계에서 차감 전에 비활성화된다. 그림체 참고 이미지는 입력 배열의 첫 번째로 전달하며 GPT Image 2의 자동 고충실도 입력 처리를 사용한다.
 
 Google 입력 단가는 Nano Banana 2 Lite $0.125/백만 토큰, Nano Banana 2 $0.25/백만 토큰, Pro $1/백만 토큰이다. 입력 이미지 한 장은 Lite·Nano 2가 1,120토큰, Pro가 560토큰이다. GPT Image 2는 텍스트 입력 $5/백만 토큰, 이미지 입력 $8/백만 토큰, 캐시 이미지 입력 $2/백만 토큰이다.
 

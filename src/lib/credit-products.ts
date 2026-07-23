@@ -71,7 +71,7 @@ export const AI_CREDIT_COSTS = {
   videoPlan: 2,
   videoPrompt: 1,
   ocr: 1,
-  cutout: 25,
+  cutout: getImageGenerationCredits("nano-banana-2", "1K"),
   tts: 1,
   image1k: getImageGenerationCredits(DEFAULT_IMAGE_MODEL_ID, "1K"),
   image2k: getImageGenerationCredits(DEFAULT_IMAGE_MODEL_ID, "2K"),
@@ -83,7 +83,7 @@ export const CREDIT_COST_ROWS: ReadonlyArray<{ label: string; credits: number }>
   { label: "기획안·영상 플랜", credits: AI_CREDIT_COSTS.projectBrief },
   { label: "영상 프롬프트 확장", credits: AI_CREDIT_COSTS.videoPrompt },
   { label: "OCR·음성 미리듣기", credits: AI_CREDIT_COSTS.ocr },
-  { label: "고화질 누끼 1장", credits: AI_CREDIT_COSTS.cutout },
+  { label: "Nano Banana AI 누끼 1장", credits: AI_CREDIT_COSTS.cutout },
   ...IMAGE_MODEL_IDS.flatMap((modelId) => {
     const model = IMAGE_MODEL_PRICING[modelId];
     return model.supportedResolutions.map((resolution) => ({

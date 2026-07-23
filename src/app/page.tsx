@@ -306,10 +306,6 @@ export default function Home() {
   const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
-    if (user?.mustChangePassword) setActiveTab("settings");
-  }, [user?.mustChangePassword]);
-
-  useEffect(() => {
     const requestedTab = new URLSearchParams(window.location.search).get("tab");
     if (requestedTab === "settings") setActiveTab("settings");
   }, []);

@@ -11,7 +11,7 @@ import {
   getProductTotalCredits,
 } from "../src/lib/credit-products";
 
-test("all new OAuth accounts receive 100 welcome credits", () => {
+test("all new accounts receive 100 welcome credits", () => {
   assert.equal(WELCOME_CREDITS, 100);
 });
 
@@ -106,6 +106,6 @@ test("browser MP4 assembly does not consume AI credits", () => {
   assert.equal(getGenerationCreditCost("short", { source: "browser-ffmpeg" }), 0);
 });
 
-test("high-quality cutout has an explicit positive credit cost", () => {
-  assert.equal(AI_CREDIT_COSTS.cutout, 25);
+test("Nano Banana cutout uses the configured 1K generation credit cost", () => {
+  assert.equal(AI_CREDIT_COSTS.cutout, 13);
 });

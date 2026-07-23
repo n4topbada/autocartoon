@@ -1,0 +1,88 @@
+.page {
+  min-height: 100vh;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: var(--bg);
+}
+
+.card {
+  width: min(420px, 100%);
+  padding: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.icon {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--blue-soft);
+  color: var(--accent);
+  font-size: 22px;
+}
+
+.card h1 { margin: 0 0 22px; color: var(--text); font-size: 22px; text-align: center; }
+.description { margin: 0 0 4px; color: var(--text-dim); font-size: 13px; line-height: 1.55; text-align: center; }
+.form { display: flex; flex-direction: column; gap: 9px; }
+.form label { margin-top: 5px; color: var(--text-dim); font-size: 13px; font-weight: 650; }
+.form input {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+}
+.form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
+.passwordField { position: relative; }
+.passwordField input { padding-right: 44px; }
+.passwordField button {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+}
+.error { margin: 4px 0 0; color: var(--danger); font-size: 13px; text-align: center; }
+.submit {
+  min-height: 44px;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+}
+.submit:disabled { opacity: 0.6; }
+.successPanel,
+.errorPanel { display: grid; gap: 14px; color: var(--text-dim); font-size: 14px; text-align: center; }
+.successPanel a,
+.errorPanel a { color: var(--accent); font-weight: 700; }
+.page > footer { width: min(420px, 100%); padding-top: 10px; }
+
+@media (max-width: 480px) {
+  .page { justify-content: flex-start; }
+  .card { padding: 28px 20px; }
+}

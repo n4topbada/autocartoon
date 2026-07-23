@@ -127,6 +127,9 @@ type PresetScope = "current" | "all" | "range";
 type EraserApplyMode = "transparent" | "heal";
 type ShapeToolType = "rectangle" | "circle" | "ellipse" | "line" | "arrow" | "star";
 
+const MAX_EXTERNAL_OBJECT_BYTES = 5 * 1024 * 1024;
+const EXTERNAL_OBJECT_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
 interface TextToolDefaults {
   fontSize: number;
   fontFamily: string;
@@ -2106,7 +2109,7 @@ export default function CanvasEditor({
     setCropRect(null);
   };
 
-  // 고화질 누끼는 서버 프록시를 통해 remove.bg에 전송한다. API 키는 브라우저에 노출하지 않는다.
+  // 누끼는 서버에서 Nano Banana로 피사체를 분리한 뒤 투명 PNG로 정규화한다.
   const handleRemoveBackground = async () => {
     const activeLayer = layers.find((l) => l.id === activeLayerId);
     if (!activeLayer?.canvas || activeLayer.locked) {
@@ -2114,7 +2117,7 @@ export default function CanvasEditor({
       return;
     }
     if (cutoutConfigured !== true) {
-      setEditorMessage("누끼 API가 아직 연결되지 않았습니다. REMOVE_BG_API_KEY 설정이 필요합니다.");
+      setEditorMessage("Nano Banana 이미지 API 연결 상태를 확인해주세요.");
       return;
     }
 
@@ -2480,10 +2483,12 @@ export default function CanvasEditor({
       name: "패널 레이아웃",
       bubbles,
     };
-    const activeIndex = layers.findIndex((layer) => layer.id === activeLayerId);
-    const next = [...layers];
-    next.splice(activeIndex >= 0 ? activeIndex + 1 : layers.length, 0, newLayer);
-    setLayers(next);
+    setLayers((current) => {
+      const activeIndex = current.findIndex((layer) => layer.id === activeLayerId);
+      const next = [...current];
+      next.splice(activeIndex >= 0 ? activeIndex + 1 : current.length, 0, newLayer);
+      return next;
+    });
     setActiveLayerId(newLayer.id);
     setSelectedBubbleId(null);
     setTool("move");
@@ -3139,18 +3144,40 @@ export default function CanvasEditor({
   };
 
   const handleImageFiles = async (files: File[]) => {
-    const file = files.find((candidate) => candidate.type.startsWith("image/") && candidate.size <= 20 * 1024 * 1024);
-    if (!file) {
-      window.alert("20MB 이하 이미지 파일을 선택해주세요.");
+    const accepted = files.filter((file) => EXTERNAL_OBJECT_TYPES.has(file.type) && file.size > 0 && file.size <= MAX_EXTERNAL_OBJECT_BYTES);
+    if (accepted.length === 0) {
+      window.alert("PNG, JPG, WebP, GIF 이미지를 파일당 최대 5MB까지 불러올 수 있습니다.");
       return;
     }
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error());
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
-    await addImageLayer(dataUrl, file.name.replace(/\.[^.]+$/, "") || "업로드 이미지");
+    const rejectedCount = files.length - accepted.length;
+    for (const file of [...accepted].reverse()) {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error());
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      await addImageLayer(dataUrl, file.name.replace(/\.[^.]+$/, "") || "업로드 이미지");
+    }
+    setEditorMessage(
+      rejectedCount > 0
+        ? `${accepted.length}개 객체를 추가했습니다. ${rejectedCount}개 파일은 형식 또는 5MB 제한으로 제외했습니다.`
+        : `${accepted.length}개 외부 이미지 객체를 추가했습니다.`
+    );
+  };
+
+  const handleExternalObjectDrop = async (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const files = Array.from(event.dataTransfer.files || []);
+    if (files.length > 0) {
+      await handleImageFiles(files);
+      return;
+    }
+    const imageUrl = event.dataTransfer.getData("text/plain").trim();
+    if (/^(data:image\/|blob:|https?:\/\/|\/)/i.test(imageUrl)) {
+      await addImageLayer(imageUrl, "불러온 이미지 객체");
+      setEditorMessage("이미지 객체를 캔버스에 추가했습니다.");
+    }
   };
 
   const createCompositeCanvas = () => {
@@ -3963,6 +3990,17 @@ export default function CanvasEditor({
   const orderedPages = [...pages].sort((a, b) => a.order - b.order);
   const currentPageIndex = orderedPages.findIndex((page) => page.id === currentPageId);
   const currentPage = currentPageIndex >= 0 ? orderedPages[currentPageIndex] : null;
+  const canvasCursorClass: Record<CanvasTool, string> = {
+    move: styles.cursorMove,
+    crop: styles.cursorCrop,
+    pipette: styles.cursorPipette,
+    bubble: styles.cursorBubble,
+    text: styles.cursorText,
+    shape: styles.cursorShape,
+    brush: styles.cursorBrush,
+    eraser: styles.cursorEraser,
+    mask: styles.cursorMask,
+  };
 
   const renameCurrentPage = () => {
     if (!currentPage || !onRenamePage) return;
@@ -4465,7 +4503,18 @@ export default function CanvasEditor({
 
         {/* 중앙: 캔버스 */}
         <div className={styles.canvasArea}>
-          <div className={styles.canvasViewport} ref={canvasViewportRef}>
+          <div
+            className={styles.canvasViewport}
+            ref={canvasViewportRef}
+            onDragOver={(event) => {
+              if (event.dataTransfer.types.includes("Files") || event.dataTransfer.types.includes("text/plain")) {
+                event.preventDefault();
+              }
+            }}
+            onDrop={(event) => {
+              void handleExternalObjectDrop(event).catch(() => setEditorMessage("이미지 객체를 불러오지 못했습니다."));
+            }}
+          >
             <div
               className={`${styles.canvasWrapper} ${showTransparencyGrid ? "" : styles.canvasWrapperPlain}`}
               style={{ width: `${canvasW * displayScale}px`, height: `${canvasH * displayScale}px` }}
@@ -4474,7 +4523,7 @@ export default function CanvasEditor({
                 ref={canvasRef}
                 width={canvasW}
                 height={canvasH}
-                className={styles.canvas}
+                className={`${styles.canvas} ${canvasCursorClass[tool]}`}
                 onPointerDown={handleMouseDown}
                 onPointerMove={handleMouseMove}
                 onPointerUp={handleMouseUp}
@@ -4502,7 +4551,8 @@ export default function CanvasEditor({
             <button onClick={handleUndo} disabled={undoStack.current.length === 0} title="되돌리기"><LuUndo2 /></button>
             <button onClick={handleRedo} disabled={redoStack.current.length === 0} title="다시 실행"><LuRedo2 /></button>
             <span className={styles.utilityDivider} />
-            <button onClick={() => imageInputRef.current?.click()} title="이미지 추가"><LuImagePlus /></button>
+            <button onClick={() => imageInputRef.current?.click()} title="외부 이미지·객체 불러오기"><LuImagePlus /> 외부 객체</button>
+            <span className={styles.importLimit}>파일당 최대 5MB</span>
             <button className={tool === "crop" && !aiRegionMode ? styles.utilityActive : ""} onClick={() => { setAiRegionMode(false); setRegionSelectionPurpose(null); activateTool("crop"); }} title="자르기"><LuCrop /></button>
             {tool === "crop" && !aiRegionMode && (
               <>
@@ -4573,6 +4623,7 @@ export default function CanvasEditor({
             ref={imageInputRef}
             hidden
             type="file"
+            multiple
             accept="image/png,image/jpeg,image/webp,image/gif"
             onChange={(event) => {
               void handleImageFiles(Array.from(event.target.files || [])).catch(() => window.alert("이미지를 추가하지 못했습니다."));
@@ -4621,13 +4672,13 @@ export default function CanvasEditor({
                 className={styles.toolBtn}
                 onClick={() => void handleRemoveBackground()}
                 disabled={cutoutLoading || !activeLayer?.canvas || activeLayer?.locked}
-                title={cutoutConfigured === false ? "remove.bg API 연결 필요" : "선택 이미지의 배경 제거"}
+                title={cutoutConfigured === false ? "Nano Banana 이미지 API 연결 필요" : "Nano Banana로 선택 이미지의 배경 제거"}
               >
                 {cutoutLoading ? <LuLoaderCircle className={styles.spin} size={16} /> : <LuEraser size={16} />} 누끼
                 <CreditCostBadge credits={AI_CREDIT_COSTS.cutout} />
               </button>
               {cutoutConfigured !== true && (
-                <span className={styles.apiStatus}>{cutoutConfigured === null ? "API 확인 중" : "API 연결 필요"}</span>
+                <span className={styles.apiStatus}>{cutoutConfigured === null ? "AI 확인 중" : "AI 연결 필요"}</span>
               )}
             </div>
             <div className={styles.toolGroup}>
@@ -4637,6 +4688,7 @@ export default function CanvasEditor({
               <input
                 hidden
                 type="file"
+                multiple
                 accept="image/png,image/jpeg,image/webp,image/gif"
                 onChange={(event) => {
                   void handleImageFiles(Array.from(event.target.files || [])).catch(() => window.alert("이미지를 추가하지 못했습니다."));

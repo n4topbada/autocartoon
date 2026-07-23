@@ -87,6 +87,58 @@
   text-align: right;
 }
 
+.styleReferenceField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.styleReferenceHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.styleReferenceHeading > div {
+  min-width: 0;
+}
+
+.styleReferenceHeading strong,
+.styleReferenceHeading span {
+  display: block;
+}
+
+.styleReferenceHeading strong {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.styleReferenceHeading span {
+  margin-top: 2px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.styleReferenceHeading button {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.styleReferenceHeading button:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
 .twoColumns {
   display: grid;
   grid-template-columns: 1fr 1fr;

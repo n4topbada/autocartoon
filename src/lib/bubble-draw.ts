@@ -193,41 +193,89 @@ export function drawBubble(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
 }
 
 function drawRoundedRectangle(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
-  drawSimpleTail(ctx, bubble);
-  const left = bubble.x - bubble.width / 2;
-  const top = bubble.y - bubble.height / 2;
   const radius = Math.max(0, Math.min(bubble.cornerRadius ?? 24, bubble.width / 2, bubble.height / 2));
-  ctx.beginPath();
-  ctx.roundRect(left, top, bubble.width, bubble.height, radius);
+  traceRectangleWithTail(ctx, bubble, radius);
   doFill(ctx, bubble);
   doStroke(ctx, bubble);
 }
 
 function drawRectangle(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
-  ctx.beginPath();
-  ctx.rect(
-    bubble.x - bubble.width / 2,
-    bubble.y - bubble.height / 2,
-    bubble.width,
-    bubble.height
-  );
+  traceRectangleWithTail(ctx, bubble, 0);
   doFill(ctx, bubble);
   doStroke(ctx, bubble);
 }
 
-function drawEllipse(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
-  ctx.beginPath();
-  ctx.ellipse(
-    bubble.x,
-    bubble.y,
-    bubble.width / 2,
-    bubble.height / 2,
-    0,
-    0,
-    Math.PI * 2
+function traceRectangleWithTail(
+  ctx: CanvasRenderingContext2D,
+  bubble: SpeechBubble,
+  radius: number
+) {
+  const left = bubble.x - bubble.width / 2;
+  const right = bubble.x + bubble.width / 2;
+  const top = bubble.y - bubble.height / 2;
+  const bottom = bubble.y + bubble.height / 2;
+  const dx = bubble.tailTipX - bubble.x;
+  const dy = bubble.tailTipY - bubble.y;
+  const horizontalScore = Math.abs(dx) / Math.max(1, bubble.width / 2);
+  const verticalScore = Math.abs(dy) / Math.max(1, bubble.height / 2);
+  const tailSide = !bubble.tailEnabled
+    ? null
+    : horizontalScore > verticalScore
+      ? dx >= 0 ? "right" : "left"
+      : dy >= 0 ? "bottom" : "top";
+  const halfTail = Math.max(3, bubble.tailWidth / 2);
+  const clamp = (value: number, minimum: number, maximum: number) =>
+    Math.max(minimum, Math.min(maximum, value));
+  const horizontalBase = clamp(
+    bubble.tailTipX,
+    left + radius + halfTail,
+    right - radius - halfTail
   );
-  doFill(ctx, bubble);
-  doStroke(ctx, bubble);
+  const verticalBase = clamp(
+    bubble.tailTipY,
+    top + radius + halfTail,
+    bottom - radius - halfTail
+  );
+
+  ctx.beginPath();
+  ctx.moveTo(left + radius, top);
+  if (tailSide === "top") {
+    ctx.lineTo(horizontalBase - halfTail, top);
+    ctx.lineTo(bubble.tailTipX, bubble.tailTipY);
+    ctx.lineTo(horizontalBase + halfTail, top);
+  }
+  ctx.lineTo(right - radius, top);
+  if (radius) ctx.quadraticCurveTo(right, top, right, top + radius);
+  else ctx.lineTo(right, top);
+  if (tailSide === "right") {
+    ctx.lineTo(right, verticalBase - halfTail);
+    ctx.lineTo(bubble.tailTipX, bubble.tailTipY);
+    ctx.lineTo(right, verticalBase + halfTail);
+  }
+  ctx.lineTo(right, bottom - radius);
+  if (radius) ctx.quadraticCurveTo(right, bottom, right - radius, bottom);
+  else ctx.lineTo(right, bottom);
+  if (tailSide === "bottom") {
+    ctx.lineTo(horizontalBase + halfTail, bottom);
+    ctx.lineTo(bubble.tailTipX, bubble.tailTipY);
+    ctx.lineTo(horizontalBase - halfTail, bottom);
+  }
+  ctx.lineTo(left + radius, bottom);
+  if (radius) ctx.quadraticCurveTo(left, bottom, left, bottom - radius);
+  else ctx.lineTo(left, bottom);
+  if (tailSide === "left") {
+    ctx.lineTo(left, verticalBase + halfTail);
+    ctx.lineTo(bubble.tailTipX, bubble.tailTipY);
+    ctx.lineTo(left, verticalBase - halfTail);
+  }
+  ctx.lineTo(left, top + radius);
+  if (radius) ctx.quadraticCurveTo(left, top, left + radius, top);
+  else ctx.lineTo(left, top);
+  ctx.closePath();
+}
+
+function drawEllipse(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
+  drawClassic(ctx, bubble);
 }
 
 function drawLine(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
@@ -251,44 +299,55 @@ function drawArrow(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
 }
 
 function drawCloud(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
-  drawSimpleTail(ctx, bubble);
   const roughness = Math.max(0, Math.min(1, bubble.roughness ?? 0));
   const wobble = Math.max(0, Math.min(1, bubble.wobble ?? 0));
-  const lobes = Math.max(8, Math.round(14 + roughness * 10));
+  const lobes = Math.max(10, Math.round(12 + roughness * 8));
   const points = Array.from({ length: lobes }, (_, index) => {
     const angle = (index / lobes) * Math.PI * 2 - Math.PI / 2;
-    const wave = 1
-      + Math.sin(index * 7.31 + 0.7) * roughness * 0.08
-      + Math.sin(angle * 3 + 1.17) * wobble * 0.11;
+    const wave = 1 + Math.sin(index * 7.31 + 0.7) * roughness * 0.04;
     return {
+      angle,
       x: bubble.x + Math.cos(angle) * bubble.width * 0.5 * wave,
       y: bubble.y + Math.sin(angle) * bubble.height * 0.5 * wave,
     };
   });
+  const tailSegmentIndex = bubble.tailEnabled
+    ? points.reduce((closest, point, index) => {
+        const next = points[(index + 1) % points.length];
+        const nextAngle = index === points.length - 1 ? next.angle + Math.PI * 2 : next.angle;
+        const middleAngle = (point.angle + nextAngle) / 2;
+        const targetAngle = Math.atan2(
+          (bubble.tailTipY - bubble.y) / Math.max(1, bubble.height),
+          (bubble.tailTipX - bubble.x) / Math.max(1, bubble.width)
+        );
+        const distance = Math.abs(Math.atan2(
+          Math.sin(middleAngle - targetAngle),
+          Math.cos(middleAngle - targetAngle)
+        ));
+        return distance < closest.distance ? { index, distance } : closest;
+      }, { index: -1, distance: Number.POSITIVE_INFINITY }).index
+    : -1;
   ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
   for (let index = 0; index < points.length; index += 1) {
-    const current = points[index];
     const next = points[(index + 1) % points.length];
-    const midpoint = { x: (current.x + next.x) / 2, y: (current.y + next.y) / 2 };
-    if (index === 0) ctx.moveTo(midpoint.x, midpoint.y);
-    ctx.quadraticCurveTo(current.x, current.y, midpoint.x, midpoint.y);
+    if (index === tailSegmentIndex) {
+      ctx.lineTo(bubble.tailTipX, bubble.tailTipY);
+      ctx.lineTo(next.x, next.y);
+      continue;
+    }
+    const nextAngle = index === points.length - 1 ? points[0].angle + Math.PI * 2 : next.angle;
+    const middleAngle = (points[index].angle + nextAngle) / 2;
+    const lobeDepth = 1.18
+      + Math.sin(index * 5.17 + 0.4) * roughness * 0.08
+      + Math.sin(middleAngle * 3 + 1.17) * wobble * 0.08;
+    ctx.quadraticCurveTo(
+      bubble.x + Math.cos(middleAngle) * bubble.width * 0.5 * lobeDepth,
+      bubble.y + Math.sin(middleAngle) * bubble.height * 0.5 * lobeDepth,
+      next.x,
+      next.y
+    );
   }
-  ctx.closePath();
-  doFill(ctx, bubble);
-  doStroke(ctx, bubble);
-}
-
-function drawSimpleTail(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
-  if (!bubble.tailEnabled) return;
-  const angle = Math.atan2(bubble.tailTipY - bubble.y, bubble.tailTipX - bubble.x);
-  const baseX = bubble.x + Math.cos(angle) * bubble.width * 0.38;
-  const baseY = bubble.y + Math.sin(angle) * bubble.height * 0.38;
-  const perpendicularX = -Math.sin(angle) * bubble.tailWidth * 0.5;
-  const perpendicularY = Math.cos(angle) * bubble.tailWidth * 0.5;
-  ctx.beginPath();
-  ctx.moveTo(baseX + perpendicularX, baseY + perpendicularY);
-  ctx.lineTo(bubble.tailTipX, bubble.tailTipY);
-  ctx.lineTo(baseX - perpendicularX, baseY - perpendicularY);
   ctx.closePath();
   doFill(ctx, bubble);
   doStroke(ctx, bubble);

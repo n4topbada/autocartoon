@@ -2,7 +2,7 @@ export const AI_PRICING_POLICY = {
   creditKrw: 12,
   markupMultiplier: 1.5,
   usdToKrw: 1_500,
-  checkedAt: "2026-07-20",
+  checkedAt: "2026-07-23",
 } as const;
 
 export const IMAGE_MODEL_IDS = [
@@ -70,8 +70,7 @@ export const IMAGE_MODEL_PRICING: Readonly<Record<ImageModelId, ImageModelPrice>
     label: "GPT Image 2",
     providerLabel: "OpenAI API",
     apiModel: "gpt-image-2",
-    availability: "planned",
-    disabledReason: "OpenAI API 연결 예정",
+    availability: "available",
     supportedResolutions: ["1K", "2K"],
     // Medium 품질의 공식 출력 토큰 계산기 결과(1K 1,756 / 2K 3,568)에 $30/M을 적용한다.
     usdPerImage: { "1K": 0.05268, "2K": 0.10704 },

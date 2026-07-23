@@ -245,12 +245,12 @@ export default function GestureGenerator({ active = true }: { active?: boolean }
         referenceAssetIds: [],
       };
       const generatedPrompt = buildStudioGenerationPrompt({
-        prompt: `${prompt.trim()}${styleReference ? "\n마지막 참고 이미지는 그림체 참고용이며 캐릭터 외형으로 복제하지 않는다." : ""}`,
+        prompt: `${prompt.trim()}${styleReference ? "\n첫 번째 참고 이미지는 그림체 전용 참조다. 선화, 채색법, 색감, 명암과 질감만 따르고 인물 외형이나 구도는 복제하지 않는다." : ""}`,
         mode: "gesture",
         settings,
         characters: selectedPresets.map((preset) => ({ id: preset.id, name: preset.name })),
       });
-      const inputImages = [...characterUploads.filter((image): image is ImageData => Boolean(image)), ...(styleReference ? [styleReference] : [])]
+      const inputImages = [...(styleReference ? [styleReference] : []), ...characterUploads.filter((image): image is ImageData => Boolean(image))]
         .filter((image) => Boolean(image.base64))
         .map((image) => ({ base64: image.base64!, mimeType: image.mimeType }));
       const data = await readJson<{ job: GestureJob }>(await fetch("/api/generate", {
@@ -268,6 +268,7 @@ export default function GestureGenerator({ active = true }: { active?: boolean }
           imageSize,
           prompt: generatedPrompt,
           ...(inputImages.length ? { inputImages } : {}),
+          ...(styleReference ? { styleReferenceFirst: true } : {}),
         }),
       }));
       setJobs((current) => [data.job, ...current.filter((job) => job.id !== data.job.id)]);

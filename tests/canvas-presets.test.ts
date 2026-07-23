@@ -107,7 +107,7 @@ test("serialized preset documents restore missing bubble render defaults", () =>
   assert.equal(parsed.layers[0].bubbles[0].opacity, 1);
 });
 
-test("canvas parity UI exposes scoped presets, region OCR, and API-only cutout safely", async () => {
+test("canvas parity UI exposes scoped presets, region OCR, and Nano Banana cutout safely", async () => {
   const [editor, cutoutRoute] = await Promise.all([
     readFile("src/components/CanvasEditor.tsx", "utf8"),
     readFile("src/app/api/studio/remove-background/route.ts", "utf8"),
@@ -116,9 +116,10 @@ test("canvas parity UI exposes scoped presets, region OCR, and API-only cutout s
     assert.match(editor, new RegExp(label));
   }
   assert.match(editor, /downloadAllCanvasPages/);
-  assert.match(cutoutRoute, /https:\/\/api\.remove\.bg\/v1\.0\/removebg/);
-  assert.match(cutoutRoute, /X-Api-Key/);
-  assert.ok(cutoutRoute.indexOf("if (!apiKey)") < cutoutRoute.indexOf("const output = await withCreditCharge"));
+  assert.match(cutoutRoute, /generateContent/);
+  assert.match(cutoutRoute, /nano-banana-2/);
+  assert.match(cutoutRoute, /크로마키/);
+  assert.ok(cutoutRoute.indexOf("if (!isGoogleImageConfigured())") < cutoutRoute.indexOf("const output = await withCreditCharge"));
 });
 
 test("canvas parity UI keeps the audited reference tool states and staged actions", async () => {

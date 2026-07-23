@@ -227,10 +227,17 @@ const FIX = {
   user2: { email: "sup-user2@dev-e2e.local", credits: 500 },
   poor: { email: "sup-poor@dev-e2e.local", credits: 0 },
   oauth: { email: "sup-oauth@dev-e2e.local", kakaoId: `sup-oauth-kakao-${runTag}` },
-  verify: { email: "sup-verify@dev-e2e.local", emailVerified: false, verifyToken: `sup-verify-${runId}` },
+  verify: {
+    email: "sup-verify@dev-e2e.local",
+    emailVerified: false,
+    verifyToken: `sup_verify_${runTag}_${"v".repeat(40)}`,
+  },
   sess: { email: "sup-sess@dev-e2e.local" },
   cap: { email: "sup-cap@dev-e2e.local" },
-  cp: { email: "sup-cp@dev-e2e.local" },
+  cp: {
+    email: "sup-cp@dev-e2e.local",
+    resetToken: `sup_reset_${runTag}_${"r".repeat(40)}`,
+  },
   victim: { email: "sup-victim@dev-e2e.local" },
   forgot: { email: "sup-forgot@dev-e2e.local" },
   temp: { email: "sup-temp@dev-e2e.local" },
@@ -277,14 +284,27 @@ await check("setup: fixture logins (admin, user1, user2, poor)", async () => {
 
 // ─────────────────────────────────────────────────────────── auth ──
 
-await check("auth: register tombstone returns 403", async () => {
+await check("auth: email registration validation is active", async () => {
   const bare = new HttpClient("bare-register");
-  const withBody = expectStatus(await bare.request("/api/auth/register", {
+  const invalidEmail = expectStatus(await bare.request("/api/auth/register", {
     method: "POST",
-    json: { email: `sup-new-${runTag}@dev-e2e.local`, password: SUP_PASSWORD },
-  }), 403);
-  const noBody = expectStatus(await bare.request("/api/auth/register", { method: "POST" }), 403);
-  return { withBody: withBody.status, noBody: noBody.status };
+    json: { email: "not-an-email", password: "Password!" },
+  }), 400);
+  const missingSpecial = expectStatus(await bare.request("/api/auth/register", {
+    method: "POST",
+    json: { email: `sup-new-${runTag}@dev-e2e.local`, password: "Password123" },
+  }), 400);
+  const tooShort = expectStatus(await bare.request("/api/auth/register", {
+    method: "POST",
+    json: { email: `sup-new-${runTag}@dev-e2e.local`, password: "Pass!12" },
+  }), 400);
+  const noBody = expectStatus(await bare.request("/api/auth/register", { method: "POST" }), 400);
+  return {
+    invalidEmail: invalidEmail.status,
+    missingSpecial: missingSpecial.status,
+    tooShort: tooShort.status,
+    noBody: noBody.status,
+  };
 });
 
 await check("auth: logout is idempotent with and without a session", async () => {
@@ -303,7 +323,8 @@ await check("auth: logout is idempotent with and without a session", async () =>
 
 await check("auth: email verify token flow (blocked login, invalid, happy)", async () => {
   const preVerify = expectStatus(await login(new HttpClient("verify-pre"), FIX.verify.email), 403);
-  const invalid = expectStatus(await anonymous.request(`/api/auth/verify?token=sup-bogus-${runTag}`), 302, 307);
+  const invalidToken = `sup_bogus_${runTag}_${"x".repeat(40)}`;
+  const invalid = expectStatus(await anonymous.request(`/api/auth/verify?token=${invalidToken}`), 302, 307);
   assert(
     (invalid.headers.location || "").includes("/verify?error=invalid_token"),
     "Invalid token should redirect to /verify?error=invalid_token",
@@ -408,39 +429,39 @@ await check("auth: device cap evicts oldest session (evicted cookie gets 401)", 
   return { evictedStatus: evicted.status, activeSessions: rows.length };
 });
 
-await check("auth: change-password flow (wrong current, weak new, success, revocation)", async () => {
+await check("auth: password reset link flow (validation, success, revocation, one-time use)", async () => {
   const cpA = new HttpClient("cp-A");
   const cpB = new HttpClient("cp-B");
   expectStatus(await login(cpA, FIX.cp.email, SUP_PASSWORD, `SUP-cp-A-${runId}`), 200);
   expectStatus(await login(cpB, FIX.cp.email, SUP_PASSWORD, `SUP-cp-B-${runId}`), 200);
-  const newPassword = `Sup-Changed-${runTag}x9`;
+  const newPassword = `SupReset!${runTag}x9`;
 
-  expectStatus(await cpA.request("/api/auth/change-password", {
+  expectStatus(await anonymous.request("/api/auth/reset-password", {
     method: "POST",
-    json: { currentPassword: "Wrong-Current-123456", newPassword },
+    json: { token: `invalid_${"x".repeat(40)}`, newPassword },
   }), 400);
-  expectStatus(await cpA.request("/api/auth/change-password", {
+  expectStatus(await anonymous.request("/api/auth/reset-password", {
     method: "POST",
-    json: { currentPassword: SUP_PASSWORD, newPassword: "short1" },
+    json: { token: FIX.cp.resetToken, newPassword: "short!" },
   }), 400);
-  expectStatus(await cpA.request("/api/auth/change-password", {
+  expectStatus(await anonymous.request("/api/auth/reset-password", {
     method: "POST",
-    json: { currentPassword: SUP_PASSWORD, newPassword: "abcdefghijkl" },
+    json: { token: FIX.cp.resetToken, newPassword: "Password123" },
   }), 400);
-  expectStatus(await cpA.request("/api/auth/change-password", {
-    method: "POST",
-    json: { currentPassword: SUP_PASSWORD, newPassword: SUP_PASSWORD },
-  }), 400);
-  expectStatus(await cpA.request("/api/auth/change-password", { method: "POST", json: {} }), 400);
+  expectStatus(await anonymous.request("/api/auth/reset-password", { method: "POST", json: {} }), 400);
 
-  const success = expectStatus(await cpA.request("/api/auth/change-password", {
+  const success = expectStatus(await anonymous.request("/api/auth/reset-password", {
     method: "POST",
-    json: { currentPassword: SUP_PASSWORD, newPassword },
+    json: { token: FIX.cp.resetToken, newPassword },
   }), 200);
   expectStatus(await cpB.request("/api/auth/me"), 401);
-  expectStatus(await cpA.request("/api/auth/me"), 200);
+  expectStatus(await cpA.request("/api/auth/me"), 401);
   expectStatus(await login(new HttpClient("cp-old"), FIX.cp.email, SUP_PASSWORD), 401);
   expectStatus(await login(new HttpClient("cp-new"), FIX.cp.email, newPassword, `SUP-cp-new-${runId}`), 200);
+  expectStatus(await anonymous.request("/api/auth/reset-password", {
+    method: "POST",
+    json: { token: FIX.cp.resetToken, newPassword: `${newPassword}Again!` },
+  }), 400);
   return { message: success.data?.message };
 });
 
@@ -468,7 +489,7 @@ await check("auth: forgot-password contract and cooldown", async () => {
     expectStatus(second, 429);
     assert(second.headers["retry-after"] === "60", "429 should carry Retry-After: 60", second.headers);
   } else {
-    // Send failure rolls back temporaryPasswordIssuedAt, so the cooldown may not engage.
+    // Send failure rolls back passwordResetRequestedAt, so the cooldown may not engage.
     assert([429, 502].includes(second.status), `Unexpected second forgot-password status ${second.status}`, second.data);
   }
   return { unknown: unknown.status, first: first.status, second: second.status };
@@ -1164,21 +1185,11 @@ await check("studio: asset ticket upload, confirm, and delete", async () => {
   return { assetId, ref: ticket.ref };
 });
 
-await check("studio: remove-background status and deterministic local 503", async () => {
+await check("studio: remove-background provider status", async () => {
   const status = expectStatus(await user1.request("/api/studio/remove-background"), 200);
-  assert(status.data?.configured === false, "REMOVE_BG_API_KEY should be unset locally", status.data);
-  const form = new FormData();
-  form.append("image", new Blob([PNG_BUFFER], { type: "image/png" }), "sup.png");
-  const before = await balance(user1);
-  const post = expectStatus(await user1.request("/api/studio/remove-background", {
-    method: "POST",
-    body: form,
-    timeoutMs: 120_000,
-  }), 503);
-  assert(post.data?.code === "provider_not_configured", "POST should fail with provider_not_configured", post.data);
-  const after = await balance(user1);
-  assert(after === before, "Unconfigured cutout must not charge credits", { before, after });
-  return { provider: status.data.provider, post: post.data };
+  assert(status.data?.provider === "nano-banana-2", "Cutout should use Nano Banana 2", status.data);
+  assert(typeof status.data?.configured === "boolean", "Configured status should be explicit", status.data);
+  return { provider: status.data.provider, configured: status.data.configured };
 });
 
 // ──────────────────────────────────────────────── generation-jobs ──

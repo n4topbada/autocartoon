@@ -6,8 +6,8 @@ import {
   isStaticPath,
 } from "../src/lib/request-routing";
 
-test("로그인, 법적 고지와 쿠폰 진입 페이지는 비로그인 사용자에게 공개된다", () => {
-  for (const pathname of ["/login", "/verify", "/terms", "/privacy", "/refund", "/coupon/WONY-ABCD-EFGH"]) {
+test("로그인, 비밀번호 재설정, 법적 고지와 쿠폰 진입 페이지는 비로그인 사용자에게 공개된다", () => {
+  for (const pathname of ["/login", "/verify", "/reset-password", "/terms", "/privacy", "/refund", "/coupon/WONY-ABCD-EFGH"]) {
     assert.equal(isPublicRoute(pathname), true, pathname);
     assert.equal(isPublicPageRoute(pathname), true, pathname);
   }

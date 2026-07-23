@@ -61,6 +61,7 @@ export async function runImageGenerationJob(
       backgroundImageId: input.backgroundImageId,
       inputImageUrl: input.inputImage,
       inputImageUrls: input.inputImages,
+      styleReferenceFirst: input.styleReferenceFirst,
       referenceAssetUrls: input.referenceAssets,
       editRegionMode: input.editRegionMode,
       editMaskUrl: input.editMask,
