@@ -170,9 +170,8 @@ npx tsc --noEmit --noUnusedLocals --noUnusedParameters --incremental false
 npx --yes knip --reporter compact
 npx prisma validate
 $env:BUILD_TARGET='cloudrun'
-$runtimeEnv='APP_ORIGIN=https://wonybananabot-272254743773.asia-northeast3.run.app,PRISMA_CONNECTION_LIMIT=5,PRISMA_POOL_TIMEOUT=30'
 npm run build
-gcloud run deploy wonybananabot --source . --project=wonybananabot --region=asia-northeast3 --update-env-vars $runtimeEnv --quiet
+.\scripts\deploy-cloud-run.ps1
 gcloud tasks queues update wony-jobs --project=wonybananabot --location=asia-northeast3 --max-concurrent-dispatches=10 --max-dispatches-per-second=5 --max-attempts=5 --min-backoff=10s --max-backoff=300s --max-doublings=5
 ```
 

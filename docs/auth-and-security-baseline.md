@@ -40,9 +40,9 @@ When a legacy member explicitly links Kakao or Google, or signs in with a provid
 
 ## Canonical Origin
 
-`APP_ORIGIN` is the server-owned canonical public origin used for OAuth callbacks, payment redirects, and email links. The 2026-07-18 audit found that its Cloud Run value accidentally contained two Prisma assignments after the URL. The service value was corrected to exactly `https://wonybananabot-272254743773.asia-northeast3.run.app`.
+`APP_ORIGIN` is the server-owned canonical public origin used for OAuth callbacks, payment redirects, and email links. The same PowerShell argument-parsing issue seen on 2026-07-18 recurred on 2026-07-23 and temporarily broke both Kakao and Google OAuth start routes. The service value was corrected to exactly `https://wonybananabot-272254743773.asia-northeast3.run.app`.
 
-PowerShell deployment commands must pass comma-separated environment updates as one variable or quoted argument. Otherwise shell argument parsing can corrupt a value while still returning a successful deployment.
+Deploy through `scripts/deploy-cloud-run.ps1`. It validates the canonical origin and passes comma-separated environment updates as one quoted argument. Application URL resolution also ignores a malformed `APP_ORIGIN`, emits a value-free structured error once, and falls back through the validated public URL, Cloud Run base URL, and request origin instead of returning OAuth 500 errors.
 
 ## Storage And Browser Baseline
 

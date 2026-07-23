@@ -188,10 +188,11 @@ Client ID와 Client Secret은 Secret Manager의 `google-oauth-client-id`, `googl
 ```powershell
 npx prisma migrate deploy
 $env:BUILD_TARGET='cloudrun'
-$runtimeEnv='APP_ORIGIN=https://wonybananabot-272254743773.asia-northeast3.run.app,PRISMA_CONNECTION_LIMIT=5,PRISMA_POOL_TIMEOUT=30'
 npm run build
-gcloud run deploy wonybananabot --source . --project=wonybananabot --region=asia-northeast3 --update-env-vars $runtimeEnv --quiet
+.\scripts\deploy-cloud-run.ps1
 ```
+
+PowerShell 명령에 쉼표가 든 `--update-env-vars` 값을 직접 인라인하지 않습니다. 위 스크립트가 URL을 먼저 검증하고 환경 변수 묶음을 단일 인자로 전달해 OAuth용 `APP_ORIGIN` 오염을 방지합니다.
 
 운영 마이그레이션은 로컬 DB URL이 아니라 Cloud SQL 소켓이 붙은 Cloud Run Job에서 실행합니다.
 
