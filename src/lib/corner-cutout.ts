@@ -147,7 +147,42 @@ export function findForegroundBounds(
   }
   const minimumReliablePixels = Math.max(8, pixelCount * 0.005);
   if (transparentPixels >= minimumReliablePixels) {
-    return findOpaquePixelBounds(source, width, height);
+    const opaqueBounds = findOpaquePixelBounds(source, width, height);
+    if (!opaqueBounds) return null;
+    const opaqueWidth = opaqueBounds.maxX - opaqueBounds.minX + 1;
+    const opaqueHeight = opaqueBounds.maxY - opaqueBounds.minY + 1;
+    const cropped = new Uint8ClampedArray(opaqueWidth * opaqueHeight * 4);
+    for (let y = 0; y < opaqueHeight; y += 1) {
+      const sourceOffset = ((opaqueBounds.minY + y) * width + opaqueBounds.minX) * 4;
+      const targetOffset = y * opaqueWidth * 4;
+      cropped.set(source.subarray(sourceOffset, sourceOffset + opaqueWidth * 4), targetOffset);
+    }
+    const refined = removeConnectedCornerBackground(
+      cropped,
+      opaqueWidth,
+      opaqueHeight,
+      tolerance
+    );
+    const opaqueArea = opaqueWidth * opaqueHeight;
+    const refinedBounds = findOpaquePixelBounds(refined.pixels, opaqueWidth, opaqueHeight);
+    if (
+      refinedBounds &&
+      refined.retainedPixels > 0 &&
+      refined.removedPixels >= Math.max(8, opaqueArea * 0.15)
+    ) {
+      const refinedArea =
+        (refinedBounds.maxX - refinedBounds.minX + 1) *
+        (refinedBounds.maxY - refinedBounds.minY + 1);
+      if (refinedArea <= opaqueArea * 0.85) {
+        return {
+          minX: opaqueBounds.minX + refinedBounds.minX,
+          minY: opaqueBounds.minY + refinedBounds.minY,
+          maxX: opaqueBounds.minX + refinedBounds.maxX,
+          maxY: opaqueBounds.minY + refinedBounds.maxY,
+        };
+      }
+    }
+    return opaqueBounds;
   }
 
   const cutout = removeConnectedCornerBackground(source, width, height, tolerance);
