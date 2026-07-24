@@ -23,7 +23,7 @@ GitHub: `https://github.com/n4topbada/autocartoon`
 | 항목 | 현재 값 |
 | --- | --- |
 | GCP project | `wonybananabot` |
-| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-24 검증 리비전 `wonybananabot-00050-b6t`, 트래픽 100% |
+| Cloud Run | `wonybananabot`, `asia-northeast3`; 2026-07-24 검증 리비전 `wonybananabot-00058-sfs`, 트래픽 100% |
 | Cloud SQL | `wony-postgres`, PostgreSQL 16; 운영 `autocartoon`, 개발 `autocartoon_dev` |
 | Cloud Tasks | `wony-jobs`, `asia-northeast3`; 동시 10, 초당 5, 최대 5회 재시도 |
 | GCS | `wonybananabot-media`, private. 브라우저 직접 업로드 CORS는 `scripts/gcs-cors.json` 기준 |
@@ -141,9 +141,9 @@ flowchart LR
 - 캐릭터 그림체 참조와 제스처 정체성 참조의 순서를 분리하고 얼굴·머리·체형·의상·소품·고유 색상 보존 지시를 생성 작업까지 전달
 - 캐릭터 수·참고 이미지·프롬프트가 부족한 제스처와 스튜디오 생성 버튼을 사전 비활성화하고 이유를 표시
 - 무료 누끼 미리보기를 원본 해상도 픽셀 판정으로 전환하고 작은 전경 0픽셀 결과 적용을 차단
-- Nano Banana 누끼가 작은 전경을 확대해 처리한 뒤 원본 좌표·크기로 복원하며, 빈 결과는 실패·자동 환불하도록 보강
+- Nano Banana 누끼가 작은 전경을 확대해 처리한 뒤 원본 좌표·크기로 복원한다. 크로마·코너 연결색 후처리와 원본 전경 대비 잔여 배경 검증을 적용하고, 빈 결과나 배경 잔존 결과는 실패·자동 환불한다.
 
-운영 반영 상태: Cloud Run Job 실행 `wony-prisma-migrate-gwgwh`가 `20260723230000_add_password_reset_tokens`까지 총 22개 마이그레이션을 운영 DB `autocartoon`에 적용하고 exit 0으로 완료했다. 2026-07-24 리비전 `wonybananabot-00056-rml`이 트래픽 100%를 받고 있다. 캐릭터·제스처 가변 패널, 참조 정체성 보존 지시, 생성 버튼 사전 검증, 원본 해상도 무료 누끼 미리보기와 작은 전경 보호, Nano Banana 작은 전경 확대·원위치 복원을 반영했다. 로컬에서 2,048×2,048 흰 배경의 작은 검정 전경을 무료 누끼로 처리해 축소 후 4픽셀을 보존하고 배경 291,596픽셀만 제거했으며, 같은 입력의 실제 Nano Banana 누끼도 13크레딧 차감·적용 완료를 확인했다. 운영 로그인 화면은 200, 비인증 `/studio`는 복귀 주소를 보존한 로그인 화면으로 307 전환된다. 새 리비전 Cloud Run ERROR 로그는 0건이다. 로컬 자동 테스트 `144/144`, TypeScript, ESLint와 76개 페이지 프로덕션 빌드를 통과했다. 배포 소스 커밋은 `8710176`이다.
+운영 반영 상태: Cloud Run Job 실행 `wony-prisma-migrate-gwgwh`가 `20260723230000_add_password_reset_tokens`까지 총 22개 마이그레이션을 운영 DB `autocartoon`에 적용하고 exit 0으로 완료했다. 2026-07-24 리비전 `wonybananabot-00058-sfs`가 트래픽 100%를 받고 있다. 캐릭터·제스처 가변 패널, 참조 정체성 보존 지시, 생성 버튼 사전 검증, 원본 해상도 무료 누끼 미리보기와 작은 전경 보호를 반영했다. 운영 UI에서 2,048×2,048 흰 배경의 작은 검정 전경을 무료 누끼와 실제 Nano Banana 누끼로 검증했다. AI가 크로마를 불완전하게 바꾼 결과 및 투명 여백 안의 흰 배경을 전경으로 오인하던 문제를 발견해 연결 배경 후처리, 원본 전경 크기 대비 검증, 투명 여백 내부 재탐지를 추가했다. 최종 결과는 원본 레이어를 숨기고 확대했을 때 잔여 녹색 배경 없이 작은 전경만 보존됐다. 세 번의 실제 AI 호출은 각각 13크레딧 차감, 잔액 전후, 추적 검증 완료 상태로 관리자 감사 화면에 남았다. 테스트 임시 프로젝트는 삭제했고 기존 `새 프로젝트 1`만 보존했다. 운영 로그인 화면은 200, 비인증 `/studio`는 복귀 주소를 보존한 로그인 화면으로 307 전환된다. 최종 리비전의 브라우저 오류 및 Cloud Run ERROR 로그는 0건이다. 로컬 자동 테스트 `147/147`, TypeScript, ESLint와 76개 페이지 프로덕션 빌드를 통과했다. 배포 소스 커밋은 `ea995c2`다.
 
 ## 5. 레퍼런스 대비 기능상 남은 항목
 
