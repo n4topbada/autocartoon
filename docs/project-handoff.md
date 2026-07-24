@@ -138,7 +138,7 @@ flowchart LR
 - 비활성 제스처·배경·보관함 패널의 조회·폴링을 중단해 숨은 네트워크 비용 제거
 - 전체 화면을 톤다운된 밝은 파스텔 팔레트와 현대적인 도구형 버튼으로 전환하고 390px에서 5개 메뉴를 모두 검증
 
-운영 반영 상태: Cloud Run Job 실행 `wony-prisma-migrate-gwgwh`가 `20260723230000_add_password_reset_tokens`까지 총 22개 마이그레이션을 운영 DB `autocartoon`에 적용하고 exit 0으로 완료했다. 리비전 `wonybananabot-00050-b6t`가 트래픽 100%를 받고 있으며, 로그인·비밀번호 재설정·약관/개인정보/환불 페이지는 200, 비인증 API는 401, 운영 비활성 E2E 경로는 404를 반환했다. 카카오·Google·이메일 로그인과 해시 토큰 기반 비밀번호 재설정 폼을 브라우저에서 확인했고, 배포 직후 Cloud Run ERROR 로그와 브라우저 콘솔 오류는 0건이다. 로컬 자동 테스트 `125/125`, TypeScript, ESLint, Prisma 상태 검사와 76개 페이지 프로덕션 빌드를 통과했다. 배포 소스 커밋은 `d2cc114`다.
+운영 반영 상태: Cloud Run Job 실행 `wony-prisma-migrate-gwgwh`가 `20260723230000_add_password_reset_tokens`까지 총 22개 마이그레이션을 운영 DB `autocartoon`에 적용하고 exit 0으로 완료했다. 2026-07-24 리비전 `wonybananabot-00054-hht`가 트래픽 100%를 받고 있다. 배경 전용 장면 생성, 캔버스 자동저장·페이지 배경·다중 선택·페이지 순서, 무료 코너 연결색 누끼와 Nano Banana AI 정밀 누끼를 반영했다. 로컬에서 실제 Nano Banana 배경 생성과 AI 누끼, 무료 누끼를 수행했고 차감·투명 PNG·좌표 보정을 확인했다. 운영 로그인 화면은 200, 비인증 `/studio`는 복귀 주소를 보존한 로그인 화면으로 이동하고 누끼 API는 401을 반환했다. 새 리비전 Cloud Run ERROR 로그는 0건이다. 로컬 자동 테스트 `142/142`, TypeScript, ESLint와 76개 페이지 프로덕션 빌드를 통과했다. 배포 소스 커밋은 `c7a52cd`다.
 
 ## 5. 레퍼런스 대비 기능상 남은 항목
 
