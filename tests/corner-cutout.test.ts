@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  cleanGeneratedCutoutBackground,
   findForegroundBounds,
   getForegroundFocusRegion,
   removeConnectedCornerBackground,
@@ -55,6 +56,44 @@ test("흰 배경의 한 픽셀짜리 검은 전경도 높은 강도에서 보존
   assert.equal(result.retainedPixels, 1);
   assert.equal(result.pixels[(50 * 101 + 50) * 4 + 3], 255);
   assert.equal(result.pixels[3], 0);
+});
+
+test("AI 결과의 흰색·연녹색 잔여 배경을 제거하고 작은 검은 전경은 보존한다", () => {
+  const pixels = image(101, 101, [255, 255, 255, 255]);
+  setPixel(pixels, 101, 50, 50, [0, 0, 0, 255]);
+  for (let y = 24; y <= 76; y += 1) {
+    setPixel(pixels, 101, 28, y, [205, 255, 205, 255]);
+    setPixel(pixels, 101, 72, y, [205, 255, 205, 255]);
+  }
+  setPixel(pixels, 101, 10, 10, [0, 255, 0, 255]);
+
+  const result = cleanGeneratedCutoutBackground(
+    pixels,
+    101,
+    101,
+    [0, 255, 0]
+  );
+
+  assert.equal(result.opaquePixels, 1);
+  assert.equal(result.pixels[(50 * 101 + 50) * 4 + 3], 255);
+  assert.equal(result.pixels[3], 0);
+  assert.equal(result.pixels[(28 * 101 + 50) * 4 + 3], 0);
+  assert.equal(result.pixels[(10 * 101 + 10) * 4 + 3], 0);
+});
+
+test("AI 결과에 크로마가 고립되어 있어도 전역 투명 처리한다", () => {
+  const pixels = image(21, 21, [30, 30, 30, 255]);
+  setPixel(pixels, 21, 10, 10, [0, 255, 0, 255]);
+
+  const result = cleanGeneratedCutoutBackground(
+    pixels,
+    21,
+    21,
+    [0, 255, 0],
+    8
+  );
+
+  assert.equal(result.pixels[(10 * 21 + 10) * 4 + 3], 0);
 });
 
 test("작은 전경은 AI가 놓치지 않도록 여백을 둔 확대 영역을 만든다", () => {

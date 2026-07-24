@@ -20,6 +20,15 @@ export interface PixelRegion {
   height: number;
 }
 
+export type RgbColor = readonly [number, number, number];
+
+export interface GeneratedCutoutCleanupResult {
+  pixels: Uint8ClampedArray;
+  transparentCoverage: number;
+  opaquePixels: number;
+  bounds: PixelBounds | null;
+}
+
 interface CornerColor {
   index: number;
   pixelIndex: number;
@@ -33,6 +42,18 @@ function colorDistance(left: CornerColor, right: CornerColor) {
   if (left.a < 16 && right.a < 16) return 0;
   if (left.a < 16 || right.a < 16) return 441;
   return Math.hypot(left.r - right.r, left.g - right.g, left.b - right.b);
+}
+
+function pixelColorDistance(
+  pixels: Uint8ClampedArray,
+  offset: number,
+  color: RgbColor
+) {
+  return Math.hypot(
+    pixels[offset] - color[0],
+    pixels[offset + 1] - color[1],
+    pixels[offset + 2] - color[2]
+  );
 }
 
 function pixelMatchesBackground(
@@ -167,7 +188,8 @@ export function removeConnectedCornerBackground(
   source: Uint8ClampedArray,
   width: number,
   height: number,
-  requestedTolerance = 42
+  requestedTolerance = 42,
+  additionalBackgroundColors: readonly RgbColor[] = []
 ): CornerCutoutResult {
   if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
     throw new Error("이미지 크기가 올바르지 않습니다.");
@@ -180,6 +202,17 @@ export function removeConnectedCornerBackground(
   const cornerPixelIndexes = [0, width - 1, (height - 1) * width, width * height - 1];
   const corners = cornerPixelIndexes.map((pixelIndex, index) => readCorner(pixels, pixelIndex, index));
   const { seeds, excludedCorner } = selectCornerSeeds(corners, tolerance);
+  const matchingSeeds = [
+    ...seeds,
+    ...additionalBackgroundColors.map((color, index) => ({
+      index: corners.length + index,
+      pixelIndex: -1,
+      r: color[0],
+      g: color[1],
+      b: color[2],
+      a: 255,
+    })),
+  ];
   const toleranceSquared = tolerance * tolerance;
   const visited = new Uint8Array(width * height);
   const queue = new Int32Array(width * height);
@@ -202,7 +235,7 @@ export function removeConnectedCornerBackground(
     head += 1;
     visited[pixelIndex] = 2;
     const offset = pixelIndex * 4;
-    const matchesBackground = pixelMatchesBackground(pixels, offset, seeds, toleranceSquared);
+    const matchesBackground = pixelMatchesBackground(pixels, offset, matchingSeeds, toleranceSquared);
     if (!matchesBackground) continue;
     if (pixels[offset + 3] > 0) removedPixels += 1;
     pixels[offset + 3] = 0;
@@ -228,5 +261,44 @@ export function removeConnectedCornerBackground(
     retainedPixels: Math.max(0, opaquePixels - removedPixels),
     seedCount: seeds.length,
     excludedCorner,
+  };
+}
+
+export function cleanGeneratedCutoutBackground(
+  source: Uint8ClampedArray,
+  width: number,
+  height: number,
+  chromaColor: RgbColor,
+  connectedTolerance = 92
+): GeneratedCutoutCleanupResult {
+  const connected = removeConnectedCornerBackground(
+    source,
+    width,
+    height,
+    connectedTolerance,
+    [chromaColor]
+  );
+  const pixels = connected.pixels;
+  let transparentCoverage = 0;
+  let opaquePixels = 0;
+
+  for (let offset = 0; offset < pixels.length; offset += 4) {
+    let alpha = pixels[offset + 3];
+    const distance = pixelColorDistance(pixels, offset, chromaColor);
+    if (distance <= 42) {
+      alpha = 0;
+    } else if (distance < 115) {
+      alpha = Math.min(alpha, Math.round(((distance - 42) / 73) * 255));
+    }
+    pixels[offset + 3] = alpha;
+    transparentCoverage += (255 - alpha) / 255;
+    if (alpha >= 16) opaquePixels += 1;
+  }
+
+  return {
+    pixels,
+    transparentCoverage,
+    opaquePixels,
+    bounds: findOpaquePixelBounds(pixels, width, height),
   };
 }

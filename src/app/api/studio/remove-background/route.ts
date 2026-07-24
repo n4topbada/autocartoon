@@ -6,6 +6,7 @@ import { IMAGE_MODEL_PRICING } from "@/lib/ai-pricing";
 import { AI_CREDIT_COSTS } from "@/lib/credit-products";
 import { isCreditError, withCreditCharge } from "@/lib/credit-service";
 import {
+  cleanGeneratedCutoutBackground,
   findForegroundBounds,
   findOpaquePixelBounds,
   getForegroundFocusRegion,
@@ -177,30 +178,40 @@ async function makeChromaTransparent(
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
-  const pixels = normalized.data;
-  let transparentPixels = 0;
-
-  for (let offset = 0; offset < pixels.length; offset += 4) {
-    if (pixels[offset + 3] < 245) {
-      transparentPixels += 1;
-      continue;
-    }
-    const distance = colorDistance(pixels[offset], pixels[offset + 1], pixels[offset + 2], chromaRgb);
-    if (distance <= 42) {
-      pixels[offset + 3] = 0;
-      transparentPixels += 1;
-    } else if (distance < 115) {
-      pixels[offset + 3] = Math.min(255, Math.round(((distance - 42) / 73) * 255));
-      transparentPixels += 1;
-    }
-  }
-
-  if (transparentPixels < width * height * 0.005) {
+  const cleanup = cleanGeneratedCutoutBackground(
+    new Uint8ClampedArray(normalized.data),
+    width,
+    height,
+    chromaRgb as readonly [number, number, number]
+  );
+  const pixelCount = width * height;
+  if (cleanup.transparentCoverage < pixelCount * 0.03) {
     throw new Error("AI가 배경을 충분히 분리하지 못했습니다. 다시 시도해주세요.");
   }
-  if (!findOpaquePixelBounds(new Uint8ClampedArray(pixels), width, height)) {
+  if (!cleanup.bounds) {
     throw new Error("AI가 작은 전경 물체를 유지하지 못해 결과를 적용하지 않았습니다. 다시 시도해주세요.");
   }
+  if (sourceBounds) {
+    const sourceArea =
+      (sourceBounds.maxX - sourceBounds.minX + 1) *
+      (sourceBounds.maxY - sourceBounds.minY + 1);
+    const sourceAreaRatio = sourceArea / pixelCount;
+    const opaqueRatio = cleanup.opaquePixels / pixelCount;
+    const boundsArea =
+      (cleanup.bounds.maxX - cleanup.bounds.minX + 1) *
+      (cleanup.bounds.maxY - cleanup.bounds.minY + 1);
+    const boundsAreaRatio = boundsArea / pixelCount;
+    const maximumOpaqueRatio = Math.min(0.97, Math.max(0.4, sourceAreaRatio * 4));
+    const maximumBoundsRatio = Math.min(0.98, Math.max(0.55, sourceAreaRatio * 6));
+    if (opaqueRatio > maximumOpaqueRatio || boundsAreaRatio > maximumBoundsRatio) {
+      throw new Error("AI 누끼 결과에 배경이 남아 있어 결과를 적용하지 않았습니다. 다시 시도해주세요.");
+    }
+  }
+  const pixels = Buffer.from(
+    cleanup.pixels.buffer,
+    cleanup.pixels.byteOffset,
+    cleanup.pixels.byteLength
+  );
   const aligned = await alignForeground(pixels, width, height, sourceBounds);
   return sharp(aligned, { raw: { width, height, channels: 4 } }).png().toBuffer();
 }
