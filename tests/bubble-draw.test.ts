@@ -29,7 +29,7 @@ function fakeContext() {
 }
 
 test("speech balloon presets are unique and carry their intended defaults", () => {
-  assert.equal(SPEECH_BUBBLE_PRESETS.length, 11);
+  assert.equal(SPEECH_BUBBLE_PRESETS.length, 12);
   assert.equal(new Set(SPEECH_BUBBLE_PRESETS.map((preset) => preset.type)).size, SPEECH_BUBBLE_PRESETS.length);
 
   for (const preset of SPEECH_BUBBLE_PRESETS) {
@@ -41,7 +41,7 @@ test("speech balloon presets are unique and carry their intended defaults", () =
 });
 
 test("every pointer balloon draws its tail inside the same outline", () => {
-  for (const preset of SPEECH_BUBBLE_PRESETS.filter((item) => item.type !== "thought")) {
+  for (const preset of SPEECH_BUBBLE_PRESETS.filter((item) => item.tailEnabled && item.type !== "thought")) {
     const { context, calls } = fakeContext();
     const bubble = {
       ...createBubble(preset.type, 100, 100),
@@ -59,6 +59,26 @@ test("every pointer balloon draws its tail inside the same outline", () => {
     assert.equal(calls.filter((call) => call.name === "fill").length, 1, `${preset.type} drew split fills`);
     assert.ok(calls.filter((call) => call.name === "stroke").length >= 1, `${preset.type} has no visible outline`);
   }
+});
+
+test("radial thought balloon uses a hidden ellipse and dense separated tapered lines", () => {
+  const { context, calls } = fakeContext();
+  const bubble = {
+    ...createBubble("radialThought", 120, 100),
+    id: "radial-thought-fixture",
+    text: "",
+    width: 240,
+    height: 160,
+  };
+
+  drawBubble(context, bubble);
+
+  assert.equal(bubble.tailEnabled, false);
+  assert.equal(calls.filter((call) => call.name === "ellipse").length, 1);
+  assert.equal(calls.filter((call) => call.name === "stroke").length, 0);
+  assert.equal(calls.filter((call) => call.name === "fill").length, 2);
+  assert.ok(calls.filter((call) => call.name === "closePath").length >= 100);
+  assert.ok(calls.filter((call) => call.name === "lineTo").length >= 400);
 });
 
 test("thought balloon draws one cloud body and three intentional thought bubbles", () => {

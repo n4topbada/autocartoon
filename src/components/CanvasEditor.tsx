@@ -4391,13 +4391,13 @@ export default function CanvasEditor({
                         <label className={styles.optionLabel}>모양</label>
                         <div className={styles.choiceGrid}>{SPEECH_BUBBLE_PRESETS.map((preset) => <button key={preset.type} className={selectedSpeechBubble.type === preset.type ? styles.optionActive : ""} title={preset.description} onClick={() => updateBubble(selectedSpeechBubble.id, getSpeechBubblePresetPatch(preset.type))}>{preset.label}</button>)}</div>
                         <div className={styles.twoColumnFields}><label>W<input type="number" min={40} value={Math.round(selectedSpeechBubble.width)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { width: Number(event.target.value) })} /></label><label>H<input type="number" min={30} value={Math.round(selectedSpeechBubble.height)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { height: Number(event.target.value) })} /></label></div>
-                        <label className={styles.rangeLabel}><span>모불모불</span><b>{Math.round((selectedSpeechBubble.roughness || 0) * 100)}</b></label><input type="range" min={0} max={100} value={Math.round((selectedSpeechBubble.roughness || 0) * 100)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { roughness: Number(event.target.value) / 100 })} />
-                        <label className={styles.rangeLabel}><span>구불구불</span><b>{Math.round((selectedSpeechBubble.wobble || 0) * 100)}</b></label><input type="range" min={0} max={100} value={Math.round((selectedSpeechBubble.wobble || 0) * 100)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { wobble: Number(event.target.value) / 100 })} />
+                        <label className={styles.rangeLabel}><span>{selectedSpeechBubble.type === "radialThought" ? "선 길이 변화" : "모불모불"}</span><b>{Math.round((selectedSpeechBubble.roughness || 0) * 100)}</b></label><input type="range" min={0} max={100} value={Math.round((selectedSpeechBubble.roughness || 0) * 100)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { roughness: Number(event.target.value) / 100 })} />
+                        <label className={styles.rangeLabel}><span>{selectedSpeechBubble.type === "radialThought" ? "배치 불규칙도" : "구불구불"}</span><b>{Math.round((selectedSpeechBubble.wobble || 0) * 100)}</b></label><input type="range" min={0} max={100} value={Math.round((selectedSpeechBubble.wobble || 0) * 100)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { wobble: Number(event.target.value) / 100 })} />
                       </section>
                       <section className={styles.optionSection}>
                         <label className={styles.optionLabel}>선</label>
                         <div className={styles.colorFieldRow}><input type="color" value={selectedSpeechBubble.strokeColor === "transparent" ? "#000000" : selectedSpeechBubble.strokeColor} onChange={(event) => updateBubble(selectedSpeechBubble.id, { strokeColor: event.target.value })} /><span>#</span><input value={(selectedSpeechBubble.strokeColor === "transparent" ? "000000" : selectedSpeechBubble.strokeColor.slice(1)).toUpperCase()} maxLength={6} onChange={(event) => { const value = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6); if (value.length === 6) updateBubble(selectedSpeechBubble.id, { strokeColor: `#${value}` }); }} /></div>
-                        <label className={styles.rangeLabel}><span>두께</span><b>{selectedSpeechBubble.strokeWidth}px</b></label><input type="range" min={0} max={16} value={selectedSpeechBubble.strokeWidth} onChange={(event) => updateBubble(selectedSpeechBubble.id, { strokeWidth: Number(event.target.value) })} />
+                        <label className={styles.rangeLabel}><span>두께</span><b>{selectedSpeechBubble.strokeWidth}px</b></label><input type="range" min={0} max={16} step={0.25} value={selectedSpeechBubble.strokeWidth} onChange={(event) => updateBubble(selectedSpeechBubble.id, { strokeWidth: Number(event.target.value) })} />
                         <select value={selectedSpeechBubble.strokeStyle || "solid"} onChange={(event) => updateBubble(selectedSpeechBubble.id, { strokeStyle: event.target.value as SpeechBubble['strokeStyle'] })}><option value="solid">실선</option><option value="dashed">파선</option><option value="dotted">점선</option><option value="rough">손그림</option></select>
                         <label className={styles.rangeLabel}><span>선 투명도</span><b>{Math.round((selectedSpeechBubble.strokeOpacity ?? 1) * 100)}%</b></label><input type="range" min={0} max={100} value={Math.round((selectedSpeechBubble.strokeOpacity ?? 1) * 100)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { strokeOpacity: Number(event.target.value) / 100 })} />
                       </section>
@@ -4405,8 +4405,8 @@ export default function CanvasEditor({
                         <label className={styles.optionLabel}>채움</label>
                         <div className={styles.colorFieldRow}><input type="color" value={selectedSpeechBubble.fillColor === "transparent" ? "#ffffff" : selectedSpeechBubble.fillColor} onChange={(event) => updateBubble(selectedSpeechBubble.id, { fillColor: event.target.value })} /><span>#</span><input value={(selectedSpeechBubble.fillColor === "transparent" ? "FFFFFF" : selectedSpeechBubble.fillColor.slice(1)).toUpperCase()} maxLength={6} onChange={(event) => { const value = event.target.value.replace(/[^0-9a-f]/gi, "").slice(0, 6); if (value.length === 6) updateBubble(selectedSpeechBubble.id, { fillColor: `#${value}` }); }} /></div>
                         <label className={styles.rangeLabel}><span>내부 투명도</span><b>{Math.round((selectedSpeechBubble.fillOpacity ?? 1) * 100)}%</b></label><input type="range" min={0} max={100} value={Math.round((selectedSpeechBubble.fillOpacity ?? 1) * 100)} onChange={(event) => updateBubble(selectedSpeechBubble.id, { fillOpacity: Number(event.target.value) / 100 })} />
-                        <label className={styles.checkboxLabel}><input type="checkbox" checked={selectedSpeechBubble.tailEnabled} onChange={(event) => updateBubble(selectedSpeechBubble.id, { tailEnabled: event.target.checked })} /> 꼬리</label>
-                        {selectedSpeechBubble.tailEnabled && <><label className={styles.rangeLabel}><span>꼬리 폭</span><b>{selectedSpeechBubble.tailWidth}px</b></label><input type="range" min={8} max={96} value={selectedSpeechBubble.tailWidth} onChange={(event) => updateBubble(selectedSpeechBubble.id, { tailWidth: Number(event.target.value) })} /></>}
+                        {selectedSpeechBubble.type !== "radialThought" && <label className={styles.checkboxLabel}><input type="checkbox" checked={selectedSpeechBubble.tailEnabled} onChange={(event) => updateBubble(selectedSpeechBubble.id, { tailEnabled: event.target.checked })} /> 꼬리</label>}
+                        {selectedSpeechBubble.type !== "radialThought" && selectedSpeechBubble.tailEnabled && <><label className={styles.rangeLabel}><span>꼬리 폭</span><b>{selectedSpeechBubble.tailWidth}px</b></label><input type="range" min={8} max={96} value={selectedSpeechBubble.tailWidth} onChange={(event) => updateBubble(selectedSpeechBubble.id, { tailWidth: Number(event.target.value) })} /></>}
                         {customBubbleOpen ? (
                           <>
                             <div className={styles.customGeneratorActions}>
@@ -5161,7 +5161,7 @@ export default function CanvasEditor({
                             <div className={styles.bubblePopupRow}>
                               <label className={styles.numericField}><span>W</span><input type="number" min={40} max={canvasW * 2} value={Math.round(selectedBubble.width)} onChange={(event) => updateBubble(selectedBubble.id, { width: Number(event.target.value) })} /></label>
                               <label className={styles.numericField}><span>H</span><input type="number" min={30} max={canvasH * 2} value={Math.round(selectedBubble.height)} onChange={(event) => updateBubble(selectedBubble.id, { height: Number(event.target.value) })} /></label>
-                              <label className={styles.toggleCompact}><input type="checkbox" checked={selectedBubble.tailEnabled} onChange={(event) => updateBubble(selectedBubble.id, { tailEnabled: event.target.checked })} /> 꼬리</label>
+                              {selectedBubble.type !== "radialThought" && <label className={styles.toggleCompact}><input type="checkbox" checked={selectedBubble.tailEnabled} onChange={(event) => updateBubble(selectedBubble.id, { tailEnabled: event.target.checked })} /> 꼬리</label>}
                             </div>
                             <div className={styles.bubblePopupRow}>
                               <span className={styles.bubblePopupLabel}>선</span>
@@ -5177,11 +5177,11 @@ export default function CanvasEditor({
                               </div>
                             )}
                             <div className={styles.bubblePopupRow}>
-                              <span className={styles.bubblePopupLabel}>모불모불</span>
+                              <span className={styles.bubblePopupLabel}>{selectedBubble.type === "radialThought" ? "선 길이 변화" : "모불모불"}</span>
                               <input type="range" min={0} max={100} value={Math.round((selectedBubble.roughness || 0) * 100)} onChange={(event) => updateBubble(selectedBubble.id, { roughness: Number(event.target.value) / 100 })} />
                             </div>
                             <div className={styles.bubblePopupRow}>
-                              <span className={styles.bubblePopupLabel}>구불구불</span>
+                              <span className={styles.bubblePopupLabel}>{selectedBubble.type === "radialThought" ? "배치 불규칙도" : "구불구불"}</span>
                               <input type="range" min={0} max={100} value={Math.round((selectedBubble.wobble || 0) * 100)} onChange={(event) => updateBubble(selectedBubble.id, { wobble: Number(event.target.value) / 100 })} />
                             </div>
                             <div className={styles.bubblePopupRow}>
@@ -5192,7 +5192,7 @@ export default function CanvasEditor({
                               <span className={styles.bubblePopupLabel}>내부 투명도</span>
                               <input type="range" min={0} max={100} value={Math.round((selectedBubble.fillOpacity ?? 1) * 100)} onChange={(event) => updateBubble(selectedBubble.id, { fillOpacity: Number(event.target.value) / 100 })} />
                             </div>
-                            {selectedBubble.tailEnabled && (
+                            {selectedBubble.type !== "radialThought" && selectedBubble.tailEnabled && (
                               <div className={styles.bubblePopupRow}>
                                 <span className={styles.bubblePopupLabel}>꼬리 폭</span>
                                 <input type="range" min={8} max={96} value={selectedBubble.tailWidth} onChange={(event) => updateBubble(selectedBubble.id, { tailWidth: Number(event.target.value) })} />
@@ -5334,7 +5334,7 @@ export default function CanvasEditor({
                         </div>
                         <div className={styles.bubblePopupRow}>
                           <span className={styles.bubblePopupLabel}>두께</span>
-                          <input type="range" min={1} max={8} value={selectedBubble.strokeWidth} onChange={(e) => updateBubble(selectedBubble.id, { strokeWidth: Number(e.target.value) })} style={{ width: 80 }} />
+                          <input type="range" min={1} max={8} step={0.25} value={selectedBubble.strokeWidth} onChange={(e) => updateBubble(selectedBubble.id, { strokeWidth: Number(e.target.value) })} style={{ width: 80 }} />
                         </div>
                         <div className={styles.bubblePopupRow}>
                           <span className={styles.bubblePopupLabel}>투명도</span>

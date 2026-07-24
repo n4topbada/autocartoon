@@ -1,5 +1,5 @@
 /**
- * 말풍선 Canvas 2D 드로잉 함수 (5종)
+ * 말풍선과 캔버스 도형을 그리는 Canvas 2D 렌더러.
  */
 
 export type BubbleType =
@@ -8,6 +8,7 @@ export type BubbleType =
   | "whisper"
   | "wavy"
   | "thought"
+  | "radialThought"
   | "spiky"
   | "angry"
   | "needle"
@@ -86,6 +87,7 @@ export const SPEECH_BUBBLE_PRESETS = [
   { type: "whisper", label: "속삭임", description: "작고 조용한 목소리", tailEnabled: true, strokeStyle: "dashed", strokeWidth: 2 },
   { type: "wavy", label: "떨리는 말", description: "불안하거나 힘없는 목소리", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.25 },
   { type: "thought", label: "생각", description: "말하지 않은 속마음", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.5 },
+  { type: "radialThought", label: "집중선 속마음", description: "촘촘한 방사선으로 강조한 속마음", tailEnabled: false, strokeStyle: "solid", strokeWidth: 1.35, roughness: 0.32, wobble: 0.22 },
   { type: "cloud", label: "구름 대사", description: "들뜨거나 몽글한 대사", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.5 },
   { type: "spiky", label: "외침", description: "크게 외치는 목소리", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.75 },
   { type: "angry", label: "비명", description: "격한 비명과 충격", tailEnabled: true, strokeStyle: "solid", strokeWidth: 3 },
@@ -99,6 +101,8 @@ export const SPEECH_BUBBLE_PRESETS = [
   tailEnabled: boolean;
   strokeStyle: BubbleStrokeStyle;
   strokeWidth: number;
+  roughness?: number;
+  wobble?: number;
 }>;
 
 export type SpeechBubblePresetType = (typeof SPEECH_BUBBLE_PRESETS)[number]["type"];
@@ -114,6 +118,8 @@ export function getSpeechBubblePresetPatch(type: SpeechBubblePresetType): Partia
     tailEnabled: preset.tailEnabled,
     strokeStyle: preset.strokeStyle,
     strokeWidth: preset.strokeWidth,
+    roughness: "roughness" in preset ? preset.roughness : 0,
+    wobble: "wobble" in preset ? preset.wobble : 0,
   };
 }
 
@@ -201,8 +207,8 @@ export function createBubble(type: BubbleType, x: number, y: number): SpeechBubb
     cornerRadius: 24,
     gradientStop: 50,
     gradientAngle: 0,
-    roughness: 0,
-    wobble: 0,
+    roughness: speechPreset && "roughness" in speechPreset ? speechPreset.roughness : 0,
+    wobble: speechPreset && "wobble" in speechPreset ? speechPreset.wobble : 0,
     fillOpacity: 1,
     strokeOpacity: 1,
     rotation: 0,
@@ -223,6 +229,7 @@ export function drawBubble(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
     case "whisper": drawClassic(ctx, b); break;
     case "wavy": drawWavy(ctx, b); break;
     case "thought": drawThought(ctx, b); break;
+    case "radialThought": drawRadialThought(ctx, b); break;
     case "spiky":   drawSpiky(ctx, b); break;
     case "angry":   drawAngry(ctx, b); break;
     case "needle":  drawNeedle(ctx, b); break;
@@ -556,6 +563,74 @@ function radialPoints(bubble: SpeechBubble, radii: readonly number[]) {
   });
 }
 
+function ellipsePerimeter(rx: number, ry: number) {
+  const sum = Math.max(1, rx + ry);
+  const h = ((rx - ry) ** 2) / (sum ** 2);
+  return Math.PI * sum * (1 + (3 * h) / (10 + Math.sqrt(4 - 3 * h)));
+}
+
+function ellipseArcAngles(rx: number, ry: number, count: number) {
+  const steps = Math.max(720, count * 6);
+  const cumulative = new Float64Array(steps + 1);
+  let previousX = rx;
+  let previousY = 0;
+
+  for (let step = 1; step <= steps; step += 1) {
+    const angle = (step / steps) * Math.PI * 2;
+    const x = Math.cos(angle) * rx;
+    const y = Math.sin(angle) * ry;
+    cumulative[step] = cumulative[step - 1] + Math.hypot(x - previousX, y - previousY);
+    previousX = x;
+    previousY = y;
+  }
+
+  const total = cumulative[steps];
+  const angles: number[] = [];
+  let cursor = 1;
+  for (let index = 0; index < count; index += 1) {
+    const target = ((index + 0.37) / count) * total;
+    while (cursor < steps && cumulative[cursor] < target) cursor += 1;
+    const lower = cumulative[cursor - 1];
+    const upper = cumulative[cursor];
+    const amount = upper > lower ? (target - lower) / (upper - lower) : 0;
+    angles.push(((cursor - 1 + amount) / steps) * Math.PI * 2);
+  }
+  return angles;
+}
+
+function stableBubbleSeed(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = Math.imul(hash ^ value.charCodeAt(index), 16777619);
+  }
+  return hash >>> 0;
+}
+
+function stableUnit(seed: number, index: number, channel: number) {
+  let hash = (seed ^ Math.imul(index + 1, -1640531527) ^ Math.imul(channel + 1, -2048144789)) >>> 0;
+  hash = Math.imul(hash ^ (hash >>> 16), 2246822507);
+  hash = Math.imul(hash ^ (hash >>> 13), 3266489909);
+  return ((hash ^ (hash >>> 16)) >>> 0) / 4294967295;
+}
+
+function distanceToOuterEllipse(
+  point: BubblePoint,
+  normal: BubblePoint,
+  outerRx: number,
+  outerRy: number
+) {
+  const inverseRxSquared = 1 / (outerRx * outerRx);
+  const inverseRySquared = 1 / (outerRy * outerRy);
+  const a = normal.x * normal.x * inverseRxSquared + normal.y * normal.y * inverseRySquared;
+  const b = 2 * (
+    point.x * normal.x * inverseRxSquared
+    + point.y * normal.y * inverseRySquared
+  );
+  const c = point.x * point.x * inverseRxSquared + point.y * point.y * inverseRySquared - 1;
+  const discriminant = Math.max(0, b * b - 4 * a * c);
+  return Math.max(1, (-b + Math.sqrt(discriminant)) / (2 * a));
+}
+
 function traceSmoothRadialOutline(
   ctx: CanvasRenderingContext2D,
   bubble: SpeechBubble,
@@ -754,14 +829,25 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
 function drawBubbleText(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
   const fontSize = Math.max(8, bubble.fontSize ?? 24);
   const padding = Math.max(10, fontSize * 0.65);
-  const maxWidth = Math.max(20, bubble.width - padding * 2);
+  const textAreaWidth = bubble.type === "radialThought" ? bubble.width * 0.68 : bubble.width;
+  const textAreaHeight = bubble.type === "radialThought" ? bubble.height * 0.62 : bubble.height;
+  const maxWidth = Math.max(20, textAreaWidth - padding * 2);
   const lineHeight = fontSize * (bubble.lineHeightScale ?? 1.28);
   const family = bubble.fontFamily || "sans-serif";
   const weight = bubble.fontWeight === "bold" ? 700 : bubble.fontWeight === "normal" || bubble.fontWeight === undefined ? 400 : bubble.fontWeight;
   const italic = bubble.fontItalic ? "italic " : "";
   ctx.font = `${italic}${weight} ${fontSize}px ${family}`;
   if (bubble.textRuns?.length) {
-    drawRichBubbleText(ctx, bubble, { fontSize, padding, maxWidth, lineHeight, family, weight });
+    drawRichBubbleText(ctx, bubble, {
+      fontSize,
+      padding,
+      maxWidth,
+      lineHeight,
+      family,
+      weight,
+      textAreaWidth,
+      textAreaHeight,
+    });
     return;
   }
   // 자간(letterSpacing)은 최신 Canvas API. 지원 시에만 적용한다.
@@ -772,12 +858,12 @@ function drawBubbleText(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
   ctx.textAlign = bubble.textAlign ?? "center";
   ctx.textBaseline = "middle";
   const lines = wrapText(ctx, bubble.text ?? "", maxWidth);
-  const visibleLines = lines.slice(0, Math.max(1, Math.floor((bubble.height - padding) / lineHeight)));
+  const visibleLines = lines.slice(0, Math.max(1, Math.floor((textAreaHeight - padding) / lineHeight)));
   const startY = bubble.y - ((visibleLines.length - 1) * lineHeight) / 2 + (bubble.baselineOffset ?? 0);
   const textX = bubble.textAlign === "left"
-    ? bubble.x - bubble.width / 2 + padding
+    ? bubble.x - textAreaWidth / 2 + padding
     : bubble.textAlign === "right"
-      ? bubble.x + bubble.width / 2 - padding
+      ? bubble.x + textAreaWidth / 2 - padding
       : bubble.x;
   const hasOutline = Boolean(bubble.outlineColor && (bubble.outlineWidth ?? 0) > 0);
   visibleLines.forEach((line, index) => {
@@ -808,7 +894,16 @@ function drawBubbleText(ctx: CanvasRenderingContext2D, bubble: SpeechBubble) {
 function drawRichBubbleText(
   ctx: CanvasRenderingContext2D,
   bubble: SpeechBubble,
-  metrics: { fontSize: number; padding: number; maxWidth: number; lineHeight: number; family: string; weight: number }
+  metrics: {
+    fontSize: number;
+    padding: number;
+    maxWidth: number;
+    lineHeight: number;
+    family: string;
+    weight: number;
+    textAreaWidth: number;
+    textAreaHeight: number;
+  }
 ) {
   const text = bubble.text ?? "";
   const spacing = bubble.letterSpacing ?? 0;
@@ -853,7 +948,7 @@ function drawRichBubbleText(
     lineWidths[lineIndex] += width;
   }
 
-  const maxLines = Math.max(1, Math.floor((bubble.height - metrics.padding) / metrics.lineHeight));
+  const maxLines = Math.max(1, Math.floor((metrics.textAreaHeight - metrics.padding) / metrics.lineHeight));
   const visibleLines = lines.slice(0, maxLines);
   const startY = bubble.y - ((visibleLines.length - 1) * metrics.lineHeight) / 2;
   ctx.textAlign = "left";
@@ -862,9 +957,9 @@ function drawRichBubbleText(
   visibleLines.forEach((line, lineIndex) => {
     const width = lineWidths[lineIndex];
     let x = bubble.textAlign === "left"
-      ? bubble.x - bubble.width / 2 + metrics.padding
+      ? bubble.x - metrics.textAreaWidth / 2 + metrics.padding
       : bubble.textAlign === "right"
-        ? bubble.x + bubble.width / 2 - metrics.padding - width
+        ? bubble.x + metrics.textAreaWidth / 2 - metrics.padding - width
         : bubble.x - width / 2;
     const baseY = startY + lineIndex * metrics.lineHeight;
     for (const glyph of line) {
@@ -1134,6 +1229,78 @@ function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
       }
     }
   }
+}
+
+// 집중선 속마음: 보이지 않는 타원 둘레에 법선 방향의 분리된 선만 배치한다.
+function drawRadialThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
+  const outerRx = Math.max(8, b.width / 2);
+  const outerRy = Math.max(8, b.height / 2);
+  const innerRx = outerRx * 0.74;
+  const innerRy = outerRy * 0.68;
+
+  ctx.beginPath();
+  ctx.ellipse(b.x, b.y, innerRx, innerRy, 0, 0, Math.PI * 2);
+  ctx.closePath();
+  doFill(ctx, b);
+
+  if (b.strokeColor === "transparent" || b.strokeWidth <= 0) return;
+
+  const roughness = Math.max(0, Math.min(1, b.roughness ?? 0.32));
+  const wobble = Math.max(0, Math.min(1, b.wobble ?? 0.22));
+  const spacing = Math.max(2.65, Math.min(4.4, 2.7 + b.strokeWidth * 0.34));
+  const lineCount = Math.max(72, Math.min(360, Math.round(ellipsePerimeter(innerRx, innerRy) / spacing)));
+  const baseAngles = ellipseArcAngles(innerRx, innerRy, lineCount);
+  const seed = stableBubbleSeed(b.id);
+
+  ctx.save();
+  ctx.globalAlpha *= Math.max(0, Math.min(1, b.strokeOpacity ?? 1));
+  ctx.fillStyle = b.strokeColor;
+  ctx.beginPath();
+
+  for (let index = 0; index < lineCount; index += 1) {
+    const jitter = (stableUnit(seed, index, 0) - 0.5) * (Math.PI * 2 / lineCount) * wobble * 0.9;
+    const angle = baseAngles[index] + jitter;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    const point = { x: cosine * innerRx, y: sine * innerRy };
+    const rawNormal = { x: cosine / innerRx, y: sine / innerRy };
+    const normalLength = Math.max(0.0001, Math.hypot(rawNormal.x, rawNormal.y));
+    const normal = { x: rawNormal.x / normalLength, y: rawNormal.y / normalLength };
+    const tangent = { x: -normal.y, y: normal.x };
+    const availableLength = distanceToOuterEllipse(point, normal, outerRx, outerRy);
+    const startOffset = (stableUnit(seed, index, 1) - 0.5) * (0.7 + roughness * 1.7);
+    const lengthFactor = Math.max(
+      0.48,
+      Math.min(
+        0.98,
+        0.64
+          + stableUnit(seed, index, 2) * 0.28
+          + (stableUnit(seed, index, 3) - 0.5) * roughness * 0.2
+      )
+    );
+    const start = {
+      x: b.x + point.x + normal.x * startOffset,
+      y: b.y + point.y + normal.y * startOffset,
+    };
+    const end = {
+      x: start.x + normal.x * availableLength * lengthFactor,
+      y: start.y + normal.y * availableLength * lengthFactor,
+    };
+    const middle = lerpPoint(start, end, 0.62);
+    const width = Math.max(0.55, b.strokeWidth * (0.54 + stableUnit(seed, index, 4) * 0.54));
+    const halfInnerWidth = width * 0.5;
+    const halfMiddleWidth = width * (0.2 + stableUnit(seed, index, 5) * 0.11);
+
+    ctx.moveTo(start.x - tangent.x * halfInnerWidth, start.y - tangent.y * halfInnerWidth);
+    ctx.lineTo(start.x + tangent.x * halfInnerWidth, start.y + tangent.y * halfInnerWidth);
+    ctx.lineTo(middle.x + tangent.x * halfMiddleWidth, middle.y + tangent.y * halfMiddleWidth);
+    ctx.lineTo(end.x, end.y);
+    ctx.lineTo(middle.x - tangent.x * halfMiddleWidth, middle.y - tangent.y * halfMiddleWidth);
+    ctx.closePath();
+  }
+
+  ctx.fill();
+  ctx.restore();
 }
 
 // ═══════════════ 3. spiky (비대칭 뾰족 외침) ═══════════════

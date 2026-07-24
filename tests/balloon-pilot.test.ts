@@ -11,6 +11,7 @@ const PILOT_NAMES = [
   "whisper",
   "wavy",
   "thought",
+  "radial-thought",
   "cloud",
   "shout",
   "scream",
@@ -134,6 +135,33 @@ test("pilot thought balloon keeps one body and three intentional thought bubbles
   assert.ok(small[3].area >= 8, "the smallest thought bubble must remain legible");
 });
 
+test("radial thought master keeps a blank oval surrounded by dense lines at 360 degrees", async () => {
+  const svg = await readFile(new URL("radial-thought.svg", PILOT_DIR), "utf8");
+  assert.ok((svg.match(/M\d/g) ?? []).length >= 120, "radial thought needs a dense line field");
+  assert.match(svg, /<ellipse[^>]+fill="#fff"[^>]*\/>/);
+
+  const { data, info } = await sharp(fileURLToPath(new URL("radial-thought.svg", PILOT_DIR)))
+    .resize({ width: 180 })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const darkCount = (left: number, top: number, right: number, bottom: number) => {
+    let count = 0;
+    for (let y = top; y < bottom; y += 1) {
+      for (let x = left; x < right; x += 1) {
+        const offset = (y * info.width + x) * info.channels;
+        if (data[offset + 3] > 120 && data[offset] < 80 && data[offset + 1] < 80 && data[offset + 2] < 80) count += 1;
+      }
+    }
+    return count;
+  };
+
+  assert.ok(darkCount(45, 4, 135, 31) > 20, "top radial lines disappeared");
+  assert.ok(darkCount(45, 94, 135, 124) > 20, "bottom radial lines disappeared");
+  assert.ok(darkCount(5, 30, 38, 96) > 20, "left radial lines disappeared");
+  assert.ok(darkCount(142, 30, 179, 96) > 20, "right radial lines disappeared");
+});
+
 test("pilot SVG masters preserve stroke width while scaling", async () => {
   for (const name of PILOT_NAMES) {
     const svg = await readFile(new URL(`${name}.svg`, PILOT_DIR), "utf8");
@@ -151,5 +179,5 @@ test("pilot gallery exposes every approved balloon master", async () => {
   for (const name of PILOT_NAMES) {
     assert.match(html, new RegExp(`\\["${name}",`));
   }
-  assert.match(html, /11종/);
+  assert.match(html, /12종/);
 });
