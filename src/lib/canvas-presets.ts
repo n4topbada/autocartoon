@@ -35,10 +35,11 @@ interface CanvasPresetLayer extends Record<string, unknown> {
 }
 
 export interface CanvasPresetDocument extends Record<string, unknown> {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   aspect: string;
   width: number;
   height: number;
+  pageBackground?: Record<string, unknown>;
   layers: CanvasPresetLayer[];
 }
 
@@ -238,12 +239,26 @@ export function createCanvasPresetDocument(options: {
       pixelUrl: options.imageUrl,
     });
   }
-  return { version: 2, aspect: options.aspect, width, height, layers };
+  return {
+    version: 3,
+    aspect: options.aspect,
+    width,
+    height,
+    pageBackground: {
+      type: "solid",
+      color: "#ffffff",
+      color2: "#dbeafe",
+      angle: 0,
+      stop: 50,
+      texture: "paper",
+    },
+    layers,
+  };
 }
 
 export function parseCanvasPresetDocument(value: unknown): CanvasPresetDocument | null {
   if (!isRecord(value) || !Array.isArray(value.layers)) return null;
-  if ((value.version !== 1 && value.version !== 2) || typeof value.width !== "number" || typeof value.height !== "number") return null;
+  if ((value.version !== 1 && value.version !== 2 && value.version !== 3) || typeof value.width !== "number" || typeof value.height !== "number") return null;
   const documentWidth = value.width;
   const documentHeight = value.height;
   const layers = value.layers.filter(isRecord).map((layer, index) => ({

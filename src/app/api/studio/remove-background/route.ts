@@ -5,6 +5,11 @@ import { AuthError, requireAuth } from "@/lib/auth";
 import { IMAGE_MODEL_PRICING } from "@/lib/ai-pricing";
 import { AI_CREDIT_COSTS } from "@/lib/credit-products";
 import { isCreditError, withCreditCharge } from "@/lib/credit-service";
+import {
+  findForegroundBounds,
+  findOpaquePixelBounds,
+  type PixelBounds,
+} from "@/lib/corner-cutout";
 import { generateContent, type GeminiRequest } from "@/lib/gemini";
 import { isGoogleImageConfigured } from "@/lib/image-generation";
 import { getPublicPlatformAIError } from "@/lib/platform-ai";
@@ -25,6 +30,37 @@ type CutoutAspectRatio = NonNullable<GeminiRequest["aspectRatio"]>;
 
 function colorDistance(r: number, g: number, b: number, target: readonly number[]) {
   return Math.hypot(r - target[0], g - target[1], b - target[2]);
+}
+
+async function alignForeground(
+  pixels: Buffer,
+  width: number,
+  height: number,
+  sourceBounds: PixelBounds | null
+) {
+  const generatedBounds = findOpaquePixelBounds(new Uint8ClampedArray(pixels), width, height);
+  if (!sourceBounds || !generatedBounds) return pixels;
+  const sourceWidth = sourceBounds.maxX - sourceBounds.minX + 1;
+  const sourceHeight = sourceBounds.maxY - sourceBounds.minY + 1;
+  const generatedWidth = generatedBounds.maxX - generatedBounds.minX + 1;
+  const generatedHeight = generatedBounds.maxY - generatedBounds.minY + 1;
+  const cropped = await sharp(pixels, { raw: { width, height, channels: 4 } })
+    .extract({
+      left: generatedBounds.minX,
+      top: generatedBounds.minY,
+      width: generatedWidth,
+      height: generatedHeight,
+    })
+    .resize(sourceWidth, sourceHeight, { fit: "fill" })
+    .raw()
+    .toBuffer();
+  const aligned = Buffer.alloc(pixels.length);
+  for (let y = 0; y < sourceHeight; y += 1) {
+    const sourceOffset = y * sourceWidth * 4;
+    const targetOffset = ((sourceBounds.minY + y) * width + sourceBounds.minX) * 4;
+    cropped.copy(aligned, targetOffset, sourceOffset, sourceOffset + sourceWidth * 4);
+  }
+  return aligned;
 }
 
 async function chooseChromaKey(source: Buffer) {
@@ -60,7 +96,8 @@ async function makeChromaTransparent(
   generated: Buffer,
   width: number,
   height: number,
-  chromaRgb: readonly number[]
+  chromaRgb: readonly number[],
+  sourceBounds: PixelBounds | null
 ) {
   const normalized = await sharp(generated)
     .resize(width, height, {
@@ -96,7 +133,8 @@ async function makeChromaTransparent(
   if (transparentPixels < width * height * 0.005) {
     throw new Error("AI가 배경을 충분히 분리하지 못했습니다. 다시 시도해주세요.");
   }
-  return sharp(pixels, { raw: { width, height, channels: 4 } }).png().toBuffer();
+  const aligned = await alignForeground(pixels, width, height, sourceBounds);
+  return sharp(aligned, { raw: { width, height, channels: 4 } }).png().toBuffer();
 }
 
 export async function GET() {
@@ -136,6 +174,16 @@ export async function POST(req: NextRequest) {
     if (!metadata.width || !metadata.height) {
       return NextResponse.json({ error: "이미지 크기를 읽지 못했습니다." }, { status: 400 });
     }
+    const sourcePixels = await sharp(source)
+      .resize(metadata.width, metadata.height, { fit: "fill" })
+      .ensureAlpha()
+      .raw()
+      .toBuffer();
+    const sourceBounds = findForegroundBounds(
+      new Uint8ClampedArray(sourcePixels),
+      metadata.width,
+      metadata.height
+    );
     const chroma = await chooseChromaKey(source);
 
     const output = await withCreditCharge(
@@ -159,6 +207,7 @@ export async function POST(req: NextRequest) {
             "원래 배경, 그림자, 반사, 바닥, 주변 사물은 모두 제거한다.",
             `제거된 모든 배경은 단 하나의 완전 균일한 크로마키 색 ${chroma.hex}로 채운다. 그라데이션, 무늬, 그림자, 테두리는 금지한다.`,
             "피사체 가장자리와 머리카락·반투명 부분은 깨끗하고 자연스럽게 보존한다.",
+            "입력 이미지의 피사체 위치, 크기, 여백, 구도를 정확히 유지한다. 중앙 정렬, 이동, 확대, 축소, 크롭을 하지 않는다.",
             "결과 이미지는 설명 없이 한 장만 반환한다.",
           ].join("\n"),
         });
@@ -168,7 +217,8 @@ export async function POST(req: NextRequest) {
           Buffer.from(generated.base64, "base64"),
           metadata.width!,
           metadata.height!,
-          chroma.rgb
+          chroma.rgb,
+          sourceBounds
         );
       }
     );

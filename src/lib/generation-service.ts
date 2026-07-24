@@ -641,15 +641,15 @@ export async function generate(input: GenerateInput) {
       if (job.cutId) {
         const currentCut = await tx.projectCut.findUnique({ where: { id: job.cutId } });
         if (currentCut) {
-          if (currentCut.imageUrl) {
+          if (currentCut.imageUrl || currentCut.canvas) {
             await tx.canvasVersion.create({
               data: {
                 cutId: currentCut.id,
-                imageUrl: currentCut.imageUrl,
-                thumbnailUrl: currentCut.thumbnailUrl,
+                imageUrl: currentCut.imageUrl ?? uploadedImages[0].blobUrl,
+                thumbnailUrl: currentCut.thumbnailUrl ?? uploadedImages[0].thumbnailUrl,
                 canvas: currentCut.canvas ?? Prisma.JsonNull,
                 source: "ai-backup",
-                label: "AI 수정 전 자동 백업",
+                label: "생성 전 작업 자동 보존",
               },
             });
           }
@@ -667,7 +667,7 @@ export async function generate(input: GenerateInput) {
               imageUrl: uploadedImages[0].blobUrl,
               thumbnailUrl: uploadedImages[0].thumbnailUrl,
               source: input.preserveOutsideMask ? "ai-region" : "ai",
-              label: input.preserveOutsideMask ? "AI 영역 다시 그리기" : "AI 다시 그리기",
+              label: input.preserveOutsideMask ? "AI 영역 다시 그리기" : "AI 생성 새 버전",
             },
           });
         }

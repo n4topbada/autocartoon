@@ -112,6 +112,7 @@ import {
   createCaptionBubble,
   createWatermarkBubble,
 } from "@/lib/canvas-presets";
+import { removeConnectedCornerBackground } from "@/lib/corner-cutout";
 
 interface GalleryImage {
   id: string;
@@ -127,6 +128,7 @@ type RedrawRegionMode = "all" | "auto" | "rectangle" | "freehand";
 type OcrRegionMode = "all" | "rectangle" | "freehand";
 type PresetScope = "current" | "all" | "range";
 type EraserApplyMode = "transparent" | "heal";
+type CutoutMethod = "ai" | "corner";
 type ShapeToolType = "rectangle" | "circle" | "ellipse" | "line" | "arrow" | "star";
 
 const MAX_EXTERNAL_OBJECT_BYTES = 5 * 1024 * 1024;
@@ -275,6 +277,44 @@ const DEFAULT_PAGE_BACKGROUND: PageBackground = {
   texture: "paper",
 };
 
+function normalizeHexColor(value: string) {
+  const clean = value.replace(/[^0-9a-f]/gi, "").slice(0, 6);
+  if (clean.length === 3) return `#${clean.split("").map((character) => character + character).join("")}`.toLowerCase();
+  if (clean.length === 6) return `#${clean}`.toLowerCase();
+  return null;
+}
+
+function HexColorInput({ value, onCommit, label }: { value: string; onCommit: (value: string) => void; label: string }) {
+  const [draft, setDraft] = useState(value.slice(1).toUpperCase());
+  useEffect(() => setDraft(value.slice(1).toUpperCase()), [value]);
+  const commit = () => {
+    const normalized = normalizeHexColor(draft);
+    if (normalized) onCommit(normalized);
+    else setDraft(value.slice(1).toUpperCase());
+  };
+  return (
+    <input
+      value={draft}
+      maxLength={7}
+      aria-label={label}
+      spellCheck={false}
+      onFocus={(event) => event.currentTarget.select()}
+      onChange={(event) => {
+        const next = event.target.value.replace(/[^0-9a-f#]/gi, "").replace(/^#/, "").slice(0, 6).toUpperCase();
+        setDraft(next);
+      }}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") {
+          setDraft(value.slice(1).toUpperCase());
+          event.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
 export type CanvasAspectRatio = "1:1" | "4:5" | "3:4" | "8:11" | "9:16" | "16:9";
 
 export interface CanvasPageItem {
@@ -302,6 +342,7 @@ interface Props {
   onDuplicatePage?: () => void | Promise<void>;
   onDeletePage?: () => void | Promise<void>;
   onMovePage?: (direction: "up" | "down") => void | Promise<void>;
+  onReorderPages?: (orderedIds: string[]) => void | Promise<void>;
   coverPageId?: string | null;
   onRenamePage?: (pageId: string, title: string) => void | Promise<void>;
   onSetCoverPage?: (pageId: string) => void | Promise<void>;
@@ -343,11 +384,36 @@ interface SerializedCanvasLayer {
 }
 
 interface SerializedCanvasState {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   aspect: AspectRatio;
   width: number;
   height: number;
+  pageBackground?: PageBackground;
   layers: SerializedCanvasLayer[];
+}
+
+interface CanvasSnapshot {
+  layers: Layer[];
+  pageBackground: PageBackground;
+}
+
+type DropPosition = "before" | "after";
+
+interface DropTarget {
+  id: string;
+  position: DropPosition;
+}
+
+interface SelectionRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+interface CanvasClipboard {
+  layers: Layer[];
+  sourcePageId?: string;
 }
 
 const MIN_CANVAS = 540;
@@ -434,7 +500,7 @@ function parseSerializedCanvas(value: unknown): SerializedCanvasState | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const state = value as Partial<SerializedCanvasState>;
   if (
-    (state.version !== 1 && state.version !== 2) ||
+    (state.version !== 1 && state.version !== 2 && state.version !== 3) ||
     !state.aspect ||
     !(state.aspect in ASPECT_CONFIG) ||
     typeof state.width !== "number" ||
@@ -442,6 +508,21 @@ function parseSerializedCanvas(value: unknown): SerializedCanvasState | null {
     !Array.isArray(state.layers)
   ) return null;
   return state as SerializedCanvasState;
+}
+
+function isLegacyBackgroundLayer(layer: SerializedCanvasLayer | Layer) {
+  const hasCanvas = "canvas" in layer ? Boolean(layer.canvas) : Boolean(layer.pixelUrl);
+  return Boolean(layer.background) || (layer.name === "페이지 배경" && !hasCanvas);
+}
+
+function backgroundFromSerializedCanvas(state: SerializedCanvasState): PageBackground {
+  if (state.pageBackground) return { ...DEFAULT_PAGE_BACKGROUND, ...state.pageBackground };
+  const legacy = state.layers.find(isLegacyBackgroundLayer);
+  return legacy?.background
+    ? { ...DEFAULT_PAGE_BACKGROUND, ...legacy.background }
+    : legacy?.fillColor
+      ? { ...DEFAULT_PAGE_BACKGROUND, color: legacy.fillColor }
+      : { ...DEFAULT_PAGE_BACKGROUND };
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement) {
@@ -487,7 +568,7 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 }
 
 async function hydrateSerializedLayers(state: SerializedCanvasState): Promise<Layer[]> {
-  return Promise.all(state.layers.map(async (saved) => {
+  return Promise.all(state.layers.filter((saved) => !isLegacyBackgroundLayer(saved)).map(async (saved) => {
     let image: HTMLImageElement | null = null;
     let layerCanvas: HTMLCanvasElement | null = null;
     if (saved.pixelUrl) {
@@ -779,13 +860,15 @@ function renderCanvasLayers(
   canvasH: number,
   outputW = canvasW,
   outputH = canvasH,
-  flattenWhite = false
+  flattenWhite = false,
+  pageBackground: PageBackground = DEFAULT_PAGE_BACKGROUND
 ) {
   context.clearRect(0, 0, outputW, outputH);
   if (flattenWhite) {
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, outputW, outputH);
   }
+  drawPageBackground(context, pageBackground, outputW, outputH);
   let layerBelow: HTMLCanvasElement | null = null;
   for (const layer of layers) {
     if (!layer.visible) continue;
@@ -917,6 +1000,7 @@ export default function CanvasEditor({
   onDuplicatePage,
   onDeletePage,
   onMovePage,
+  onReorderPages,
   coverPageId,
   onRenamePage,
   onSetCoverPage,
@@ -935,12 +1019,16 @@ export default function CanvasEditor({
   const [shapeToolDefaults, setShapeToolDefaults] = useState<ShapeToolDefaults>({ ...DEFAULT_SHAPE_TOOL });
   const [selectedBubbleId, setSelectedBubbleId] = useState<string | null>(null);
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([]);
+  const [pageBackground, setPageBackground] = useState<PageBackground>({ ...DEFAULT_PAGE_BACKGROUND });
+  const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null);
+  const [canvasCursor, setCanvasCursor] = useState("default");
   const bubbleDragMode = useRef<"none" | "move" | "resize" | "tail" | "rotate" | "create">("none");
   const bubbleDragHandle = useRef("");
   const bubbleDragStart = useRef({ x: 0, y: 0 });
   const bubbleOriginal = useRef<Partial<SpeechBubble>>({});
   const textSelectionRef = useRef({ start: 0, end: 0 });
   const [saving, setSaving] = useState(false);
+  const [autosaving, setAutosaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [aspect, setAspect] = useState<AspectRatio>("1:1");
@@ -976,6 +1064,8 @@ export default function CanvasEditor({
   const [regionSelectionPurpose, setRegionSelectionPurpose] = useState<"redraw" | "ocr" | null>(null);
   const [cutoutLoading, setCutoutLoading] = useState(false);
   const [cutoutConfigured, setCutoutConfigured] = useState<boolean | null>(null);
+  const [cutoutMethod, setCutoutMethod] = useState<CutoutMethod>("ai");
+  const [cornerCutoutTolerance, setCornerCutoutTolerance] = useState(42);
   const [redrawOpen, setRedrawOpen] = useState(false);
   const [redrawLoading, setRedrawLoading] = useState(false);
   const [redrawPrompt, setRedrawPrompt] = useState("");
@@ -1002,8 +1092,10 @@ export default function CanvasEditor({
   const [renamingPageId, setRenamingPageId] = useState<string | null>(null);
   const [pageTitleDraft, setPageTitleDraft] = useState("");
   const [layerPanelSide, setLayerPanelSide] = useState<"left" | "right">("right");
-  const [layerDropTargetId, setLayerDropTargetId] = useState<string | null>(null);
+  const [layerDropTarget, setLayerDropTarget] = useState<DropTarget | null>(null);
+  const [pageDropTarget, setPageDropTarget] = useState<DropTarget | null>(null);
   const [backgroundOpen, setBackgroundOpen] = useState(false);
+  const [cutoutOpen, setCutoutOpen] = useState(false);
   const [sfxOpen, setSfxOpen] = useState(false);
   const [watermarkOpen, setWatermarkOpen] = useState(false);
   const [watermarkSettings, setWatermarkSettings] = useState<WatermarkSettings>({ ...DEFAULT_WATERMARK_SETTINGS });
@@ -1035,8 +1127,17 @@ export default function CanvasEditor({
   const eraserLayerIdRef = useRef<string | null>(null);
   const eraserDrawingRef = useRef(false);
   const eraserStrokesRef = useRef<Array<Array<{ x: number; y: number }>>>([]);
-  const copiedLayerRef = useRef<Layer | null>(null);
+  const copiedLayersRef = useRef<CanvasClipboard | null>(null);
+  const textEditorRef = useRef<HTMLTextAreaElement>(null);
   const initializedSourceRef = useRef<string | null>(null);
+  const dirtyRef = useRef(false);
+  const autosavePromiseRef = useRef<Promise<boolean> | null>(null);
+  const pendingNavigationRef = useRef<(() => void | Promise<void>) | null>(null);
+  const [saveFailureMessage, setSaveFailureMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
 
   useEffect(() => {
     if (document.getElementById(CANVAS_FONT_STYLESHEET_ID)) return;
@@ -1082,8 +1183,8 @@ export default function CanvasEditor({
     }));
   }, [pages.length]);
 
-  const undoStack = useRef<Layer[][]>([]);
-  const redoStack = useRef<Layer[][]>([]);
+  const undoStack = useRef<CanvasSnapshot[]>([]);
+  const redoStack = useRef<CanvasSnapshot[]>([]);
   const pointerChangeCommitted = useRef(false);
   const [, rerenderHistory] = useState(0);
 
@@ -1091,21 +1192,30 @@ export default function CanvasEditor({
   // 스택을 밀어넣으면(부작용) StrictMode에서 업데이터가 두 번 실행돼 스택이
   // 중복 push되므로, 스택 조작은 업데이터 밖에서 순수하게 처리한다.
   const layersRef = useRef<Layer[]>([]);
+  const pageBackgroundRef = useRef<PageBackground>({ ...DEFAULT_PAGE_BACKGROUND });
   useEffect(() => {
     layersRef.current = layers;
   }, [layers]);
+  useEffect(() => {
+    pageBackgroundRef.current = pageBackground;
+  }, [pageBackground]);
+
+  const currentSnapshot = useCallback((): CanvasSnapshot => ({
+    layers: cloneLayers(layersRef.current),
+    pageBackground: { ...pageBackgroundRef.current },
+  }), []);
 
   const saveUndo = useCallback(() => {
-    undoStack.current.push(cloneLayers(layers));
+    undoStack.current.push(currentSnapshot());
     if (undoStack.current.length > 30) undoStack.current.shift();
     redoStack.current = [];
     setDirty(true);
     rerenderHistory((value) => value + 1);
-  }, [layers]);
+  }, [currentSnapshot]);
 
   const commitPointerUndo = () => {
     if (pointerChangeCommitted.current) return;
-    undoStack.current.push(cloneLayers(layersRef.current));
+    undoStack.current.push(currentSnapshot());
     if (undoStack.current.length > 30) undoStack.current.shift();
     redoStack.current = [];
     pointerChangeCommitted.current = true;
@@ -1116,20 +1226,22 @@ export default function CanvasEditor({
   const handleUndo = useCallback(() => {
     const previous = undoStack.current.pop();
     if (!previous) return;
-    redoStack.current.push(cloneLayers(layersRef.current));
-    setLayers(cloneLayers(previous));
+    redoStack.current.push(currentSnapshot());
+    setLayers(cloneLayers(previous.layers));
+    setPageBackground({ ...previous.pageBackground });
     setDirty(true);
     rerenderHistory((value) => value + 1);
-  }, []);
+  }, [currentSnapshot]);
 
   const handleRedo = useCallback(() => {
     const next = redoStack.current.pop();
     if (!next) return;
-    undoStack.current.push(cloneLayers(layersRef.current));
-    setLayers(cloneLayers(next));
+    undoStack.current.push(currentSnapshot());
+    setLayers(cloneLayers(next.layers));
+    setPageBackground({ ...next.pageBackground });
     setDirty(true);
     rerenderHistory((value) => value + 1);
-  }, []);
+  }, [currentSnapshot]);
 
   const toggleActiveLayerLock = useCallback(() => {
     if (!activeLayerId) return;
@@ -1203,6 +1315,10 @@ export default function CanvasEditor({
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const dragLayerStarts = useRef(new Map<string, Layer>());
+  const marqueeStart = useRef({ x: 0, y: 0 });
+  const marqueeSelecting = useRef(false);
+  const marqueeAdditive = useRef(false);
+  const marqueeBaseSelection = useRef<string[]>([]);
   const layerTransformMode = useRef<"none" | "resize" | "rotate">("none");
   const layerTransformStart = useRef({
     layerId: "",
@@ -1232,13 +1348,17 @@ export default function CanvasEditor({
     (async () => {
       try {
         const persisted = parseSerializedCanvas(initialCanvas);
-        if (persisted && persisted.layers.length > 0) {
+        if (persisted) {
           const restored = await hydrateSerializedLayers(persisted);
           setCanvasW(persisted.width);
           setCanvasH(persisted.height);
           setAspect(persisted.aspect);
-          setLayers(restored);
-          setActiveLayerId(restored[restored.length - 1].id);
+          setPageBackground(backgroundFromSerializedCanvas(persisted));
+          const nextLayers = restored.length > 0
+            ? restored
+            : [createLayer("layer_initial", persisted.width, persisted.height)];
+          setLayers(nextLayers);
+          setActiveLayerId(nextLayers[nextLayers.length - 1].id);
           setDirty(false);
           return;
         }
@@ -1250,13 +1370,12 @@ export default function CanvasEditor({
         setCanvasW(cw);
         setCanvasH(ch);
         setAspect(targetAspect);
+        setPageBackground({ ...DEFAULT_PAGE_BACKGROUND });
 
         const layerCanvas = document.createElement("canvas");
         layerCanvas.width = cw;
         layerCanvas.height = ch;
         const ctx = layerCanvas.getContext("2d")!;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, cw, ch);
         // 원본 이미지를 캔버스 중앙에 원본 크기로
         const x = (cw - img.width) / 2;
         const y = (ch - img.height) / 2;
@@ -1278,6 +1397,7 @@ export default function CanvasEditor({
         setDirty(false);
       } catch {
         const layer = createLayer("layer_initial", MIN_CANVAS, MIN_CANVAS);
+        setPageBackground({ ...DEFAULT_PAGE_BACKGROUND });
         setLayers([layer]);
         setActiveLayerId(layer.id);
         setDirty(false);
@@ -1354,7 +1474,7 @@ export default function CanvasEditor({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
-    renderCanvasLayers(ctx, layers, canvasW, canvasH);
+    renderCanvasLayers(ctx, layers, canvasW, canvasH, canvasW, canvasH, false, pageBackground);
 
     const editMask = aiMaskCanvasRef.current;
     if (editMask && (redrawOpen || ocrOpen || tool === "mask")) {
@@ -1385,33 +1505,39 @@ export default function CanvasEditor({
     }
 
     if (!selectedBubbleId && tool === "move") {
-      const selectedLayer = layers.find((layer) => layer.id === activeLayerId && layer.visible);
-      if (selectedLayer) {
+      const selectedLayers = layers.filter((layer) =>
+        layer.visible && (selectedLayerIds.includes(layer.id) || (selectedLayerIds.length === 0 && layer.id === activeLayerId))
+      );
+      for (const selectedLayer of selectedLayers) {
         const bounds = getLayerBounds(selectedLayer, canvasW, canvasH);
         const overflows = bounds.left < 0 || bounds.top < 0 || bounds.right > canvasW || bounds.bottom > canvasH;
         ctx.save();
-        ctx.strokeStyle = overflows && showOverflow ? "#ef4444" : "#14b8a6";
+        ctx.strokeStyle = overflows && showOverflow
+          ? "#ef4444"
+          : selectedLayer.id === activeLayerId ? "#14b8a6" : "#0ea5e9";
         ctx.fillStyle = ctx.strokeStyle;
         ctx.lineWidth = Math.max(2, canvasW / 500);
         ctx.setLineDash([8, 5]);
         ctx.strokeRect(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top);
         ctx.setLineDash([]);
-        const handleRadius = Math.max(7, canvasW / 120);
-        const handles = getLayerHandleGeometry(bounds, canvasW, canvasH, handleRadius);
-        for (const [x, y] of handles.corners) {
+        if (selectedLayers.length === 1 && selectedLayer.id === activeLayerId) {
+          const handleRadius = Math.max(7, canvasW / 120);
+          const handles = getLayerHandleGeometry(bounds, canvasW, canvasH, handleRadius);
+          for (const [x, y] of handles.corners) {
+            ctx.beginPath();
+            ctx.arc(x, y, handleRadius, 0, Math.PI * 2);
+            ctx.fill();
+          }
           ctx.beginPath();
-          ctx.arc(x, y, handleRadius, 0, Math.PI * 2);
+          ctx.moveTo(handles.rotationAnchor.x, handles.rotationAnchor.y);
+          ctx.lineTo(handles.rotation.x, handles.rotation.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillStyle = "#f59e0b";
+          ctx.beginPath();
+          ctx.arc(handles.rotation.x, handles.rotation.y, handleRadius * 1.15, 0, Math.PI * 2);
           ctx.fill();
         }
-        ctx.beginPath();
-        ctx.moveTo(handles.rotationAnchor.x, handles.rotationAnchor.y);
-        ctx.lineTo(handles.rotation.x, handles.rotation.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = "#f59e0b";
-        ctx.beginPath();
-        ctx.arc(handles.rotation.x, handles.rotation.y, handleRadius * 1.15, 0, Math.PI * 2);
-        ctx.fill();
         if (overflows && showOverflow) {
           ctx.strokeStyle = "rgba(239, 68, 68, 0.9)";
           ctx.lineWidth = Math.max(4, canvasW / 250);
@@ -1419,6 +1545,19 @@ export default function CanvasEditor({
         }
         ctx.restore();
       }
+    }
+
+    if (selectionRect && tool === "move") {
+      const left = Math.min(selectionRect.x, selectionRect.x + selectionRect.w);
+      const top = Math.min(selectionRect.y, selectionRect.y + selectionRect.h);
+      ctx.save();
+      ctx.fillStyle = "rgba(14, 165, 233, 0.1)";
+      ctx.strokeStyle = "#0ea5e9";
+      ctx.lineWidth = Math.max(1.5, canvasW / 650);
+      ctx.setLineDash([7, 5]);
+      ctx.fillRect(left, top, Math.abs(selectionRect.w), Math.abs(selectionRect.h));
+      ctx.strokeRect(left, top, Math.abs(selectionRect.w), Math.abs(selectionRect.h));
+      ctx.restore();
     }
 
     // 선택된 말풍선 오버레이
@@ -1467,7 +1606,7 @@ export default function CanvasEditor({
       }
       ctx.restore();
     }
-  }, [activeLayerId, layers, cropRect, tool, canvasH, canvasW, selectedBubbleId, showGuides, showOverflow, redrawOpen, ocrOpen, maskRevision, eraserApplyMode]);
+  }, [activeLayerId, layers, cropRect, tool, canvasH, canvasW, pageBackground, selectedBubbleId, selectedLayerIds, selectionRect, showGuides, showOverflow, redrawOpen, ocrOpen, maskRevision, eraserApplyMode]);
 
   useEffect(() => {
     render();
@@ -1483,6 +1622,71 @@ export default function CanvasEditor({
       x: (e.clientX - rect.left) * scaleX,
       y: (e.clientY - rect.top) * scaleY,
     };
+  };
+
+  const resolveMoveCursor = (x: number, y: number) => {
+    const activeTransformLayer = layersRef.current.find((layer) =>
+      layer.id === activeLayerId && layer.visible && !layer.locked
+    );
+    if (activeTransformLayer && !selectedBubbleId && selectedLayerIds.length <= 1) {
+      const bounds = getLayerBounds(activeTransformLayer, canvasW, canvasH);
+      const hitRadius = Math.max(24, canvasW / 30);
+      const handles = getLayerHandleGeometry(bounds, canvasW, canvasH, Math.max(7, canvasW / 120));
+      if (Math.hypot(x - handles.rotation.x, y - handles.rotation.y) <= hitRadius) return "grab";
+      const corner = handles.corners.findIndex(([handleX, handleY]) => Math.hypot(x - handleX, y - handleY) <= hitRadius);
+      if (corner >= 0) return corner === 0 || corner === 2 ? "nwse-resize" : "nesw-resize";
+    }
+    for (const layer of [...layersRef.current].reverse()) {
+      if (!layer.visible || layer.locked) continue;
+      for (const bubble of [...layer.bubbles].reverse()) {
+        const hit = hitTestBubble(x, y, bubble);
+        if (!hit) continue;
+        if (hit === "body") return "grab";
+        if (hit === "rotate") return "grab";
+        if (hit === "tail") return "crosshair";
+        return hit === "nw" || hit === "se" ? "nwse-resize" : "nesw-resize";
+      }
+      if (pointHitsLayerPixels(layer, canvasW, canvasH, x, y)) return "grab";
+    }
+    return "default";
+  };
+
+  useEffect(() => {
+    const defaults: Record<CanvasTool, string> = {
+      move: "default",
+      crop: "crosshair",
+      pipette: "copy",
+      bubble: "crosshair",
+      text: "text",
+      shape: "crosshair",
+      brush: "crosshair",
+      eraser: "crosshair",
+      mask: "crosshair",
+    };
+    setCanvasCursor(defaults[tool]);
+  }, [tool]);
+
+  const handleCanvasDoubleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (tool !== "move" && tool !== "text") return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.clientX - rect.left) * canvas.width / rect.width;
+    const y = (event.clientY - rect.top) * canvas.height / rect.height;
+    for (const layer of [...layersRef.current].reverse()) {
+      if (!layer.visible || layer.locked) continue;
+      const bubble = [...layer.bubbles].reverse().find((item) => item.type === "text" && hitTestBubble(x, y, item));
+      if (!bubble) continue;
+      setActiveLayerId(layer.id);
+      setSelectedLayerIds([]);
+      setSelectedBubbleId(bubble.id);
+      setTool("text");
+      window.requestAnimationFrame(() => {
+        textEditorRef.current?.focus();
+        textEditorRef.current?.select();
+      });
+      return;
+    }
   };
 
   // 마우스 이벤트 (이동 / 크롭)
@@ -1652,7 +1856,7 @@ export default function CanvasEditor({
       drawing.current = true;
     } else if (tool === "move") {
       const activeTransformLayer = layers.find((layer) => layer.id === activeLayerId && layer.visible && !layer.locked);
-      if (activeTransformLayer && !selectedBubbleId) {
+      if (activeTransformLayer && !selectedBubbleId && selectedLayerIds.length <= 1) {
         const bounds = getLayerBounds(activeTransformLayer, canvasW, canvasH);
         const hitRadius = Math.max(24, canvasW / 30);
         const handles = getLayerHandleGeometry(bounds, canvasW, canvasH, Math.max(7, canvasW / 120));
@@ -1660,6 +1864,7 @@ export default function CanvasEditor({
         const rotationHit = Math.hypot(mx - handles.rotation.x, my - handles.rotation.y) <= hitRadius;
         if (cornerHit || rotationHit) {
           pointerChangeCommitted.current = false;
+          setCanvasCursor(rotationHit ? "grabbing" : "nwse-resize");
           const centerX = activeTransformLayer.x + canvasW / 2;
           const centerY = activeTransformLayer.y + canvasH / 2;
           layerTransformMode.current = rotationHit ? "rotate" : "resize";
@@ -1685,6 +1890,8 @@ export default function CanvasEditor({
             pointerChangeCommitted.current = false;
             setActiveLayerId(layer.id);
             setSelectedBubbleId(bubble.id);
+            setSelectedLayerIds([]);
+            setCanvasCursor("grabbing");
             bubbleDragStart.current = { x: mx, y: my };
             bubbleOriginal.current = { ...bubble };
             if (hit === "body") bubbleDragMode.current = "move";
@@ -1703,18 +1910,42 @@ export default function CanvasEditor({
         return pointHitsLayerPixels(layer, canvasW, canvasH, mx, my);
       });
       if (!selectedLayer) {
-        setActiveLayerId("");
-        setSelectedLayerIds([]);
+        const additive = e.ctrlKey || e.metaKey;
+        if (!additive) {
+          setActiveLayerId("");
+          setSelectedLayerIds([]);
+        }
+        marqueeSelecting.current = true;
+        marqueeAdditive.current = additive;
+        marqueeBaseSelection.current = additive ? [...selectedLayerIds] : [];
+        marqueeStart.current = { x: mx, y: my };
+        setSelectionRect({ x: mx, y: my, w: 0, h: 0 });
+        setCanvasCursor("crosshair");
+        return;
+      }
+      const additive = e.ctrlKey || e.metaKey;
+      if (additive) {
+        const alreadySelected = selectedLayerIds.includes(selectedLayer.id);
+        const nextSelection = alreadySelected
+          ? selectedLayerIds.filter((id) => id !== selectedLayer.id)
+          : [...selectedLayerIds, selectedLayer.id];
+        setSelectedLayerIds(nextSelection);
+        setActiveLayerId(alreadySelected ? nextSelection.at(-1) || "" : selectedLayer.id);
         return;
       }
       setActiveLayerId(selectedLayer.id);
-      const movingLayers = selectedLayer.groupId
-        ? layers.filter((layer) => layer.groupId === selectedLayer.groupId)
-        : [selectedLayer];
+      const currentSelection = selectedLayerIds.includes(selectedLayer.id) && selectedLayerIds.length > 0
+        ? selectedLayerIds
+        : selectedLayer.groupId
+          ? layers.filter((layer) => layer.groupId === selectedLayer.groupId).map((layer) => layer.id)
+          : [selectedLayer.id];
+      setSelectedLayerIds(currentSelection);
+      const movingLayers = layers.filter((layer) => currentSelection.includes(layer.id));
       if (movingLayers.some((layer) => layer.locked)) return;
       pointerChangeCommitted.current = false;
       isDragging.current = true;
       dragStart.current = { x: mx, y: my };
+      setCanvasCursor("grabbing");
       dragLayerStarts.current = new Map(
         movingLayers.map((layer) => [layer.id, { ...layer, bubbles: layer.bubbles.map((bubble) => ({ ...bubble })) }])
       );
@@ -1821,6 +2052,26 @@ export default function CanvasEditor({
 
   const handleMouseMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const { x: mx, y: my } = getCanvasCoords(e);
+
+    if (tool === "move" && marqueeSelecting.current) {
+      setSelectionRect({
+        x: marqueeStart.current.x,
+        y: marqueeStart.current.y,
+        w: mx - marqueeStart.current.x,
+        h: my - marqueeStart.current.y,
+      });
+      setCanvasCursor("crosshair");
+      return;
+    }
+
+    if (
+      tool === "move" &&
+      !isDragging.current &&
+      layerTransformMode.current === "none" &&
+      bubbleDragMode.current === "none"
+    ) {
+      setCanvasCursor(resolveMoveCursor(mx, my));
+    }
 
     if (tool === "mask" && aiMaskDrawing.current && aiMaskCanvasRef.current) {
       const context = aiMaskCanvasRef.current.getContext("2d")!;
@@ -1977,6 +2228,7 @@ export default function CanvasEditor({
           return start ? translateLayer(start, dx, dy) : layer;
         })
       );
+      setCanvasCursor("grabbing");
     } else if (tool === "crop" && cropping) {
       const x = Math.min(mx, cropStart.current.x);
       const y = Math.min(my, cropStart.current.y);
@@ -2005,10 +2257,32 @@ export default function CanvasEditor({
       drawingLayerRef.current = null;
       drawing.current = false;
     }
+    if (marqueeSelecting.current) {
+      const rect = selectionRect;
+      const left = rect ? Math.min(rect.x, rect.x + rect.w) : 0;
+      const top = rect ? Math.min(rect.y, rect.y + rect.h) : 0;
+      const right = rect ? Math.max(rect.x, rect.x + rect.w) : 0;
+      const bottom = rect ? Math.max(rect.y, rect.y + rect.h) : 0;
+      const hits = rect && Math.abs(rect.w) > 3 && Math.abs(rect.h) > 3
+        ? layersRef.current.filter((layer) => {
+            if (!layer.visible || layer.locked) return false;
+            const bounds = getLayerBounds(layer, canvasW, canvasH);
+            return bounds.left <= right && bounds.right >= left && bounds.top <= bottom && bounds.bottom >= top;
+          }).map((layer) => layer.id)
+        : [];
+      const next = marqueeAdditive.current
+        ? Array.from(new Set([...marqueeBaseSelection.current, ...hits]))
+        : hits;
+      setSelectedLayerIds(next);
+      setActiveLayerId(next.at(-1) || "");
+      marqueeSelecting.current = false;
+      setSelectionRect(null);
+    }
     isDragging.current = false;
     layerTransformMode.current = "none";
     bubbleDragMode.current = "none";
     pointerChangeCommitted.current = false;
+    setCanvasCursor(tool === "move" ? "default" : "crosshair");
     if (tool === "crop" && cropping && cropRect && cropRect.w > 5 && cropRect.h > 5) {
       // AI 영역 지정 모드에서는 파괴적 크롭을 적용하지 않고 cropRect를 재생성 영역으로 보존한다.
       if (aiRegionMode) {
@@ -2111,14 +2385,14 @@ export default function CanvasEditor({
     setCropRect(null);
   };
 
-  // 누끼는 서버에서 Nano Banana로 피사체를 분리한 뒤 투명 PNG로 정규화한다.
+  // AI 정밀 누끼와 코너 연결색 기반 무료 누끼를 같은 위치·크기의 투명 PNG로 적용한다.
   const handleRemoveBackground = async () => {
     const activeLayer = layers.find((l) => l.id === activeLayerId);
     if (!activeLayer?.canvas || activeLayer.locked) {
       setEditorMessage("누끼를 적용할 이미지 레이어를 먼저 선택해주세요.");
       return;
     }
-    if (cutoutConfigured !== true) {
+    if (cutoutMethod === "ai" && cutoutConfigured !== true) {
       setEditorMessage("Nano Banana 이미지 API 연결 상태를 확인해주세요.");
       return;
     }
@@ -2126,6 +2400,50 @@ export default function CanvasEditor({
     setCutoutLoading(true);
     setEditorMessage(null);
     try {
+      if (cutoutMethod === "corner") {
+        await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+        const sourceContext = activeLayer.canvas.getContext("2d")!;
+        const opaque = canvasAlphaBounds(activeLayer.canvas);
+        const region = opaque
+          ? {
+              x: opaque.minX,
+              y: opaque.minY,
+              width: opaque.maxX - opaque.minX + 1,
+              height: opaque.maxY - opaque.minY + 1,
+            }
+          : { x: 0, y: 0, width: activeLayer.canvas.width, height: activeLayer.canvas.height };
+        const sourceData = sourceContext.getImageData(region.x, region.y, region.width, region.height);
+        const result = removeConnectedCornerBackground(
+          sourceData.data,
+          region.width,
+          region.height,
+          cornerCutoutTolerance
+        );
+        const nextCanvas = cloneCanvas(activeLayer.canvas);
+        const nextContext = nextCanvas.getContext("2d")!;
+        nextContext.putImageData(
+          new ImageData(new Uint8ClampedArray(result.pixels), region.width, region.height),
+          region.x,
+          region.y
+        );
+        alphaBoundsCache.delete(nextCanvas);
+        saveUndo();
+        setLayers((current) => current.map((layer) => layer.id === activeLayerId
+          ? {
+              ...layer,
+              imageUrl: null,
+              canvas: nextCanvas,
+              pixelDirty: true,
+              pixelRevision: layer.pixelRevision + 1,
+            }
+          : layer));
+        setBackgroundRemoved(true);
+        const excluded = result.excludedCorner === null
+          ? "네 코너 색을 모두 사용"
+          : `${["왼쪽 위", "오른쪽 위", "왼쪽 아래", "오른쪽 아래"][result.excludedCorner]} 예외색 제외`;
+        setEditorMessage(`코너 색상 누끼 완료 · ${result.removedPixels.toLocaleString("ko-KR")}픽셀 제거 · ${excluded} · 무료`);
+        return;
+      }
       const sourceBlob = await canvasToBlob(activeLayer.canvas);
       const form = new FormData();
       form.append("image", sourceBlob, "canvas-layer.png");
@@ -2194,10 +2512,6 @@ export default function CanvasEditor({
           newCanvas.width = newW;
           newCanvas.height = newH;
           const ctx = newCanvas.getContext("2d")!;
-          if (l.id === "layer_initial") {
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(0, 0, newW, newH);
-          }
           ctx.drawImage(l.canvas, 0, dy);
           return {
             ...l,
@@ -3045,25 +3359,7 @@ export default function CanvasEditor({
   const updatePageBackground = (updates: Partial<PageBackground>, recordHistory = true) => {
     if (recordHistory) saveUndo();
     else setDirty(true);
-    setLayers((current) => {
-      const existing = current.find((layer) => layer.background || (layer.name === "페이지 배경" && !layer.canvas));
-      const previous = existing?.background ?? {
-        ...DEFAULT_PAGE_BACKGROUND,
-        color: existing?.fillColor || DEFAULT_PAGE_BACKGROUND.color,
-      };
-      const background = { ...previous, ...updates };
-      if (existing) {
-        return current.map((layer) => layer.id === existing.id
-          ? { ...layer, background, fillColor: null, visible: true, locked: true }
-          : layer);
-      }
-      return [{
-        ...createLayer(undefined, canvasW, canvasH),
-        name: "페이지 배경",
-        locked: true,
-        background,
-      }, ...current];
-    });
+    setPageBackground((current) => ({ ...current, ...updates }));
   };
 
   // 레이어 삭제
@@ -3101,22 +3397,22 @@ export default function CanvasEditor({
     });
   };
 
-  const reorderLayer = (sourceId: string, targetId: string) => {
+  const reorderLayer = (sourceId: string, targetId: string, position: DropPosition) => {
     if (sourceId === targetId) return;
-    const sourceIndex = layersRef.current.findIndex((layer) => layer.id === sourceId);
-    const targetIndex = layersRef.current.findIndex((layer) => layer.id === targetId);
-    if (sourceIndex < 0 || targetIndex < 0) return;
+    const displayed = [...layersRef.current].reverse();
+    const sourceIndex = displayed.findIndex((layer) => layer.id === sourceId);
+    if (sourceIndex < 0 || !displayed.some((layer) => layer.id === targetId)) return;
     saveUndo();
-    const next = [...layersRef.current];
-    const [source] = next.splice(sourceIndex, 1);
-    const targetIndexAfterRemoval = next.findIndex((layer) => layer.id === targetId);
-    next.splice(targetIndexAfterRemoval + 1, 0, source);
-    setLayers(next);
+    const [source] = displayed.splice(sourceIndex, 1);
+    const targetIndex = displayed.findIndex((layer) => layer.id === targetId);
+    displayed.splice(position === "before" ? targetIndex : targetIndex + 1, 0, source);
+    setLayers(displayed.reverse());
     setActiveLayerId(sourceId);
-    setLayerDropTargetId(null);
+    setSelectedLayerIds([sourceId]);
+    setLayerDropTarget(null);
   };
 
-  const addImageLayer = async (imageUrl: string, name = "이미지 객체") => {
+  const createImageLayer = async (imageUrl: string, name = "이미지 객체") => {
     const img = await loadImage(imageUrl);
     const layerCanvas = document.createElement("canvas");
     layerCanvas.width = canvasW;
@@ -3126,7 +3422,7 @@ export default function CanvasEditor({
     const width = img.width * scale;
     const height = img.height * scale;
     ctx.drawImage(img, (canvasW - width) / 2, (canvasH - height) / 2, width, height);
-    const newLayer = {
+    return {
       ...createLayer(undefined, canvasW, canvasH),
       name: name.slice(0, 40),
       image: img,
@@ -3135,12 +3431,19 @@ export default function CanvasEditor({
       pixelDirty: true,
       pixelRevision: 1,
     };
+  };
+
+  const addImageLayer = async (imageUrl: string, name = "이미지 객체") => {
+    const newLayer = await createImageLayer(imageUrl, name);
     saveUndo();
-    const activeIndex = layers.findIndex((layer) => layer.id === activeLayerId);
-    const next = [...layers];
-    next.splice(activeIndex >= 0 ? activeIndex + 1 : layers.length, 0, newLayer);
-    setLayers(next);
+    setLayers((current) => {
+      const activeIndex = current.findIndex((layer) => layer.id === activeLayerId);
+      const next = [...current];
+      next.splice(activeIndex >= 0 ? activeIndex + 1 : current.length, 0, newLayer);
+      return next;
+    });
     setActiveLayerId(newLayer.id);
+    setSelectedLayerIds([newLayer.id]);
     setSelectedBubbleId(null);
     setTool("move");
   };
@@ -3152,15 +3455,26 @@ export default function CanvasEditor({
       return;
     }
     const rejectedCount = files.length - accepted.length;
-    for (const file of [...accepted].reverse()) {
+    const imageLayers = await Promise.all(accepted.map(async (file) => {
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error());
         reader.onerror = () => reject(reader.error);
         reader.readAsDataURL(file);
       });
-      await addImageLayer(dataUrl, file.name.replace(/\.[^.]+$/, "") || "업로드 이미지");
-    }
+      return createImageLayer(dataUrl, file.name.replace(/\.[^.]+$/, "") || "업로드 이미지");
+    }));
+    saveUndo();
+    setLayers((current) => {
+      const activeIndex = current.findIndex((layer) => layer.id === activeLayerId);
+      const next = [...current];
+      next.splice(activeIndex >= 0 ? activeIndex + 1 : current.length, 0, ...imageLayers);
+      return next;
+    });
+    setActiveLayerId(imageLayers.at(-1)?.id || "");
+    setSelectedLayerIds(imageLayers.map((layer) => layer.id));
+    setSelectedBubbleId(null);
+    setTool("move");
     setEditorMessage(
       rejectedCount > 0
         ? `${accepted.length}개 객체를 추가했습니다. ${rejectedCount}개 파일은 형식 또는 5MB 제한으로 제외했습니다.`
@@ -3187,7 +3501,7 @@ export default function CanvasEditor({
     composite.width = canvasW;
     composite.height = canvasH;
     const ctx = composite.getContext("2d")!;
-    renderCanvasLayers(ctx, layers, canvasW, canvasH, canvasW, canvasH, true);
+    renderCanvasLayers(ctx, layers, canvasW, canvasH, canvasW, canvasH, true, pageBackground);
     return composite;
   };
 
@@ -3617,71 +3931,89 @@ export default function CanvasEditor({
     }
   };
 
+  const serializeCanvasDocument = useCallback(async (
+    layersToSave: Layer[],
+    documentBackground: PageBackground
+  ) => {
+    const savedPixelRefs = new Map<string, { url: string; revision: number }>();
+    if (!projectId || !cutId) {
+      return { serializedCanvas: undefined, savedPixelRefs };
+    }
+    const serializedLayers = await Promise.all(layersToSave.map(async (layer, index) => {
+      const pixelUrl = layer.canvas
+        ? !layer.pixelDirty && layer.imageUrl
+          ? layer.imageUrl
+          : await uploadViaTicket({
+              signEndpoint: "/api/images/upload",
+              file: await canvasToBlob(layer.canvas),
+              filename: `${cutId}-${index}-${Date.now()}.png`,
+              contentType: "image/png",
+              meta: { projectId, cutId, contentType: "image/png" },
+            })
+        : null;
+      if (pixelUrl) savedPixelRefs.set(layer.id, { url: pixelUrl, revision: layer.pixelRevision });
+      return {
+        id: layer.id,
+        name: layer.name,
+        locked: layer.locked,
+        groupId: layer.groupId,
+        pixelUrl,
+        opacity: layer.opacity,
+        scale: layer.scale,
+        scaleX: layer.scaleX,
+        scaleY: layer.scaleY,
+        rotation: layer.rotation,
+        x: layer.x,
+        y: layer.y,
+        width: layer.width,
+        height: layer.height,
+        visible: layer.visible,
+        fillColor: layer.fillColor,
+        bubbles: layer.bubbles.map((bubble) => ({ ...bubble })),
+        filter: layer.filter,
+        filterIntensity: layer.filterIntensity,
+        clipToBelow: layer.clipToBelow,
+        background: null,
+      } satisfies SerializedCanvasLayer;
+    }));
+    return {
+      serializedCanvas: {
+        version: 3,
+        aspect,
+        width: canvasW,
+        height: canvasH,
+        pageBackground: { ...documentBackground },
+        layers: serializedLayers,
+      } satisfies SerializedCanvasState,
+      savedPixelRefs,
+    };
+  }, [aspect, canvasH, canvasW, cutId, projectId]);
+
+  const applySavedPixelRefs = useCallback((savedPixelRefs: Map<string, { url: string; revision: number }>) => {
+    setLayers((current) => current.map((layer) => {
+      const savedPixel = savedPixelRefs.get(layer.id);
+      if (!savedPixel || layer.pixelRevision !== savedPixel.revision) return layer;
+      return { ...layer, imageUrl: savedPixel.url, pixelDirty: false };
+    }));
+  }, []);
+
   // 합치고 저장하기 (1080px)
   const handleSave = useCallback(async (layersOverride?: Layer[]) => {
     setSaving(true);
     try {
       const layersToSave = layersOverride ?? layers;
+      const backgroundToSave = { ...pageBackground };
       const { exportW, exportH } = ASPECT_CONFIG[aspect];
       const exportCanvas = document.createElement("canvas");
       exportCanvas.width = exportW;
       exportCanvas.height = exportH;
       const ctx = exportCanvas.getContext("2d")!;
-      renderCanvasLayers(ctx, layersToSave, canvasW, canvasH, exportW, exportH);
+      renderCanvasLayers(ctx, layersToSave, canvasW, canvasH, exportW, exportH, false, pageBackground);
 
       const blob = await new Promise<Blob>((resolve) =>
         exportCanvas.toBlob((b) => resolve(b!), "image/png")
       );
-      const savedPixelRefs = new Map<string, { url: string; revision: number }>();
-      let serializedCanvas: SerializedCanvasState | undefined;
-      if (projectId && cutId) {
-        const serializedLayers = await Promise.all(layersToSave.map(async (layer, index) => {
-          const pixelUrl = layer.canvas
-            ? !layer.pixelDirty && layer.imageUrl
-              ? layer.imageUrl
-              : await uploadViaTicket({
-                  signEndpoint: "/api/images/upload",
-                  file: await canvasToBlob(layer.canvas),
-                  filename: `${cutId}-${index}-${Date.now()}.png`,
-                  contentType: "image/png",
-                  meta: { projectId, cutId, contentType: "image/png" },
-                })
-            : null;
-          if (pixelUrl) {
-            savedPixelRefs.set(layer.id, { url: pixelUrl, revision: layer.pixelRevision });
-          }
-          return {
-            id: layer.id,
-            name: layer.name,
-            locked: layer.locked,
-            groupId: layer.groupId,
-            pixelUrl,
-            opacity: layer.opacity,
-            scale: layer.scale,
-            scaleX: layer.scaleX,
-            scaleY: layer.scaleY,
-            rotation: layer.rotation,
-            x: layer.x,
-            y: layer.y,
-            width: layer.width,
-            height: layer.height,
-            visible: layer.visible,
-            fillColor: layer.fillColor,
-            bubbles: layer.bubbles.map((bubble) => ({ ...bubble })),
-            filter: layer.filter,
-            filterIntensity: layer.filterIntensity,
-            clipToBelow: layer.clipToBelow,
-            background: layer.background ? { ...layer.background } : null,
-          } satisfies SerializedCanvasLayer;
-        }));
-        serializedCanvas = {
-          version: 2,
-          aspect,
-          width: canvasW,
-          height: canvasH,
-          layers: serializedLayers,
-        };
-      }
+      const { serializedCanvas, savedPixelRefs } = await serializeCanvasDocument(layersToSave, backgroundToSave);
       const uploadedRef = await uploadViaTicket({
         signEndpoint: "/api/images/upload",
         file: blob,
@@ -3706,29 +4038,91 @@ export default function CanvasEditor({
 
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "이미지를 저장하지 못했습니다.");
-      setLayers((current) => current.map((layer) => {
-        const savedPixel = savedPixelRefs.get(layer.id);
-        if (!savedPixel || layer.pixelRevision !== savedPixel.revision) return layer;
-        return { ...layer, imageUrl: savedPixel.url, pixelDirty: false };
-      }));
+      applySavedPixelRefs(savedPixelRefs);
       setDirty(false);
       setBackgroundRemoved(false);
       setSavedAt(new Date());
       setEditorMessage("캔버스와 편집 이력을 저장했습니다.");
       onSave(result as SavedCanvasImage);
+      return true;
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "이미지를 저장하지 못했습니다.");
+      return false;
     } finally {
       setSaving(false);
     }
-  }, [aspect, backgroundRemoved, canvasH, canvasW, cutId, layers, onSave, projectId]);
+  }, [applySavedPixelRefs, aspect, backgroundRemoved, canvasH, canvasW, cutId, layers, onSave, pageBackground, projectId, serializeCanvasDocument]);
+
+  const handleAutosave = useCallback(async () => {
+    if (!projectId || !cutId) return false;
+    if (autosavePromiseRef.current) return autosavePromiseRef.current;
+    const operation = (async () => {
+      setAutosaving(true);
+      const sourceLayers = layersRef.current;
+      const sourceBackground = { ...pageBackgroundRef.current };
+      try {
+        const { serializedCanvas, savedPixelRefs } = await serializeCanvasDocument(sourceLayers, sourceBackground);
+        if (!serializedCanvas) return false;
+        const response = await fetch(`/api/studio/cuts/${encodeURIComponent(cutId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ canvas: serializedCanvas }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "자동저장에 실패했습니다.");
+        const unchanged = layersRef.current === sourceLayers &&
+          JSON.stringify(pageBackgroundRef.current) === JSON.stringify(sourceBackground);
+        applySavedPixelRefs(savedPixelRefs);
+        if (unchanged) {
+          dirtyRef.current = false;
+          setDirty(false);
+        }
+        setSavedAt(new Date());
+        return true;
+      } catch (error) {
+        setEditorMessage(error instanceof Error ? `자동저장 실패: ${error.message}` : "자동저장에 실패했습니다.");
+        return false;
+      } finally {
+        setAutosaving(false);
+      }
+    })();
+    autosavePromiseRef.current = operation;
+    try {
+      return await operation;
+    } finally {
+      autosavePromiseRef.current = null;
+    }
+  }, [applySavedPixelRefs, cutId, projectId, serializeCanvasDocument]);
+
+  useEffect(() => {
+    if (!dirty || saving || autosaving || !projectId || !cutId) return;
+    const timer = window.setTimeout(() => void handleAutosave(), 1_600);
+    return () => window.clearTimeout(timer);
+  }, [autosaving, cutId, dirty, handleAutosave, layers, pageBackground, projectId, saving]);
+
+  const runPageAction = useCallback(async (action?: () => void | Promise<void>) => {
+    if (!action) return;
+    if (!dirtyRef.current) {
+      pendingNavigationRef.current = null;
+      await action();
+      return;
+    }
+    const saved = await handleAutosave();
+    if (saved && !dirtyRef.current) {
+      pendingNavigationRef.current = null;
+      await action();
+      return;
+    }
+    pendingNavigationRef.current = action;
+    setSaveFailureMessage("변경 내용을 자동저장하지 못했습니다. 진행 방법을 선택해주세요.");
+  }, [handleAutosave]);
 
   const downloadCanvasPng = useCallback(async () => {
     const { exportW, exportH } = ASPECT_CONFIG[aspect];
     const output = document.createElement("canvas");
     output.width = exportW;
     output.height = exportH;
-    renderCanvasLayers(output.getContext("2d")!, layers, canvasW, canvasH, exportW, exportH);
+    renderCanvasLayers(output.getContext("2d")!, layers, canvasW, canvasH, exportW, exportH, false, pageBackground);
     const blob = await canvasToBlob(output);
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -3736,7 +4130,7 @@ export default function CanvasEditor({
     link.download = `canvas-${aspect.replace(":", "x")}-${Date.now()}.png`;
     link.click();
     URL.revokeObjectURL(url);
-  }, [aspect, canvasH, canvasW, layers]);
+  }, [aspect, canvasH, canvasW, layers, pageBackground]);
 
   const downloadAllCanvasPages = useCallback(async () => {
     const exportPages = [...pages].sort((left, right) => left.order - right.order);
@@ -3760,11 +4154,14 @@ export default function CanvasEditor({
             const pageAspect = isCurrent ? aspect : serialized!.aspect;
             const pageWidth = isCurrent ? canvasW : serialized!.width;
             const pageHeight = isCurrent ? canvasH : serialized!.height;
+            const pageDocumentBackground = isCurrent
+              ? pageBackground
+              : backgroundFromSerializedCanvas(serialized!);
             const outputSize = ASPECT_CONFIG[pageAspect];
             const output = document.createElement("canvas");
             output.width = outputSize.exportW;
             output.height = outputSize.exportH;
-            renderCanvasLayers(output.getContext("2d")!, pageLayers, pageWidth, pageHeight, output.width, output.height);
+            renderCanvasLayers(output.getContext("2d")!, pageLayers, pageWidth, pageHeight, output.width, output.height, false, pageDocumentBackground);
             blob = await canvasToBlob(output);
           } catch {
             blob = null;
@@ -3794,7 +4191,7 @@ export default function CanvasEditor({
     } finally {
       setExportingPages(false);
     }
-  }, [aspect, canvasH, canvasW, currentPageId, layers, onDownloadAllPages, pages]);
+  }, [aspect, canvasH, canvasW, currentPageId, layers, onDownloadAllPages, pageBackground, pages]);
 
   const loadHistory = useCallback(async () => {
     if (!cutId) return;
@@ -3831,6 +4228,7 @@ export default function CanvasEditor({
         setCanvasW(restoredState.width);
         setCanvasH(restoredState.height);
         setAspect(restoredState.aspect);
+        setPageBackground(backgroundFromSerializedCanvas(restoredState));
         setLayers(restoredLayers);
         setActiveLayerId(restoredLayers.at(-1)?.id || "");
         setEditorMessage("선택한 버전의 이미지와 세부 레이어를 모두 복원했습니다.");
@@ -3882,33 +4280,50 @@ export default function CanvasEditor({
       const key = event.key.toLowerCase();
       if (command && key === "s") {
         event.preventDefault();
-        if (!saving) void handleSave();
+        if (!saving && !autosaving) void handleSave();
         return;
       }
-      if (command && key === "c" && activeLayerId) {
+      if (command && key === "c" && (activeLayerId || selectedLayerIds.length > 0)) {
         event.preventDefault();
-        const layer = layersRef.current.find((item) => item.id === activeLayerId);
-        copiedLayerRef.current = layer ? cloneLayers([layer])[0] : null;
+        const selectedIds = selectedLayerIds.length > 0 ? selectedLayerIds : [activeLayerId];
+        const selected = layersRef.current.filter((item) => selectedIds.includes(item.id));
+        copiedLayersRef.current = selected.length > 0
+          ? { layers: cloneLayers(selected), sourcePageId: currentPageId }
+          : null;
         return;
       }
-      if (command && key === "v" && copiedLayerRef.current) {
+      if (command && key === "v" && copiedLayersRef.current) {
         event.preventDefault();
         saveUndo();
-        const pasted = cloneLayers([copiedLayerRef.current])[0];
-        pasted.id = `layer_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-        pasted.name = `${pasted.name} 복사본`.slice(0, 40);
-        pasted.x += 12;
-        pasted.y += 12;
-        pasted.bubbles = pasted.bubbles.map((bubble) => ({
-          ...bubble,
-          id: `bubble_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          x: bubble.x + 12,
-          y: bubble.y + 12,
-          tailTipX: bubble.tailTipX + 12,
-          tailTipY: bubble.tailTipY + 12,
-        }));
-        setLayers((current) => [...current, pasted]);
-        setActiveLayerId(pasted.id);
+        const clipboard = copiedLayersRef.current;
+        const offset = clipboard.sourcePageId === currentPageId ? 12 : 0;
+        const groupIds = new Map<string, string>();
+        const pasted = cloneLayers(clipboard.layers).map((layer, index) => {
+          const nextGroupId = layer.groupId
+            ? groupIds.get(layer.groupId) || `group_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+            : null;
+          if (layer.groupId && nextGroupId) groupIds.set(layer.groupId, nextGroupId);
+          return {
+            ...layer,
+            id: `layer_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 6)}`,
+            groupId: nextGroupId,
+            name: `${layer.name} 복사본`.slice(0, 40),
+            x: layer.x + offset,
+            y: layer.y + offset,
+            bubbles: layer.bubbles.map((bubble, bubbleIndex) => ({
+              ...bubble,
+              id: `bubble_${Date.now()}_${index}_${bubbleIndex}_${Math.random().toString(36).slice(2, 6)}`,
+              x: bubble.x + offset,
+              y: bubble.y + offset,
+              tailTipX: bubble.tailTipX + offset,
+              tailTipY: bubble.tailTipY + offset,
+            })),
+          };
+        });
+        setLayers((current) => [...current, ...pasted]);
+        setSelectedLayerIds(pasted.map((layer) => layer.id));
+        setActiveLayerId(pasted.at(-1)?.id || "");
+        setSelectedBubbleId(null);
         return;
       }
       if (command && key === "d" && activeLayerId) {
@@ -3920,6 +4335,14 @@ export default function CanvasEditor({
         if (selectedBubbleId) {
           event.preventDefault();
           deleteBubble(selectedBubbleId);
+        } else if (selectedLayerIds.length > 1) {
+          event.preventDefault();
+          saveUndo();
+          const selected = new Set(selectedLayerIds);
+          const next = layersRef.current.filter((layer) => !selected.has(layer.id));
+          setLayers(next.length > 0 ? next : [createLayer(undefined, canvasW, canvasH)]);
+          setSelectedLayerIds([]);
+          setActiveLayerId(next.at(-1)?.id || "");
         } else if (activeLayerId && layersRef.current.length > 1) {
           event.preventDefault();
           deleteLayer(activeLayerId);
@@ -3934,8 +4357,7 @@ export default function CanvasEditor({
           const target = ordered[targetIndex];
           if (!target) return;
           event.preventDefault();
-          if (dirty && !window.confirm("현재 페이지에 저장하지 않은 변경 사항이 있습니다. 저장하지 않고 이동할까요?")) return;
-          void onSelectPage(target.id);
+          void runPageAction(() => onSelectPage(target.id));
           return;
         }
         const amount = event.shiftKey ? 10 : 1;
@@ -3955,7 +4377,8 @@ export default function CanvasEditor({
             } : bubble),
           })));
         } else {
-          setLayers((current) => current.map((layer) => layer.id === activeLayerId && !layer.locked
+          const movingIds = selectedLayerIds.length > 0 ? selectedLayerIds : [activeLayerId];
+          setLayers((current) => current.map((layer) => movingIds.includes(layer.id) && !layer.locked
             ? translateLayer(layer, dx, dy)
             : layer));
         }
@@ -3963,26 +4386,12 @@ export default function CanvasEditor({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeLayerId, currentPageId, deleteBubble, deleteLayer, dirty, duplicateLayer, handleSave, onSelectPage, pages, saveUndo, saving, selectedBubbleId]);
+  }, [activeLayerId, autosaving, canvasH, canvasW, currentPageId, deleteBubble, deleteLayer, duplicateLayer, handleSave, onSelectPage, pages, runPageAction, saveUndo, saving, selectedBubbleId, selectedLayerIds]);
 
-  const closeEditor = () => {
-    if (dirty && !window.confirm("저장하지 않은 변경 사항이 있습니다. 편집을 종료할까요?")) return;
-    onClose();
-  };
-
-  const runPageAction = (action?: () => void | Promise<void>) => {
-    if (!action) return;
-    if (dirty && !window.confirm("현재 페이지에 저장하지 않은 변경 사항이 있습니다. 저장하지 않고 페이지 작업을 계속할까요?")) return;
-    void action();
-  };
+  const closeEditor = () => void runPageAction(onClose);
 
   const activeLayer = layers.find((l) => l.id === activeLayerId);
   const displayScale = fitScale * zoom / 100;
-  const pageBackgroundLayer = layers.find((layer) => layer.background || (layer.name === "페이지 배경" && !layer.canvas));
-  const pageBackground: PageBackground = pageBackgroundLayer?.background ?? {
-    ...DEFAULT_PAGE_BACKGROUND,
-    color: pageBackgroundLayer?.fillColor || DEFAULT_PAGE_BACKGROUND.color,
-  };
   const pageBackgroundColor = pageBackground.color;
   const displayedAssets = assetTab === "project"
     ? galleryImages
@@ -4034,9 +4443,11 @@ export default function CanvasEditor({
         <div className={styles.headerActions}>
           <span className={`${styles.saveStatus} ${dirty ? styles.saveStatusDirty : ""}`}>
             {saving
-              ? "저장 중"
+              ? "버전 저장 중"
+              : autosaving
+                ? "자동저장 중"
               : dirty
-                ? "저장 안 됨"
+                ? "자동저장 대기"
                 : savedAt
                   ? `${savedAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 저장됨`
                   : "최신 상태"}
@@ -4049,7 +4460,7 @@ export default function CanvasEditor({
           <button className={styles.headerIconButton} onClick={() => void downloadCanvasPng()} title="현재 캔버스 PNG 저장">
             <LuDownload size={16} />
           </button>
-          <button className={styles.headerSaveButton} onClick={() => void handleSave()} disabled={saving || layers.length === 0}>
+          <button className={styles.headerSaveButton} onClick={() => void handleSave()} disabled={saving || autosaving}>
             {saving ? <LuLoaderCircle className={styles.spin} size={15} /> : <LuSave size={15} />} 저장
           </button>
           <button className={styles.headerDoneButton} onClick={closeEditor}>
@@ -4108,8 +4519,34 @@ export default function CanvasEditor({
                   {orderedPages.map((page) => (
                     <button
                       key={page.id}
-                      className={page.id === currentPageId ? styles.pageItemActive : ""}
+                      className={`${page.id === currentPageId ? styles.pageItemActive : ""} ${pageDropTarget?.id === page.id && pageDropTarget.position === "before" ? styles.pageDropBefore : ""} ${pageDropTarget?.id === page.id && pageDropTarget.position === "after" ? styles.pageDropAfter : ""}`}
                       aria-current={page.id === currentPageId ? "page" : undefined}
+                      draggable={Boolean(onReorderPages)}
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("application/x-canvas-page", page.id);
+                        setPageDropTarget(null);
+                      }}
+                      onDragOver={(event) => {
+                        if (!event.dataTransfer.types.includes("application/x-canvas-page")) return;
+                        event.preventDefault();
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        setPageDropTarget({ id: page.id, position: event.clientY < rect.top + rect.height / 2 ? "before" : "after" });
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const sourceId = event.dataTransfer.getData("application/x-canvas-page");
+                        if (!sourceId || sourceId === page.id || !onReorderPages) {
+                          setPageDropTarget(null);
+                          return;
+                        }
+                        const next = orderedPages.map((item) => item.id).filter((id) => id !== sourceId);
+                        const targetIndex = next.indexOf(page.id);
+                        next.splice(pageDropTarget?.id === page.id && pageDropTarget.position === "after" ? targetIndex + 1 : targetIndex, 0, sourceId);
+                        setPageDropTarget(null);
+                        runPageAction(() => onReorderPages(next));
+                      }}
+                      onDragEnd={() => setPageDropTarget(null)}
                       onClick={() => {
                         if (page.id !== currentPageId) runPageAction(onSelectPage ? () => onSelectPage(page.id) : undefined);
                       }}
@@ -4123,6 +4560,7 @@ export default function CanvasEditor({
                         <span className={styles.pageOrder}><b>{page.order + 1}</b>{page.id === coverPageId && <LuStar size={8} />}</span>
                         <small>{page.title}</small>
                       </span>
+                      {onReorderPages && <LuGripVertical className={styles.pageDragIcon} size={13} />}
                     </button>
                   ))}
                 </div>
@@ -4536,10 +4974,15 @@ export default function CanvasEditor({
                 width={canvasW}
                 height={canvasH}
                 className={`${styles.canvas} ${canvasCursorClass[tool]}`}
+                style={{ cursor: canvasCursor }}
                 onPointerDown={handleMouseDown}
                 onPointerMove={handleMouseMove}
                 onPointerUp={handleMouseUp}
                 onPointerCancel={handleMouseUp}
+                onDoubleClick={handleCanvasDoubleClick}
+                onPointerLeave={() => {
+                  if (!isDragging.current && !marqueeSelecting.current) setCanvasCursor(tool === "move" ? "default" : "crosshair");
+                }}
               />
             </div>
           </div>
@@ -4572,9 +5015,32 @@ export default function CanvasEditor({
                 <button onClick={() => { setCropRect(null); setTool("move"); }} title="자르기 취소"><LuX /> 취소</button>
               </>
             )}
-            <button onClick={() => void handleRemoveBackground()} disabled={cutoutLoading || !activeLayer?.canvas || activeLayer.locked} title="누끼 따기">
-              {cutoutLoading ? <LuLoaderCircle className={styles.spin} /> : <LuEraser />} 누끼 <CreditCostBadge credits={AI_CREDIT_COSTS.cutout} />
-            </button>
+            <div className={styles.utilityAnchor}>
+              <button className={cutoutOpen ? styles.utilityActive : ""} onClick={() => setCutoutOpen((value) => !value)} disabled={!activeLayer?.canvas || activeLayer.locked} title="누끼 방식 선택">
+                {cutoutLoading ? <LuLoaderCircle className={styles.spin} /> : <LuEraser />} 누끼
+                {cutoutMethod === "ai" && <CreditCostBadge credits={AI_CREDIT_COSTS.cutout} />}
+              </button>
+              {cutoutOpen && (
+                <div className={`${styles.utilityPopover} ${styles.cutoutPopover}`}>
+                  <strong>누끼 방식</strong>
+                  <div className={styles.segmentedControl}>
+                    <button className={cutoutMethod === "ai" ? styles.segmentActive : ""} onClick={() => setCutoutMethod("ai")}>AI 정밀</button>
+                    <button className={cutoutMethod === "corner" ? styles.segmentActive : ""} onClick={() => setCutoutMethod("corner")}>코너 색상</button>
+                  </div>
+                  {cutoutMethod === "corner" && (
+                    <label className={styles.utilityRange}>
+                      <span>유사색 범위</span>
+                      <input type="range" min={0} max={120} value={cornerCutoutTolerance} onChange={(event) => setCornerCutoutTolerance(Number(event.target.value))} />
+                      <b>{cornerCutoutTolerance}</b>
+                    </label>
+                  )}
+                  <button className={styles.utilityPrimary} onClick={() => void handleRemoveBackground()} disabled={cutoutLoading || (cutoutMethod === "ai" && cutoutConfigured !== true)}>
+                    {cutoutLoading ? <LuLoaderCircle className={styles.spin} /> : <LuEraser />} 적용
+                    {cutoutMethod === "ai" ? <CreditCostBadge credits={AI_CREDIT_COSTS.cutout} /> : <span>무료</span>}
+                  </button>
+                </div>
+              )}
+            </div>
             <button className={directDrawOpen ? styles.utilityActive : ""} onClick={() => { setDirectDrawOpen((value) => !value); activateTool("brush"); }} title="직접 그리기"><LuPencil /> 직접 그리기</button>
             <span className={styles.utilityDivider} />
             <div className={styles.utilityAnchor}>
@@ -4587,8 +5053,8 @@ export default function CanvasEditor({
                 <div className={`${styles.utilityPopover} ${styles.backgroundUtilityPopover}`}>
                   <strong>페이지 배경</strong>
                   <div className={styles.segmentedControl}>{([['none', '없음'], ['solid', '단색'], ['linear', '그라데이션'], ['texture', '텍스처']] as const).map(([id, label]) => <button key={id} className={pageBackground.type === id ? styles.segmentActive : ""} onClick={() => updatePageBackground({ type: id })}>{label}</button>)}</div>
-                  {pageBackground.type !== "none" && <label className={styles.utilityField}><span>기본색</span><input type="color" value={pageBackgroundColor} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ color: event.target.value }, false)} /><input value={pageBackgroundColor.slice(1).toUpperCase()} readOnly /></label>}
-                  {pageBackground.type === "linear" && <><label className={styles.utilityField}><span>끝 색</span><input type="color" value={pageBackground.color2} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ color2: event.target.value }, false)} /><input value={pageBackground.color2.slice(1).toUpperCase()} readOnly /></label><label className={styles.utilityRange}><span>각도</span><input type="range" min={0} max={360} value={pageBackground.angle} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ angle: Number(event.target.value) }, false)} /><b>{pageBackground.angle}°</b></label><label className={styles.utilityRange}><span>비율</span><input type="range" min={5} max={95} value={pageBackground.stop} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ stop: Number(event.target.value) }, false)} /><b>{pageBackground.stop}%</b></label></>}
+                  {pageBackground.type !== "none" && <label className={styles.utilityField}><span>기본색</span><input type="color" value={pageBackgroundColor} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ color: event.target.value }, false)} /><HexColorInput value={pageBackgroundColor} label="페이지 배경 기본색 HEX" onCommit={(color) => updatePageBackground({ color })} /></label>}
+                  {pageBackground.type === "linear" && <><label className={styles.utilityField}><span>끝 색</span><input type="color" value={pageBackground.color2} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ color2: event.target.value }, false)} /><HexColorInput value={pageBackground.color2} label="페이지 배경 끝 색 HEX" onCommit={(color2) => updatePageBackground({ color2 })} /></label><label className={styles.utilityRange}><span>각도</span><input type="range" min={0} max={360} value={pageBackground.angle} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ angle: Number(event.target.value) }, false)} /><b>{pageBackground.angle}°</b></label><label className={styles.utilityRange}><span>비율</span><input type="range" min={5} max={95} value={pageBackground.stop} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ stop: Number(event.target.value) }, false)} /><b>{pageBackground.stop}%</b></label></>}
                   {pageBackground.type === "texture" && <div className={styles.segmentedControl}>{(['paper', 'dot', 'canvas'] as const).map((texture) => <button key={texture} className={pageBackground.texture === texture ? styles.segmentActive : ""} onClick={() => updatePageBackground({ texture })}>{texture === 'paper' ? '종이' : texture === 'dot' ? '도트' : '캔버스'}</button>)}</div>}
                 </div>
               )}
@@ -4680,17 +5146,29 @@ export default function CanvasEditor({
               >
                 <LuCrop size={16} /> 크롭
               </button>
+              <select value={cutoutMethod} onChange={(event) => setCutoutMethod(event.target.value as CutoutMethod)} aria-label="누끼 방식">
+                <option value="ai">AI 정밀 누끼</option>
+                <option value="corner">코너 색상 누끼 · 무료</option>
+              </select>
+              {cutoutMethod === "corner" && (
+                <label className={styles.opacityLabel}>범위
+                  <input type="range" min={0} max={120} value={cornerCutoutTolerance} onChange={(event) => setCornerCutoutTolerance(Number(event.target.value))} />
+                  <span>{cornerCutoutTolerance}</span>
+                </label>
+              )}
               <button
                 className={styles.toolBtn}
                 onClick={() => void handleRemoveBackground()}
                 disabled={cutoutLoading || !activeLayer?.canvas || activeLayer?.locked}
-                title={cutoutConfigured === false ? "Nano Banana 이미지 API 연결 필요" : "Nano Banana로 선택 이미지의 배경 제거"}
+                title={cutoutMethod === "ai"
+                  ? cutoutConfigured === false ? "Nano Banana 이미지 API 연결 필요" : "Nano Banana로 선택 이미지의 배경 제거"
+                  : "네 코너의 연결된 유사색 배경 제거"}
               >
                 {cutoutLoading ? <LuLoaderCircle className={styles.spin} size={16} /> : <LuEraser size={16} />} 누끼
-                <CreditCostBadge credits={AI_CREDIT_COSTS.cutout} />
+                {cutoutMethod === "ai" && <CreditCostBadge credits={AI_CREDIT_COSTS.cutout} />}
               </button>
-              {cutoutConfigured !== true && (
-                <span className={styles.apiStatus}>{cutoutConfigured === null ? "AI 확인 중" : "AI 연결 필요"}</span>
+              {cutoutMethod === "ai" && cutoutConfigured !== true && (
+                <span className={styles.apiStatus}>{cutoutConfigured === null ? "AI 확인 중" : "API 연결 필요"}</span>
               )}
             </div>
             <div className={styles.toolGroup}>
@@ -4928,10 +5406,10 @@ export default function CanvasEditor({
                     </div>
                     {pageBackground.type !== "none" && (
                       <div className={styles.backgroundRows}>
-                        <label><span>기본색</span><input type="color" value={pageBackgroundColor} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ color: event.target.value }, false)} /></label>
+                        <label><span>기본색</span><input type="color" value={pageBackgroundColor} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ color: event.target.value }, false)} /><HexColorInput value={pageBackgroundColor} label="페이지 배경 기본색 HEX" onCommit={(color) => updatePageBackground({ color })} /></label>
                         {pageBackground.type === "linear" && (
                           <>
-                            <label><span>끝 색</span><input type="color" value={pageBackground.color2} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ color2: event.target.value }, false)} /></label>
+                            <label><span>끝 색</span><input type="color" value={pageBackground.color2} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ color2: event.target.value }, false)} /><HexColorInput value={pageBackground.color2} label="페이지 배경 끝 색 HEX" onCommit={(color2) => updatePageBackground({ color2 })} /></label>
                             <label><span>각도</span><input type="range" min={0} max={360} value={pageBackground.angle} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ angle: Number(event.target.value) }, false)} /><b>{pageBackground.angle}°</b></label>
                             <label><span>비율</span><input type="range" min={5} max={95} value={pageBackground.stop} onPointerDown={saveUndo} onChange={(event) => updatePageBackground({ stop: Number(event.target.value) }, false)} /><b>{pageBackground.stop}%</b></label>
                           </>
@@ -5368,6 +5846,7 @@ export default function CanvasEditor({
               {tool === "text" && selectedBubble?.type === "text" && (
                 <div className={`${styles.bubblePopup} ${styles.textPopup}`}>
                   <textarea
+                    ref={textEditorRef}
                     className={styles.bubbleTextInput}
                     value={selectedBubble.text ?? ""}
                     rows={3}
@@ -5584,22 +6063,35 @@ export default function CanvasEditor({
                   <LuPlus size={10} />
                 </button>
                 <div
-                  className={`${styles.layerItem} ${activeLayerId === layer.id ? styles.layerActive : ""} ${layer.groupId ? styles.layerGrouped : ""} ${layerDropTargetId === layer.id ? styles.layerDropTarget : ""}`}
-                  onClick={() => setActiveLayerId(layer.id)}
-                  onDragEnter={(event) => {
-                    if (event.dataTransfer.types.includes("application/x-canvas-layer")) setLayerDropTargetId(layer.id);
+                  className={`${styles.layerItem} ${activeLayerId === layer.id ? styles.layerActive : ""} ${layer.groupId ? styles.layerGrouped : ""} ${layerDropTarget?.id === layer.id && layerDropTarget.position === "before" ? styles.layerDropBefore : ""} ${layerDropTarget?.id === layer.id && layerDropTarget.position === "after" ? styles.layerDropAfter : ""}`}
+                  onClick={() => {
+                    setActiveLayerId(layer.id);
+                    setSelectedLayerIds([layer.id]);
+                    setSelectedBubbleId(null);
                   }}
-                  onDragOver={(e) => e.preventDefault()}
+                  onDragEnter={(event) => {
+                    if (event.dataTransfer.types.includes("application/x-canvas-layer")) {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setLayerDropTarget({ id: layer.id, position: event.clientY < rect.top + rect.height / 2 ? "before" : "after" });
+                    }
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    if (event.dataTransfer.types.includes("application/x-canvas-layer")) {
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setLayerDropTarget({ id: layer.id, position: event.clientY < rect.top + rect.height / 2 ? "before" : "after" });
+                    }
+                  }}
                   onDrop={(e) => {
                     e.preventDefault();
                     const sourceId = e.dataTransfer.getData("application/x-canvas-layer");
                     if (sourceId) {
-                      reorderLayer(sourceId, layer.id);
+                      reorderLayer(sourceId, layer.id, layerDropTarget?.id === layer.id ? layerDropTarget.position : "before");
                       return;
                     }
                     const url = e.dataTransfer.getData("text/plain");
                     if (url) handleDropOnLayer(layer.id, url);
-                    setLayerDropTargetId(null);
+                    setLayerDropTarget(null);
                   }}
                 >
                   <button
@@ -5611,9 +6103,9 @@ export default function CanvasEditor({
                       event.stopPropagation();
                       event.dataTransfer.effectAllowed = "move";
                       event.dataTransfer.setData("application/x-canvas-layer", layer.id);
-                      setLayerDropTargetId(null);
+                      setLayerDropTarget(null);
                     }}
-                    onDragEnd={() => setLayerDropTargetId(null)}
+                    onDragEnd={() => setLayerDropTarget(null)}
                     title="드래그해 레이어 순서 변경"
                     aria-label={`${layer.name || "레이어"} 순서 변경`}
                   ><LuGripVertical size={12} /></button>
@@ -5757,7 +6249,7 @@ export default function CanvasEditor({
           <button
             className={styles.saveBtn}
             onClick={() => void handleSave()}
-            disabled={saving}
+            disabled={saving || autosaving}
           >
             <LuSave size={16} />
             {saving
@@ -6010,6 +6502,34 @@ export default function CanvasEditor({
                 </article>
               ))}
             </div>
+          </section>
+        </div>
+      )}
+      {saveFailureMessage && (
+        <div className={styles.presetBackdrop} role="presentation">
+          <section className={`${styles.presetDialog} ${styles.saveFailureDialog}`} role="dialog" aria-modal="true" aria-labelledby="autosave-failure-title">
+            <header className={styles.historyHeader}>
+              <div><span>AUTOSAVE</span><h2 id="autosave-failure-title">자동저장 실패</h2></div>
+            </header>
+            <p>{saveFailureMessage}</p>
+            <footer className={styles.presetActions}>
+              <span />
+              <button onClick={() => {
+                pendingNavigationRef.current = null;
+                setSaveFailureMessage(null);
+              }}>취소</button>
+              <button onClick={() => {
+                const action = pendingNavigationRef.current;
+                pendingNavigationRef.current = null;
+                setSaveFailureMessage(null);
+                if (action) void action();
+              }}>저장하지 않고 계속</button>
+              <button className={styles.presetPrimary} disabled={autosaving} onClick={() => {
+                const action = pendingNavigationRef.current;
+                setSaveFailureMessage(null);
+                void runPageAction(action || undefined);
+              }}>{autosaving ? <LuLoaderCircle className={styles.spin} /> : <LuRefreshCw />} 다시 저장</button>
+            </footer>
           </section>
         </div>
       )}

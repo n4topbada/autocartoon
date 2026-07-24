@@ -28,7 +28,7 @@
 - 프로젝트·컷·표지·자산·대사·AI 기획·영상 플랜
 - PDF, DOCX, ZIP, Markdown, TXT, CSV, HTML, 이미지 OCR, 공개 URL 기획 자료 가져오기
 - 다중 페이지, 세로 8종 도구·고정 옵션, 단계형 지우개, 드래그 레이어·그룹·클리핑·가이드·정렬·필터·말풍선 생성기·도형·5종 직접 그리기·영역 OCR 캔버스
-- 53개 웹툰 폰트, 범위 워터마크, 전역 캡션 서식, Nano Banana AI 누끼와 투명 PNG 정규화
+- 53개 웹툰 폰트, 범위 워터마크, 전역 캡션 서식, 무료 코너 연결색 누끼와 Nano Banana AI 정밀 누끼
 - AI 자동·사각형·자유 마스크 편집, 바깥 픽셀 강제 보존, 버전 비교·복원
 - 현재 컷 PNG, 전체 컷 ZIP, 자동 저장
 - 컷별 Veo/Seedance 영상 생성, Gemini Flash 프롬프트 확장, 승인·Retry, ffmpeg.wasm 기반 세로 MP4 병합
@@ -51,6 +51,7 @@
 | AI 채팅, OCR, TTS | 1 |
 | 캐릭터 디렉터, AI 기획, 영상 플랜 | 2 |
 | 영상 프롬프트 확장 | 1 |
+| 코너 색상 누끼 | 무료 |
 | Nano Banana AI 누끼 | 13 |
 | Nano Banana 2 Lite 1K | 7 |
 | Nano Banana 2 1K / 2K | 13 / 19 |

@@ -789,6 +789,31 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
     }
   };
 
+  const reorderCuts = async (orderedIds: string[]) => {
+    if (!project || orderedIds.length !== project.cuts.length) return;
+    const byId = new Map(project.cuts.map((cut) => [cut.id, cut]));
+    const next = orderedIds.flatMap((id) => {
+      const cut = byId.get(id);
+      return cut ? [cut] : [];
+    });
+    if (next.length !== project.cuts.length) return;
+    setProject((current) => current
+      ? { ...current, cuts: next.map((cut, order) => ({ ...cut, order })) }
+      : current
+    );
+    try {
+      await readJson(await fetch(`/api/studio/projects/${project.id}/cuts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderedIds }),
+      }));
+      await loadProject(project.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "컷 순서 저장 실패");
+      await loadProject(project.id);
+    }
+  };
+
   const setCoverCut = async (cutId = selectedCut?.id) => {
     if (!project || !cutId) return;
     try {
@@ -1011,10 +1036,11 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
 
   const startImageGeneration = async () => {
     const hasGestureReference = mode === "gesture" && draft.scene.referenceAssetIds.length > 0;
-    if (!project || !selectedCut || (!hasGestureReference && selectedCharacterIds.length === 0) || !draft.prompt.trim()) {
+    const gestureHasSubject = hasGestureReference || selectedCharacterIds.length > 0;
+    if (!project || !selectedCut || !draft.prompt.trim() || (mode === "gesture" && !gestureHasSubject)) {
       setError(mode === "gesture"
         ? "캐릭터 프리셋 또는 참고 이미지와 제스처 프롬프트를 선택하세요."
-        : "캐릭터와 장면 프롬프트를 선택하세요.");
+        : "배경이나 장면을 설명하는 프롬프트를 입력하세요.");
       return;
     }
     const hasTwoUploadedCharacters = selectedCharacterIds.length === 0 && draft.scene.referenceAssetIds.length >= 2;
@@ -1030,7 +1056,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
     setGenerating(true);
     setError(null);
     try {
-      await saveCut();
+      if (!(await saveCut())) return;
       const prompt = buildStudioGenerationPrompt({
         prompt: draft.prompt,
         mode: mode === "gesture" ? "gesture" : "scene",
@@ -1051,7 +1077,11 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
             : project.aspectRatio,
           imageModel,
           imageSize,
-          jobKind: mode === "gesture" ? "gesture" : "image",
+          jobKind: mode === "gesture"
+            ? "gesture"
+            : selectedCharacterIds.length === 0
+              ? "background"
+              : "image",
           prompt,
           projectId: project.id,
           cutId: selectedCut.id,
@@ -1940,7 +1970,6 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
 
       {editingCut && project && selectedCut && (
         <CanvasEditor
-          key={selectedCut.id}
           initialImage={{ id: `cut:${selectedCut.id}`, dataUrl: selectedCut.imageUrl || BLANK_CANVAS_DATA_URL }}
           initialAspect={project.aspectRatio as "1:1" | "4:5" | "3:4" | "8:11" | "9:16" | "16:9"}
           galleryImages={project.assets
@@ -1963,6 +1992,7 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
           onDuplicatePage={duplicateCut}
           onDeletePage={deleteCut}
           onMovePage={moveCut}
+          onReorderPages={reorderCuts}
           coverPageId={project.coverCutId}
           onRenamePage={renameCut}
           onSetCoverPage={setCoverCut}

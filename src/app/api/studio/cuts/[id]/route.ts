@@ -37,6 +37,9 @@ export async function PATCH(
     const cut = await ownedCut(id, session.userId);
     if (!cut) return NextResponse.json({ error: "컷을 찾을 수 없습니다." }, { status: 404 });
     const body = (await req.json()) as Record<string, unknown>;
+    if (body.canvas && typeof body.canvas === "object" && JSON.stringify(body.canvas).length > 200_000) {
+      return NextResponse.json({ error: "캔버스 편집 정보가 너무 큽니다." }, { status: 413 });
+    }
     const duration = typeof body.durationMs === "number"
       ? Math.max(1000, Math.min(30_000, Math.round(body.durationMs)))
       : undefined;

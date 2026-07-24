@@ -49,11 +49,12 @@ test("account, character design, and owned characters use their integrated works
 });
 
 test("gesture and background workspaces share durable assets with scene and canvas", async () => {
-  const [home, gesture, background, canvas] = await Promise.all([
+  const [home, gesture, background, canvas, studio] = await Promise.all([
     readFile("src/app/page.tsx", "utf8"),
     readFile("src/components/GestureGenerator.tsx", "utf8"),
     readFile("src/components/BackgroundGenerator.tsx", "utf8"),
     readFile("src/components/CanvasEditor.tsx", "utf8"),
+    readFile("src/components/StudioWorkspace.tsx", "utf8"),
   ]);
 
   assert.match(gesture, /jobKind: "gesture"/);
@@ -62,6 +63,7 @@ test("gesture and background workspaces share durable assets with scene and canv
   assert.match(canvas, /\/api\/archive\?kind=background/);
 
   assert.match(background, /onBackgroundSaved\?\.\(saved\)/);
+  assert.match(studio, /selectedCharacterIds\.length === 0[\s\S]*\? "background"[\s\S]*: "image"/);
   assert.match(home, /onBackgroundSaved=\{\(saved\) =>/);
   assert.match(home, /setSelectedBgImageId\(saved\.id\)/);
   assert.match(home, /active=\{sceneWorkspaceView === "background"\}/);
