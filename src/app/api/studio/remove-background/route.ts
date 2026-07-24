@@ -8,7 +8,9 @@ import { isCreditError, withCreditCharge } from "@/lib/credit-service";
 import {
   findForegroundBounds,
   findOpaquePixelBounds,
+  getForegroundFocusRegion,
   type PixelBounds,
+  type PixelRegion,
 } from "@/lib/corner-cutout";
 import { generateContent, type GeminiRequest } from "@/lib/gemini";
 import { isGoogleImageConfigured } from "@/lib/image-generation";
@@ -92,6 +94,69 @@ function closestAspectRatio(width: number, height: number): CutoutAspectRatio {
   return options.sort((a, b) => Math.abs(a[1] - ratio) - Math.abs(b[1] - ratio))[0][0];
 }
 
+async function prepareCutoutSource(
+  source: Buffer,
+  width: number,
+  height: number,
+  sourceBounds: PixelBounds | null,
+  mimeType: string
+) {
+  const focusRegion = getForegroundFocusRegion(sourceBounds, width, height);
+  if (!focusRegion || !sourceBounds) {
+    return {
+      buffer: source,
+      width,
+      height,
+      mimeType,
+      bounds: sourceBounds,
+      focusRegion: null as PixelRegion | null,
+    };
+  }
+
+  const buffer = await sharp(source)
+    .extract({
+      left: focusRegion.x,
+      top: focusRegion.y,
+      width: focusRegion.width,
+      height: focusRegion.height,
+    })
+    .png()
+    .toBuffer();
+  return {
+    buffer,
+    width: focusRegion.width,
+    height: focusRegion.height,
+    mimeType: "image/png",
+    bounds: {
+      minX: sourceBounds.minX - focusRegion.x,
+      minY: sourceBounds.minY - focusRegion.y,
+      maxX: sourceBounds.maxX - focusRegion.x,
+      maxY: sourceBounds.maxY - focusRegion.y,
+    },
+    focusRegion,
+  };
+}
+
+async function restoreCutoutFrame(
+  cutout: Buffer,
+  width: number,
+  height: number,
+  focusRegion: PixelRegion | null
+) {
+  if (!focusRegion) return cutout;
+  return sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input: cutout, left: focusRegion.x, top: focusRegion.y }])
+    .png()
+    .toBuffer();
+}
+
 async function makeChromaTransparent(
   generated: Buffer,
   width: number,
@@ -132,6 +197,9 @@ async function makeChromaTransparent(
 
   if (transparentPixels < width * height * 0.005) {
     throw new Error("AI가 배경을 충분히 분리하지 못했습니다. 다시 시도해주세요.");
+  }
+  if (!findOpaquePixelBounds(new Uint8ClampedArray(pixels), width, height)) {
+    throw new Error("AI가 작은 전경 물체를 유지하지 못해 결과를 적용하지 않았습니다. 다시 시도해주세요.");
   }
   const aligned = await alignForeground(pixels, width, height, sourceBounds);
   return sharp(aligned, { raw: { width, height, channels: 4 } }).png().toBuffer();
@@ -184,7 +252,14 @@ export async function POST(req: NextRequest) {
       metadata.width,
       metadata.height
     );
-    const chroma = await chooseChromaKey(source);
+    const workImage = await prepareCutoutSource(
+      source,
+      metadata.width,
+      metadata.height,
+      sourceBounds,
+      image.type
+    );
+    const chroma = await chooseChromaKey(workImage.buffer);
 
     const output = await withCreditCharge(
       session.userId,
@@ -197,13 +272,14 @@ export async function POST(req: NextRequest) {
       async () => {
         const result = await generateContent({
           model: CUTOUT_MODEL,
-          aspectRatio: closestAspectRatio(metadata.width!, metadata.height!),
+          aspectRatio: closestAspectRatio(workImage.width, workImage.height),
           imageSize: "1K",
           modalities: ["IMAGE"],
-          referenceImages: [{ base64: source.toString("base64"), mimeType: image.type }],
+          referenceImages: [{ base64: workImage.buffer.toString("base64"), mimeType: workImage.mimeType }],
           prompt: [
             "배경 제거 전용 이미지 편집 작업이다. 첫 번째 입력 이미지의 전경 피사체만 정확히 분리한다.",
             "인물이나 물체의 얼굴, 신체, 외곽선, 색, 글자, 의상, 소품, 그림체와 해상도를 바꾸거나 새로 그리지 않는다.",
+            "피사체가 매우 작은 곤충, 아이콘, 얇은 선 또는 점 크기여도 배경으로 판단하거나 삭제하지 않는다. 보이는 전경 픽셀을 빠짐없이 유지한다.",
             "원래 배경, 그림자, 반사, 바닥, 주변 사물은 모두 제거한다.",
             `제거된 모든 배경은 단 하나의 완전 균일한 크로마키 색 ${chroma.hex}로 채운다. 그라데이션, 무늬, 그림자, 테두리는 금지한다.`,
             "피사체 가장자리와 머리카락·반투명 부분은 깨끗하고 자연스럽게 보존한다.",
@@ -213,12 +289,18 @@ export async function POST(req: NextRequest) {
         });
         const generated = result.images[0];
         if (!generated) throw new Error("AI가 누끼 결과 이미지를 반환하지 않았습니다.");
-        return makeChromaTransparent(
+        const cutout = await makeChromaTransparent(
           Buffer.from(generated.base64, "base64"),
+          workImage.width,
+          workImage.height,
+          chroma.rgb,
+          workImage.bounds
+        );
+        return restoreCutoutFrame(
+          cutout,
           metadata.width!,
           metadata.height!,
-          chroma.rgb,
-          sourceBounds
+          workImage.focusRegion
         );
       }
     );

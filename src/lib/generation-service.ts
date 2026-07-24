@@ -60,6 +60,7 @@ export function selectCharacterReferenceImages<T extends CharacterReferenceCandi
 
 export interface GenerateInput {
   jobId?: string;
+  jobKind?: "image" | "gesture" | "character" | "background";
   presetIds: string[];
   userId: string;
   isAdmin?: boolean;
@@ -434,6 +435,18 @@ export async function generate(input: GenerateInput) {
     if (priorityImages.length > 0) {
       guideLines.push(
         `전체 입력의 첫 번째 "=== 사용자 참조 이미지 1번 ==="은 그림체 전용 기준입니다. 선화·채색·색감·명암·질감만 따르고 인물이나 구도는 복제하지 마세요.`
+      );
+    }
+    if (presets.length > 0) {
+      guideLines.push(
+        `캐릭터 레퍼런스는 정체성 고정 기준입니다. 얼굴, 머리 모양, 체형, 의상, 소품, 고유 색상, 선 비율을 그대로 유지하고 요청받은 포즈·표정·카메라만 바꾸세요. 그림체 참조 이미지의 인물을 캐릭터로 사용하거나 캐릭터끼리 특징을 섞지 마세요.`
+      );
+    }
+    if (input.jobKind === "gesture" && regularInputImages.length > 0) {
+      const firstIdentityImage = input.styleReferenceFirst ? 2 : 1;
+      const lastIdentityImage = firstIdentityImage + regularInputImages.length - 1;
+      guideLines.push(
+        `"=== 사용자 참조 이미지 ${firstIdentityImage}번 ==="${lastIdentityImage > firstIdentityImage ? `부터 "=== 사용자 참조 이미지 ${lastIdentityImage}번 ==="` : ""}은 순서대로 캐릭터 정체성 참조입니다. 각 이미지의 얼굴, 머리, 체형, 의상, 소품과 고유 색상을 정확히 보존하고 포즈와 표정만 변경하세요. 작은 특징을 생략하거나 서로 섞거나 새 캐릭터로 재설계하지 마세요.`
       );
     }
     if (presets.length > 1) {

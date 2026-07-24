@@ -1,6 +1,7 @@
 export interface CornerCutoutResult {
   pixels: Uint8ClampedArray;
   removedPixels: number;
+  retainedPixels: number;
   seedCount: number;
   excludedCorner: number | null;
 }
@@ -10,6 +11,13 @@ export interface PixelBounds {
   minY: number;
   maxX: number;
   maxY: number;
+}
+
+export interface PixelRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 interface CornerColor {
@@ -27,15 +35,22 @@ function colorDistance(left: CornerColor, right: CornerColor) {
   return Math.hypot(left.r - right.r, left.g - right.g, left.b - right.b);
 }
 
-function pixelDistance(pixels: Uint8ClampedArray, offset: number, seed: CornerColor) {
+function pixelMatchesBackground(
+  pixels: Uint8ClampedArray,
+  offset: number,
+  seeds: CornerColor[],
+  toleranceSquared: number
+) {
   const alpha = pixels[offset + 3];
-  if (alpha < 16 && seed.a < 16) return 0;
-  if (alpha < 16 || seed.a < 16) return 441;
-  return Math.hypot(
-    pixels[offset] - seed.r,
-    pixels[offset + 1] - seed.g,
-    pixels[offset + 2] - seed.b
-  );
+  for (const seed of seeds) {
+    if (alpha < 16 && seed.a < 16) return true;
+    if (alpha < 16 || seed.a < 16) continue;
+    const red = pixels[offset] - seed.r;
+    const green = pixels[offset + 1] - seed.g;
+    const blue = pixels[offset + 2] - seed.b;
+    if (red * red + green * green + blue * blue <= toleranceSquared) return true;
+  }
+  return false;
 }
 
 function readCorner(pixels: Uint8ClampedArray, pixelIndex: number, index: number): CornerColor {
@@ -119,6 +134,35 @@ export function findForegroundBounds(
   return findOpaquePixelBounds(cutout.pixels, width, height);
 }
 
+export function getForegroundFocusRegion(
+  bounds: PixelBounds | null,
+  width: number,
+  height: number
+): PixelRegion | null {
+  if (!bounds || width <= 0 || height <= 0) return null;
+  const subjectWidth = bounds.maxX - bounds.minX + 1;
+  const subjectHeight = bounds.maxY - bounds.minY + 1;
+  if (subjectWidth <= 0 || subjectHeight <= 0) return null;
+
+  const subjectAreaRatio = (subjectWidth * subjectHeight) / (width * height);
+  if (subjectAreaRatio >= 0.18) return null;
+
+  const paddingX = Math.max(8, Math.ceil(subjectWidth * 0.45), Math.ceil(width * 0.01));
+  const paddingY = Math.max(8, Math.ceil(subjectHeight * 0.45), Math.ceil(height * 0.01));
+  const left = Math.max(0, bounds.minX - paddingX);
+  const top = Math.max(0, bounds.minY - paddingY);
+  const right = Math.min(width - 1, bounds.maxX + paddingX);
+  const bottom = Math.min(height - 1, bounds.maxY + paddingY);
+  const region = {
+    x: left,
+    y: top,
+    width: right - left + 1,
+    height: bottom - top + 1,
+  };
+
+  return region.width * region.height < width * height * 0.82 ? region : null;
+}
+
 export function removeConnectedCornerBackground(
   source: Uint8ClampedArray,
   width: number,
@@ -136,6 +180,7 @@ export function removeConnectedCornerBackground(
   const cornerPixelIndexes = [0, width - 1, (height - 1) * width, width * height - 1];
   const corners = cornerPixelIndexes.map((pixelIndex, index) => readCorner(pixels, pixelIndex, index));
   const { seeds, excludedCorner } = selectCornerSeeds(corners, tolerance);
+  const toleranceSquared = tolerance * tolerance;
   const visited = new Uint8Array(width * height);
   const queue = new Int32Array(width * height);
   let head = 0;
@@ -147,13 +192,17 @@ export function removeConnectedCornerBackground(
     tail += 1;
   }
 
+  let opaquePixels = 0;
+  for (let offset = 3; offset < pixels.length; offset += 4) {
+    if (pixels[offset] > 0) opaquePixels += 1;
+  }
   let removedPixels = 0;
   while (head < tail) {
     const pixelIndex = queue[head];
     head += 1;
     visited[pixelIndex] = 2;
     const offset = pixelIndex * 4;
-    const matchesBackground = seeds.some((seed) => pixelDistance(pixels, offset, seed) <= tolerance);
+    const matchesBackground = pixelMatchesBackground(pixels, offset, seeds, toleranceSquared);
     if (!matchesBackground) continue;
     if (pixels[offset + 3] > 0) removedPixels += 1;
     pixels[offset + 3] = 0;
@@ -173,5 +222,11 @@ export function removeConnectedCornerBackground(
     }
   }
 
-  return { pixels, removedPixels, seedCount: seeds.length, excludedCorner };
+  return {
+    pixels,
+    removedPixels,
+    retainedPixels: Math.max(0, opaquePixels - removedPixels),
+    seedCount: seeds.length,
+    excludedCorner,
+  };
 }

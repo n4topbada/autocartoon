@@ -117,10 +117,14 @@ test("canvas parity UI exposes scoped presets, region OCR, and Nano Banana cutou
   }
   assert.match(editor, /downloadAllCanvasPages/);
   assert.match(editor, /createCornerCutoutCanvas/);
-  assert.match(editor, /CORNER_CUTOUT_PREVIEW_MAX_SIDE/);
+  assert.match(editor, /CORNER_CUTOUT_PREVIEW_DEBOUNCE_MS/);
+  assert.doesNotMatch(editor, /CORNER_CUTOUT_PREVIEW_MAX_SIDE/);
   assert.match(cutoutRoute, /generateContent/);
   assert.match(cutoutRoute, /nano-banana-2/);
   assert.match(cutoutRoute, /크로마키/);
+  assert.match(cutoutRoute, /prepareCutoutSource/);
+  assert.match(cutoutRoute, /getForegroundFocusRegion/);
+  assert.match(cutoutRoute, /작은 전경 물체를 유지하지 못해 결과를 적용하지 않았습니다/);
   assert.ok(cutoutRoute.indexOf("if (!isGoogleImageConfigured())") < cutoutRoute.indexOf("const output = await withCreditCharge"));
 });
 

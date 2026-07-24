@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { generate } from "./generation-service";
+import { generate, type GenerateInput } from "./generation-service";
 import {
   failGenerationJob,
   updateJobProgress,
@@ -48,6 +48,7 @@ export async function runImageGenerationJob(
     await updateJobProgress(jobId, "generating_image", 35);
     await generate({
       jobId,
+      jobKind: job.kind as GenerateInput["jobKind"],
       userId: job.userId,
       isAdmin: input.isAdmin,
       presetIds: input.presetIds,

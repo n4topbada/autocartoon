@@ -132,12 +132,13 @@ type CutoutMethod = "ai" | "corner";
 type ShapeToolType = "rectangle" | "circle" | "ellipse" | "line" | "arrow" | "star";
 
 const MAX_EXTERNAL_OBJECT_BYTES = 5 * 1024 * 1024;
-const CORNER_CUTOUT_PREVIEW_MAX_SIDE = 420;
+const CORNER_CUTOUT_PREVIEW_DEBOUNCE_MS = 80;
 const EXTERNAL_OBJECT_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 interface CornerCutoutCanvasResult {
   canvas: HTMLCanvasElement;
   removedPixels: number;
+  retainedPixels: number;
   excludedCorner: number | null;
   approximate: boolean;
 }
@@ -771,6 +772,10 @@ function createCornerCutoutCanvas(
     removedPixels: Math.min(
       regionPixels,
       Math.round((result.removedPixels / samplePixels) * regionPixels)
+    ),
+    retainedPixels: Math.min(
+      regionPixels,
+      Math.round((result.retainedPixels / samplePixels) * regionPixels)
     ),
     excludedCorner: result.excludedCorner,
     approximate: scale < 1,
@@ -1575,30 +1580,30 @@ export default function CanvasEditor({
 
     let cancelled = false;
     setCornerCutoutPreviewPending(true);
-    const frame = window.requestAnimationFrame(() => {
-      try {
-        const result = createCornerCutoutCanvas(
-          cornerPreviewCanvas,
-          cornerCutoutTolerance,
-          CORNER_CUTOUT_PREVIEW_MAX_SIDE
-        );
-        if (!cancelled) {
-          setCornerCutoutPreview({
-            ...result,
-            layerId: activeLayerId,
-            tolerance: cornerCutoutTolerance,
-          });
+    let frame = 0;
+    const timer = window.setTimeout(() => {
+      frame = window.requestAnimationFrame(() => {
+        try {
+          const result = createCornerCutoutCanvas(cornerPreviewCanvas, cornerCutoutTolerance);
+          if (!cancelled) {
+            setCornerCutoutPreview({
+              ...result,
+              layerId: activeLayerId,
+              tolerance: cornerCutoutTolerance,
+            });
+          }
+        } catch {
+          if (!cancelled) setCornerCutoutPreview(null);
+        } finally {
+          if (!cancelled) setCornerCutoutPreviewPending(false);
         }
-      } catch {
-        if (!cancelled) setCornerCutoutPreview(null);
-      } finally {
-        if (!cancelled) setCornerCutoutPreviewPending(false);
-      }
-    });
+      });
+    }, CORNER_CUTOUT_PREVIEW_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;
-      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+      if (frame) window.cancelAnimationFrame(frame);
     };
   }, [
     activeLayerId,
@@ -2549,6 +2554,10 @@ export default function CanvasEditor({
       if (cutoutMethod === "corner") {
         await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
         const result = createCornerCutoutCanvas(activeLayer.canvas, cornerCutoutTolerance);
+        if (result.retainedPixels === 0) {
+          setEditorMessage("전경 물체를 찾지 못해 누끼를 적용하지 않았습니다. 강도를 낮추거나 AI 정밀 누끼를 사용해주세요.");
+          return;
+        }
         saveUndo();
         setLayers((current) => current.map((layer) => layer.id === activeLayerId
           ? {
@@ -5162,12 +5171,14 @@ export default function CanvasEditor({
                       <output className={styles.cutoutPreviewStatus} aria-live="polite">
                         <span>{cornerCutoutPreviewPending ? "미리보기 갱신 중" : "실시간 미리보기"}</span>
                         <b>{cornerCutoutPreview
-                          ? `${cornerCutoutPreview.approximate ? "약 " : ""}${cornerCutoutPreview.removedPixels.toLocaleString("ko-KR")}픽셀 제거`
+                          ? cornerCutoutPreview.retainedPixels === 0
+                            ? "전경 없음 · 강도를 낮추세요"
+                            : `${cornerCutoutPreview.removedPixels.toLocaleString("ko-KR")}픽셀 제거`
                           : "준비 중"}</b>
                       </output>
                     </>
                   )}
-                  <button className={styles.utilityPrimary} onClick={() => void handleRemoveBackground()} disabled={cutoutLoading || (cutoutMethod === "ai" && cutoutConfigured !== true)}>
+                  <button className={styles.utilityPrimary} onClick={() => void handleRemoveBackground()} disabled={cutoutLoading || (cutoutMethod === "ai" && cutoutConfigured !== true) || (cutoutMethod === "corner" && cornerCutoutPreview?.retainedPixels === 0)}>
                     {cutoutLoading ? <LuLoaderCircle className={styles.spin} /> : <LuEraser />} 적용
                     {cutoutMethod === "ai" ? <CreditCostBadge credits={AI_CREDIT_COSTS.cutout} /> : <span>무료</span>}
                   </button>
@@ -5290,12 +5301,12 @@ export default function CanvasEditor({
                 </label>
               )}
               {cutoutMethod === "corner" && cornerCutoutPreview && (
-                <span className={styles.cutoutInlinePreview}>실시간 · {cornerCutoutPreview.approximate ? "약 " : ""}{cornerCutoutPreview.removedPixels.toLocaleString("ko-KR")}픽셀</span>
+                <span className={styles.cutoutInlinePreview}>{cornerCutoutPreview.retainedPixels === 0 ? "전경 없음 · 강도 낮춤 필요" : `실시간 · ${cornerCutoutPreview.removedPixels.toLocaleString("ko-KR")}픽셀`}</span>
               )}
               <button
                 className={styles.toolBtn}
                 onClick={() => void handleRemoveBackground()}
-                disabled={cutoutLoading || !activeLayer?.canvas || activeLayer?.locked}
+                disabled={cutoutLoading || !activeLayer?.canvas || activeLayer?.locked || (cutoutMethod === "corner" && cornerCutoutPreview?.retainedPixels === 0)}
                 title={cutoutMethod === "ai"
                   ? cutoutConfigured === false ? "Nano Banana 이미지 API 연결 필요" : "Nano Banana로 선택 이미지의 배경 제거"
                   : "네 코너의 연결된 유사색 배경 제거"}

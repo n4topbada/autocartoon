@@ -19,6 +19,9 @@ test("style reference requests explicitly reserve the first model image", async 
   ]);
   assert.match(characterCreator, /styleReferenceFirst: true/);
   assert.match(gestureGenerator, /\.\.\.\(styleReference \? \[styleReference\] : \[\]\)/);
+  assert.match(gestureGenerator, /캐릭터 정체성 참조/);
   assert.match(service, /priorityImages = input\.styleReferenceFirst/);
+  assert.match(service, /캐릭터 레퍼런스는 정체성 고정 기준/);
+  assert.match(service, /input\.jobKind === "gesture"/);
   assert.ok(gemini.indexOf("if (req.priorityImages)") < gemini.indexOf("if (req.referenceImages)"));
 });

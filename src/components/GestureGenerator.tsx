@@ -16,6 +16,7 @@ import {
 import CreditCostBadge from "@/components/CreditCostBadge";
 import ImageModelSelector from "@/components/ImageModelSelector";
 import ImageDropZone, { type ImageData } from "@/components/ImageDropZone";
+import { useResizablePanelWidth } from "@/components/useResizablePanelWidth";
 import { getGenerationCreditCost } from "@/lib/credit-products";
 import { DEFAULT_IMAGE_MODEL_ID, type ImageModelId } from "@/lib/ai-pricing";
 import {
@@ -117,10 +118,19 @@ export default function GestureGenerator({ active = true }: { active?: boolean }
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const completedRef = useRef(new Set<string>());
+  const splitPane = useResizablePanelWidth({
+    storageKey: "wony-gesture-generator-panel-width",
+    defaultWidth: 440,
+  });
 
   const maxCharacters = layout === "two" ? 2 : 1;
   const uploadCount = characterUploads.filter(Boolean).length;
   const sourceCount = uploadCount + selectedPresetIds.length;
+  const generationDisabledReason = sourceCount !== maxCharacters
+    ? `캐릭터 ${maxCharacters}명을 선택하거나 업로드하세요.`
+    : !prompt.trim()
+      ? "원하는 포즈, 표정, 상황을 입력하세요."
+      : null;
   const selectedPresets = useMemo(
     () => presets.filter((preset) => selectedPresetIds.includes(preset.id)),
     [presets, selectedPresetIds]
@@ -245,7 +255,15 @@ export default function GestureGenerator({ active = true }: { active?: boolean }
         referenceAssetIds: [],
       };
       const generatedPrompt = buildStudioGenerationPrompt({
-        prompt: `${prompt.trim()}${styleReference ? "\n첫 번째 참고 이미지는 그림체 전용 참조다. 선화, 채색법, 색감, 명암과 질감만 따르고 인물 외형이나 구도는 복제하지 않는다." : ""}`,
+        prompt: [
+          prompt.trim(),
+          styleReference
+            ? "첫 번째 참고 이미지는 그림체 전용 참조다. 선화, 채색법, 색감, 명암과 질감만 따르고 인물 외형이나 구도는 복제하지 않는다."
+            : "",
+          uploadCount > 0
+            ? `그림체 이미지 다음에 첨부된 ${uploadCount}장은 순서대로 캐릭터 정체성 참조다. 각 캐릭터의 얼굴, 머리 모양, 체형, 의상, 소품, 고유 색상과 선 비율을 그대로 유지하고 포즈와 표정만 요청에 맞게 바꾼다. 서로의 특징을 섞거나 새로운 디자인으로 재해석하지 않는다.`
+            : "",
+        ].filter(Boolean).join("\n"),
         mode: "gesture",
         settings,
         characters: selectedPresets.map((preset) => ({ id: preset.id, name: preset.name })),
@@ -342,7 +360,7 @@ export default function GestureGenerator({ active = true }: { active?: boolean }
   };
 
   return (
-    <div className={styles.workspace}>
+    <div ref={splitPane.containerRef} className={styles.workspace} style={splitPane.style}>
       <aside className={styles.controls}>
         <div className={styles.headingRow}>
           <div><h2>제스처 만들기</h2><span>Vertex AI</span></div>
@@ -450,7 +468,13 @@ export default function GestureGenerator({ active = true }: { active?: boolean }
 
         <div className={styles.formActions}>
           <button type="button" className={styles.resetButton} onClick={reset} disabled={starting}><LuRefreshCw /> 초기화</button>
-          <button type="button" className={styles.generateButton} onClick={() => void startGeneration()} disabled={starting || Boolean(trackedJobId)}>
+          <button
+            type="button"
+            className={styles.generateButton}
+            onClick={() => void startGeneration()}
+            disabled={starting || Boolean(trackedJobId) || Boolean(generationDisabledReason)}
+            title={generationDisabledReason || undefined}
+          >
             {starting || trackedJobId ? <LuLoaderCircle className={styles.spin} /> : <LuSparkles />}
             {starting ? "요청 중" : trackedJobId ? "생성 중" : "제스처 생성"}
             <CreditCostBadge credits={getGenerationCreditCost("gesture", { imageModel, imageSize })} />
@@ -465,6 +489,13 @@ export default function GestureGenerator({ active = true }: { active?: boolean }
           </div>
         )}
       </aside>
+
+      <div
+        {...splitPane.separatorProps}
+        className={`${styles.panelResizer} ${splitPane.resizing ? styles.panelResizerActive : ""}`}
+        aria-label="제스처 설정 패널 너비 조절"
+        title="드래그해 설정 패널 너비 조절 · 더블클릭 초기화"
+      />
 
       <section className={styles.results}>
         <div className={styles.resultsHeader}>

@@ -1014,6 +1014,23 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
     authUser?.role === "admin" ||
     (Boolean(character.userId) && character.userId === authUser?.id);
 
+  const hasGestureReference = mode === "gesture" && draft.scene.referenceAssetIds.length > 0;
+  const gestureHasSubject = hasGestureReference || selectedCharacterIds.length > 0;
+  const hasTwoUploadedCharacters = selectedCharacterIds.length === 0 && draft.scene.referenceAssetIds.length >= 2;
+  const gestureLayoutReady = mode !== "gesture" ||
+    draft.scene.gestureLayout !== "two" ||
+    selectedCharacterIds.length === 2 ||
+    hasTwoUploadedCharacters;
+  const imageGenerationDisabledReason = !project || !selectedCut
+    ? "프로젝트와 컷을 선택하세요."
+    : !draft.prompt.trim()
+      ? mode === "gesture" ? "제스처 프롬프트를 입력하세요." : "배경이나 장면을 설명하는 프롬프트를 입력하세요."
+      : mode === "gesture" && !gestureHasSubject
+        ? "캐릭터 프리셋 또는 참고 이미지를 선택하세요."
+        : !gestureLayoutReady
+          ? "2캐릭터 장면은 프리셋 2명 또는 참고 이미지 2장 이상이 필요합니다."
+          : null;
+
   const setCharacterImageView = async (presetId: string, imageId: string, view: string) => {
     try {
       await readJson(await fetch(`/api/presets/${presetId}/images`, {
@@ -1035,22 +1052,8 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
   };
 
   const startImageGeneration = async () => {
-    const hasGestureReference = mode === "gesture" && draft.scene.referenceAssetIds.length > 0;
-    const gestureHasSubject = hasGestureReference || selectedCharacterIds.length > 0;
-    if (!project || !selectedCut || !draft.prompt.trim() || (mode === "gesture" && !gestureHasSubject)) {
-      setError(mode === "gesture"
-        ? "캐릭터 프리셋 또는 참고 이미지와 제스처 프롬프트를 선택하세요."
-        : "배경이나 장면을 설명하는 프롬프트를 입력하세요.");
-      return;
-    }
-    const hasTwoUploadedCharacters = selectedCharacterIds.length === 0 && draft.scene.referenceAssetIds.length >= 2;
-    if (
-      mode === "gesture" &&
-      draft.scene.gestureLayout === "two" &&
-      selectedCharacterIds.length !== 2 &&
-      !hasTwoUploadedCharacters
-    ) {
-      setError("2캐릭터 장면은 프리셋 2명 또는 참고 이미지 2장 이상이 필요합니다.");
+    if (!project || !selectedCut || imageGenerationDisabledReason) {
+      setError(imageGenerationDisabledReason || "프로젝트와 컷을 선택하세요.");
       return;
     }
     setGenerating(true);
@@ -1951,7 +1954,10 @@ export default function StudioWorkspace({ initialMode = "scene" }: { initialMode
               <button
                 className={styles.generateButton}
                 onClick={() => void (mode === "video" ? startVideoGeneration() : startImageGeneration())}
-                disabled={generating || (mode === "video" && !videoProviderConfigured[videoOptions.provider])}
+                disabled={generating || (mode === "video"
+                  ? !videoProviderConfigured[videoOptions.provider]
+                  : Boolean(imageGenerationDisabledReason))}
+                title={mode !== "video" && imageGenerationDisabledReason ? imageGenerationDisabledReason : undefined}
               >
                 {generating ? <LuLoaderCircle className={styles.spin} /> : mode === "video" ? <LuPlay /> : <LuSparkles />}
                 {generating ? "작업 등록 중" : mode === "video" ? "영상 만들기" : mode === "gesture" ? "제스처 만들기" : "장면 만들기"}

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   findForegroundBounds,
+  getForegroundFocusRegion,
   removeConnectedCornerBackground,
 } from "../src/lib/corner-cutout";
 
@@ -43,6 +44,28 @@ test("배경과 같은 색이어도 연결이 끊긴 내부 영역은 보존한�
   const result = removeConnectedCornerBackground(pixels, 7, 7, 16);
   assert.equal(result.pixels[(3 * 7 + 3) * 4 + 3], 255);
   assert.equal(result.pixels[3], 0);
+});
+
+test("흰 배경의 한 픽셀짜리 검은 전경도 높은 강도에서 보존한다", () => {
+  const pixels = image(101, 101, [255, 255, 255, 255]);
+  setPixel(pixels, 101, 50, 50, [0, 0, 0, 255]);
+
+  const result = removeConnectedCornerBackground(pixels, 101, 101, 120);
+
+  assert.equal(result.retainedPixels, 1);
+  assert.equal(result.pixels[(50 * 101 + 50) * 4 + 3], 255);
+  assert.equal(result.pixels[3], 0);
+});
+
+test("작은 전경은 AI가 놓치지 않도록 여백을 둔 확대 영역을 만든다", () => {
+  assert.deepEqual(
+    getForegroundFocusRegion({ minX: 49, minY: 50, maxX: 51, maxY: 52 }, 100, 100),
+    { x: 41, y: 42, width: 19, height: 19 }
+  );
+  assert.equal(
+    getForegroundFocusRegion({ minX: 10, minY: 10, maxX: 89, maxY: 89 }, 100, 100),
+    null
+  );
 });
 
 test("불투명 단색 배경에서도 실제 전경의 좌표 경계를 찾는다", () => {

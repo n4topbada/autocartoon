@@ -19,6 +19,7 @@ import { DEFAULT_IMAGE_MODEL_ID, type ImageModelId } from "@/lib/ai-pricing";
 import CreditCostBadge from "@/components/CreditCostBadge";
 import ImageDropZone, { type ImageData } from "@/components/ImageDropZone";
 import ImageModelSelector from "@/components/ImageModelSelector";
+import { useResizablePanelWidth } from "@/components/useResizablePanelWidth";
 import styles from "./CharacterCreator.module.css";
 
 interface JobArtifact {
@@ -105,6 +106,10 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
   const [imageSize, setImageSize] = useState<"1K" | "2K">("1K");
   const [styleReference, setStyleReference] = useState<ImageData | null>(null);
   const completedRef = useRef<Set<string>>(new Set());
+  const splitPane = useResizablePanelWidth({
+    storageKey: "wony-character-creator-panel-width",
+    defaultWidth: 430,
+  });
 
   const loadJobs = useCallback(async () => {
     const data = await readJson<{ jobs: CharacterJob[] }>(
@@ -294,7 +299,7 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
   };
 
   return (
-    <div className={styles.workspace}>
+    <div ref={splitPane.containerRef} className={styles.workspace} style={splitPane.style}>
       <aside className={styles.controls}>
         <div className={styles.headingRow}>
           <div>
@@ -460,6 +465,13 @@ export default function CharacterCreator({ onPresetSaved }: { onPresetSaved?: ()
           </div>
         )}
       </aside>
+
+      <div
+        {...splitPane.separatorProps}
+        className={`${styles.panelResizer} ${splitPane.resizing ? styles.panelResizerActive : ""}`}
+        aria-label="캐릭터 설정 패널 너비 조절"
+        title="드래그해 설정 패널 너비 조절 · 더블클릭 초기화"
+      />
 
       <section className={styles.results}>
         <div className={styles.resultsHeader}>
