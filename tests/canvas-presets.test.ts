@@ -112,10 +112,12 @@ test("canvas parity UI exposes scoped presets, region OCR, and Nano Banana cutou
     readFile("src/components/CanvasEditor.tsx", "utf8"),
     readFile("src/app/api/studio/remove-background/route.ts", "utf8"),
   ]);
-  for (const label of ["현재 컷", "전체 컷", "범위", "상단 추가", "하단 추가", "사각형", "자유 선택", "API 연결 필요"]) {
+  for (const label of ["현재 컷", "전체 컷", "범위", "상단 추가", "하단 추가", "사각형", "자유 선택", "API 연결 필요", "실시간 미리보기", "누끼 강도"]) {
     assert.match(editor, new RegExp(label));
   }
   assert.match(editor, /downloadAllCanvasPages/);
+  assert.match(editor, /createCornerCutoutCanvas/);
+  assert.match(editor, /CORNER_CUTOUT_PREVIEW_MAX_SIDE/);
   assert.match(cutoutRoute, /generateContent/);
   assert.match(cutoutRoute, /nano-banana-2/);
   assert.match(cutoutRoute, /크로마키/);

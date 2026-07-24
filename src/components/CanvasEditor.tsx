@@ -132,7 +132,20 @@ type CutoutMethod = "ai" | "corner";
 type ShapeToolType = "rectangle" | "circle" | "ellipse" | "line" | "arrow" | "star";
 
 const MAX_EXTERNAL_OBJECT_BYTES = 5 * 1024 * 1024;
+const CORNER_CUTOUT_PREVIEW_MAX_SIDE = 420;
 const EXTERNAL_OBJECT_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+interface CornerCutoutCanvasResult {
+  canvas: HTMLCanvasElement;
+  removedPixels: number;
+  excludedCorner: number | null;
+  approximate: boolean;
+}
+
+interface CornerCutoutPreview extends CornerCutoutCanvasResult {
+  layerId: string;
+  tolerance: number;
+}
 
 interface TextToolDefaults {
   fontSize: number;
@@ -687,6 +700,83 @@ function canvasAlphaBounds(canvas: HTMLCanvasElement): PixelBounds | null {
   }
 }
 
+function createCornerCutoutCanvas(
+  source: HTMLCanvasElement,
+  tolerance: number,
+  previewMaxSide = Number.POSITIVE_INFINITY
+): CornerCutoutCanvasResult {
+  const opaque = canvasAlphaBounds(source);
+  const region = opaque
+    ? {
+        x: opaque.minX,
+        y: opaque.minY,
+        width: opaque.maxX - opaque.minX + 1,
+        height: opaque.maxY - opaque.minY + 1,
+      }
+    : { x: 0, y: 0, width: source.width, height: source.height };
+  const scale = Math.min(1, previewMaxSide / Math.max(region.width, region.height));
+  const sampleWidth = Math.max(1, Math.round(region.width * scale));
+  const sampleHeight = Math.max(1, Math.round(region.height * scale));
+  const sample = document.createElement("canvas");
+  sample.width = sampleWidth;
+  sample.height = sampleHeight;
+  const sampleContext = sample.getContext("2d")!;
+  sampleContext.drawImage(
+    source,
+    region.x,
+    region.y,
+    region.width,
+    region.height,
+    0,
+    0,
+    sampleWidth,
+    sampleHeight
+  );
+  const sampleData = sampleContext.getImageData(0, 0, sampleWidth, sampleHeight);
+  const result = removeConnectedCornerBackground(
+    sampleData.data,
+    sampleWidth,
+    sampleHeight,
+    tolerance
+  );
+  sampleContext.putImageData(
+    new ImageData(new Uint8ClampedArray(result.pixels), sampleWidth, sampleHeight),
+    0,
+    0
+  );
+
+  const nextCanvas = cloneCanvas(source);
+  const nextContext = nextCanvas.getContext("2d")!;
+  nextContext.save();
+  nextContext.globalCompositeOperation = "destination-in";
+  nextContext.imageSmoothingEnabled = true;
+  nextContext.drawImage(
+    sample,
+    0,
+    0,
+    sampleWidth,
+    sampleHeight,
+    region.x,
+    region.y,
+    region.width,
+    region.height
+  );
+  nextContext.restore();
+  alphaBoundsCache.delete(nextCanvas);
+
+  const samplePixels = sampleWidth * sampleHeight;
+  const regionPixels = region.width * region.height;
+  return {
+    canvas: nextCanvas,
+    removedPixels: Math.min(
+      regionPixels,
+      Math.round((result.removedPixels / samplePixels) * regionPixels)
+    ),
+    excludedCorner: result.excludedCorner,
+    approximate: scale < 1,
+  };
+}
+
 function rotatePoint(x: number, y: number, centerX: number, centerY: number, degrees: number) {
   const radians = degrees * Math.PI / 180;
   const cosine = Math.cos(radians);
@@ -1066,6 +1156,8 @@ export default function CanvasEditor({
   const [cutoutConfigured, setCutoutConfigured] = useState<boolean | null>(null);
   const [cutoutMethod, setCutoutMethod] = useState<CutoutMethod>("ai");
   const [cornerCutoutTolerance, setCornerCutoutTolerance] = useState(42);
+  const [cornerCutoutPreview, setCornerCutoutPreview] = useState<CornerCutoutPreview | null>(null);
+  const [cornerCutoutPreviewPending, setCornerCutoutPreviewPending] = useState(false);
   const [redrawOpen, setRedrawOpen] = useState(false);
   const [redrawLoading, setRedrawLoading] = useState(false);
   const [redrawPrompt, setRedrawPrompt] = useState("");
@@ -1468,13 +1560,67 @@ export default function CanvasEditor({
     return () => { active = false; };
   }, [assetReloadVersion]);
 
+  const cornerPreviewLayer = layers.find((layer) => layer.id === activeLayerId);
+  const cornerPreviewCanvas = cornerPreviewLayer?.canvas ?? null;
+  const cornerPreviewRevision = cornerPreviewLayer?.pixelRevision ?? -1;
+  const cornerPreviewLocked = cornerPreviewLayer?.locked ?? true;
+  const cornerPreviewActive = cutoutMethod === "corner" && (cutoutOpen || toolbarCollapsed);
+
+  useEffect(() => {
+    if (!cornerPreviewActive || !cornerPreviewCanvas || cornerPreviewLocked) {
+      setCornerCutoutPreview(null);
+      setCornerCutoutPreviewPending(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCornerCutoutPreviewPending(true);
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const result = createCornerCutoutCanvas(
+          cornerPreviewCanvas,
+          cornerCutoutTolerance,
+          CORNER_CUTOUT_PREVIEW_MAX_SIDE
+        );
+        if (!cancelled) {
+          setCornerCutoutPreview({
+            ...result,
+            layerId: activeLayerId,
+            tolerance: cornerCutoutTolerance,
+          });
+        }
+      } catch {
+        if (!cancelled) setCornerCutoutPreview(null);
+      } finally {
+        if (!cancelled) setCornerCutoutPreviewPending(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
+  }, [
+    activeLayerId,
+    cornerCutoutTolerance,
+    cornerPreviewActive,
+    cornerPreviewCanvas,
+    cornerPreviewLocked,
+    cornerPreviewRevision,
+  ]);
+
   // 캔버스 렌더링
   const render = useCallback(() => {
     void maskRevision;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
-    renderCanvasLayers(ctx, layers, canvasW, canvasH, canvasW, canvasH, false, pageBackground);
+    const previewLayers = cornerPreviewActive && cornerCutoutPreview?.layerId === activeLayerId
+      ? layers.map((layer) => layer.id === activeLayerId
+        ? { ...layer, canvas: cornerCutoutPreview.canvas }
+        : layer)
+      : layers;
+    renderCanvasLayers(ctx, previewLayers, canvasW, canvasH, canvasW, canvasH, false, pageBackground);
 
     const editMask = aiMaskCanvasRef.current;
     if (editMask && (redrawOpen || ocrOpen || tool === "mask")) {
@@ -1606,7 +1752,7 @@ export default function CanvasEditor({
       }
       ctx.restore();
     }
-  }, [activeLayerId, layers, cropRect, tool, canvasH, canvasW, pageBackground, selectedBubbleId, selectedLayerIds, selectionRect, showGuides, showOverflow, redrawOpen, ocrOpen, maskRevision, eraserApplyMode]);
+  }, [activeLayerId, layers, cropRect, tool, canvasH, canvasW, pageBackground, selectedBubbleId, selectedLayerIds, selectionRect, showGuides, showOverflow, redrawOpen, ocrOpen, maskRevision, eraserApplyMode, cornerCutoutPreview, cornerPreviewActive]);
 
   useEffect(() => {
     render();
@@ -2402,41 +2548,19 @@ export default function CanvasEditor({
     try {
       if (cutoutMethod === "corner") {
         await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-        const sourceContext = activeLayer.canvas.getContext("2d")!;
-        const opaque = canvasAlphaBounds(activeLayer.canvas);
-        const region = opaque
-          ? {
-              x: opaque.minX,
-              y: opaque.minY,
-              width: opaque.maxX - opaque.minX + 1,
-              height: opaque.maxY - opaque.minY + 1,
-            }
-          : { x: 0, y: 0, width: activeLayer.canvas.width, height: activeLayer.canvas.height };
-        const sourceData = sourceContext.getImageData(region.x, region.y, region.width, region.height);
-        const result = removeConnectedCornerBackground(
-          sourceData.data,
-          region.width,
-          region.height,
-          cornerCutoutTolerance
-        );
-        const nextCanvas = cloneCanvas(activeLayer.canvas);
-        const nextContext = nextCanvas.getContext("2d")!;
-        nextContext.putImageData(
-          new ImageData(new Uint8ClampedArray(result.pixels), region.width, region.height),
-          region.x,
-          region.y
-        );
-        alphaBoundsCache.delete(nextCanvas);
+        const result = createCornerCutoutCanvas(activeLayer.canvas, cornerCutoutTolerance);
         saveUndo();
         setLayers((current) => current.map((layer) => layer.id === activeLayerId
           ? {
               ...layer,
               imageUrl: null,
-              canvas: nextCanvas,
+              canvas: result.canvas,
               pixelDirty: true,
               pixelRevision: layer.pixelRevision + 1,
             }
           : layer));
+        setCornerCutoutPreview(null);
+        setCutoutOpen(false);
         setBackgroundRemoved(true);
         const excluded = result.excludedCorner === null
           ? "네 코너 색을 모두 사용"
@@ -5028,11 +5152,20 @@ export default function CanvasEditor({
                     <button className={cutoutMethod === "corner" ? styles.segmentActive : ""} onClick={() => setCutoutMethod("corner")}>코너 색상</button>
                   </div>
                   {cutoutMethod === "corner" && (
-                    <label className={styles.utilityRange}>
-                      <span>유사색 범위</span>
-                      <input type="range" min={0} max={120} value={cornerCutoutTolerance} onChange={(event) => setCornerCutoutTolerance(Number(event.target.value))} />
-                      <b>{cornerCutoutTolerance}</b>
-                    </label>
+                    <>
+                      <label className={styles.utilityRange}>
+                        <span>강도</span>
+                        <input aria-label="누끼 강도" type="range" min={0} max={120} value={cornerCutoutTolerance} onChange={(event) => setCornerCutoutTolerance(Number(event.target.value))} />
+                        <b>{cornerCutoutTolerance}</b>
+                      </label>
+                      <div className={styles.cutoutIntensityScale} aria-hidden="true"><span>정밀</span><span>강함</span></div>
+                      <output className={styles.cutoutPreviewStatus} aria-live="polite">
+                        <span>{cornerCutoutPreviewPending ? "미리보기 갱신 중" : "실시간 미리보기"}</span>
+                        <b>{cornerCutoutPreview
+                          ? `${cornerCutoutPreview.approximate ? "약 " : ""}${cornerCutoutPreview.removedPixels.toLocaleString("ko-KR")}픽셀 제거`
+                          : "준비 중"}</b>
+                      </output>
+                    </>
                   )}
                   <button className={styles.utilityPrimary} onClick={() => void handleRemoveBackground()} disabled={cutoutLoading || (cutoutMethod === "ai" && cutoutConfigured !== true)}>
                     {cutoutLoading ? <LuLoaderCircle className={styles.spin} /> : <LuEraser />} 적용
@@ -5151,10 +5284,13 @@ export default function CanvasEditor({
                 <option value="corner">코너 색상 누끼 · 무료</option>
               </select>
               {cutoutMethod === "corner" && (
-                <label className={styles.opacityLabel}>범위
-                  <input type="range" min={0} max={120} value={cornerCutoutTolerance} onChange={(event) => setCornerCutoutTolerance(Number(event.target.value))} />
+                <label className={styles.opacityLabel}>강도
+                  <input aria-label="누끼 강도" type="range" min={0} max={120} value={cornerCutoutTolerance} onChange={(event) => setCornerCutoutTolerance(Number(event.target.value))} />
                   <span>{cornerCutoutTolerance}</span>
                 </label>
+              )}
+              {cutoutMethod === "corner" && cornerCutoutPreview && (
+                <span className={styles.cutoutInlinePreview}>실시간 · {cornerCutoutPreview.approximate ? "약 " : ""}{cornerCutoutPreview.removedPixels.toLocaleString("ko-KR")}픽셀</span>
               )}
               <button
                 className={styles.toolBtn}

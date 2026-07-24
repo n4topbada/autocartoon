@@ -1361,6 +1361,40 @@
   text-align: right;
 }
 
+.cutoutIntensityScale {
+  margin: -7px 45px 0 49px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.cutoutPreviewStatus {
+  min-height: 37px;
+  padding: 7px 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-subtle);
+  color: var(--text-sub);
+  font-size: 10px;
+}
+
+.cutoutPreviewStatus b {
+  color: var(--text);
+  font-size: 10px;
+  text-align: right;
+}
+
+.cutoutInlinePreview {
+  color: var(--text-sub);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
 .promptPresetButton {
   align-self: flex-start;
   border-color: var(--border) !important;
