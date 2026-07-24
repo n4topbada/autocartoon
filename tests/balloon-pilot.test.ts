@@ -135,10 +135,13 @@ test("pilot thought balloon keeps one body and three intentional thought bubbles
   assert.ok(small[3].area >= 8, "the smallest thought bubble must remain legible");
 });
 
-test("radial thought master keeps a blank oval surrounded by dense lines at 360 degrees", async () => {
+test("radial thought master uses a blurred virtual ellipse with dense double-ended hairline rays", async () => {
   const svg = await readFile(new URL("radial-thought.svg", PILOT_DIR), "utf8");
-  assert.ok((svg.match(/M\d/g) ?? []).length >= 120, "radial thought needs a dense line field");
+  assert.ok((svg.match(/M\d/g) ?? []).length >= 800, "radial thought needs a very dense line field and inner haze");
   assert.match(svg, /<ellipse[^>]+fill="#fff"[^>]*\/>/);
+  assert.match(svg, /<feGaussianBlur\b/);
+  assert.match(svg, /fill-opacity="0\.11"/);
+  assert.doesNotMatch(svg, /stroke="#171717"/);
 
   const { data, info } = await sharp(fileURLToPath(new URL("radial-thought.svg", PILOT_DIR)))
     .resize({ width: 180 })
@@ -150,7 +153,7 @@ test("radial thought master keeps a blank oval surrounded by dense lines at 360 
     for (let y = top; y < bottom; y += 1) {
       for (let x = left; x < right; x += 1) {
         const offset = (y * info.width + x) * info.channels;
-        if (data[offset + 3] > 120 && data[offset] < 80 && data[offset + 1] < 80 && data[offset + 2] < 80) count += 1;
+        if (data[offset + 3] > 80 && data[offset] < 220 && data[offset + 1] < 220 && data[offset + 2] < 220) count += 1;
       }
     }
     return count;

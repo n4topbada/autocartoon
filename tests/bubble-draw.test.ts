@@ -61,7 +61,7 @@ test("every pointer balloon draws its tail inside the same outline", () => {
   }
 });
 
-test("radial thought balloon uses a hidden ellipse and dense separated tapered lines", () => {
+test("radial thought balloon crosses a virtual ellipse with dense hairline rays and an inner haze", () => {
   const { context, calls } = fakeContext();
   const bubble = {
     ...createBubble("radialThought", 120, 100),
@@ -76,9 +76,9 @@ test("radial thought balloon uses a hidden ellipse and dense separated tapered l
   assert.equal(bubble.tailEnabled, false);
   assert.equal(calls.filter((call) => call.name === "ellipse").length, 1);
   assert.equal(calls.filter((call) => call.name === "stroke").length, 0);
-  assert.equal(calls.filter((call) => call.name === "fill").length, 2);
-  assert.ok(calls.filter((call) => call.name === "closePath").length >= 100);
-  assert.ok(calls.filter((call) => call.name === "lineTo").length >= 400);
+  assert.equal(calls.filter((call) => call.name === "fill").length, 3);
+  assert.ok(calls.filter((call) => call.name === "closePath").length >= 700);
+  assert.ok(calls.filter((call) => call.name === "lineTo").length >= 1_700);
 });
 
 test("thought balloon draws one cloud body and three intentional thought bubbles", () => {

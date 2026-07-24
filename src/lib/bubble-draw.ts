@@ -87,7 +87,7 @@ export const SPEECH_BUBBLE_PRESETS = [
   { type: "whisper", label: "속삭임", description: "작고 조용한 목소리", tailEnabled: true, strokeStyle: "dashed", strokeWidth: 2 },
   { type: "wavy", label: "떨리는 말", description: "불안하거나 힘없는 목소리", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.25 },
   { type: "thought", label: "생각", description: "말하지 않은 속마음", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.5 },
-  { type: "radialThought", label: "집중선 속마음", description: "촘촘한 방사선으로 강조한 속마음", tailEnabled: false, strokeStyle: "solid", strokeWidth: 1.35, roughness: 0.32, wobble: 0.22 },
+  { type: "radialThought", label: "집중선 속마음", description: "초미세 방사선으로 감싼 속마음", tailEnabled: false, strokeStyle: "solid", strokeWidth: 0.7, roughness: 0.28, wobble: 0.12 },
   { type: "cloud", label: "구름 대사", description: "들뜨거나 몽글한 대사", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.5 },
   { type: "spiky", label: "외침", description: "크게 외치는 목소리", tailEnabled: true, strokeStyle: "solid", strokeWidth: 2.75 },
   { type: "angry", label: "비명", description: "격한 비명과 충격", tailEnabled: true, strokeStyle: "solid", strokeWidth: 3 },
@@ -1231,74 +1231,106 @@ function drawThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   }
 }
 
-// 집중선 속마음: 보이지 않는 타원 둘레에 법선 방향의 분리된 선만 배치한다.
+// 집중선 속마음: 각 선의 중심을 가상 타원에 놓고 안쪽은 희미하게, 바깥쪽은 날카롭게 뻗는다.
 function drawRadialThought(ctx: CanvasRenderingContext2D, b: SpeechBubble) {
   const outerRx = Math.max(8, b.width / 2);
   const outerRy = Math.max(8, b.height / 2);
-  const innerRx = outerRx * 0.74;
-  const innerRy = outerRy * 0.68;
+  const guideRx = outerRx * 0.74;
+  const guideRy = outerRy * 0.7;
 
+  ctx.save();
+  ctx.filter = "blur(0.7px)";
   ctx.beginPath();
-  ctx.ellipse(b.x, b.y, innerRx, innerRy, 0, 0, Math.PI * 2);
+  ctx.ellipse(b.x, b.y, Math.max(1, guideRx - 0.7), Math.max(1, guideRy - 0.7), 0, 0, Math.PI * 2);
   ctx.closePath();
   doFill(ctx, b);
+  ctx.restore();
 
   if (b.strokeColor === "transparent" || b.strokeWidth <= 0) return;
 
-  const roughness = Math.max(0, Math.min(1, b.roughness ?? 0.32));
-  const wobble = Math.max(0, Math.min(1, b.wobble ?? 0.22));
-  const spacing = Math.max(2.65, Math.min(4.4, 2.7 + b.strokeWidth * 0.34));
-  const lineCount = Math.max(72, Math.min(360, Math.round(ellipsePerimeter(innerRx, innerRy) / spacing)));
-  const baseAngles = ellipseArcAngles(innerRx, innerRy, lineCount);
+  const roughness = Math.max(0, Math.min(1, b.roughness ?? 0.28));
+  const wobble = Math.max(0, Math.min(1, b.wobble ?? 0.12));
+  const spacing = Math.max(1.05, Math.min(1.55, 1.08 + b.strokeWidth * 0.22));
+  const lineCount = Math.max(180, Math.min(720, Math.round(ellipsePerimeter(guideRx, guideRy) / spacing)));
+  const baseAngles = ellipseArcAngles(guideRx, guideRy, lineCount);
   const seed = stableBubbleSeed(b.id);
-
-  ctx.save();
-  ctx.globalAlpha *= Math.max(0, Math.min(1, b.strokeOpacity ?? 1));
-  ctx.fillStyle = b.strokeColor;
-  ctx.beginPath();
-
-  for (let index = 0; index < lineCount; index += 1) {
-    const jitter = (stableUnit(seed, index, 0) - 0.5) * (Math.PI * 2 / lineCount) * wobble * 0.9;
-    const angle = baseAngles[index] + jitter;
+  const rays = baseAngles.map((baseAngle, index) => {
+    const jitter = (stableUnit(seed, index, 0) - 0.5) * (Math.PI * 2 / lineCount) * wobble * 0.55;
+    const angle = baseAngle + jitter;
     const cosine = Math.cos(angle);
     const sine = Math.sin(angle);
-    const point = { x: cosine * innerRx, y: sine * innerRy };
-    const rawNormal = { x: cosine / innerRx, y: sine / innerRy };
+    const rawNormal = { x: cosine / guideRx, y: sine / guideRy };
     const normalLength = Math.max(0.0001, Math.hypot(rawNormal.x, rawNormal.y));
     const normal = { x: rawNormal.x / normalLength, y: rawNormal.y / normalLength };
     const tangent = { x: -normal.y, y: normal.x };
-    const availableLength = distanceToOuterEllipse(point, normal, outerRx, outerRy);
-    const startOffset = (stableUnit(seed, index, 1) - 0.5) * (0.7 + roughness * 1.7);
+    const guideOffset = (stableUnit(seed, index, 1) - 0.5) * wobble * 0.9;
+    const guide = {
+      x: b.x + cosine * guideRx + normal.x * guideOffset,
+      y: b.y + sine * guideRy + normal.y * guideOffset,
+    };
+    const relativeGuide = { x: guide.x - b.x, y: guide.y - b.y };
+    const availableLength = distanceToOuterEllipse(relativeGuide, normal, outerRx, outerRy);
     const lengthFactor = Math.max(
-      0.48,
+      0.5,
       Math.min(
-        0.98,
-        0.64
-          + stableUnit(seed, index, 2) * 0.28
-          + (stableUnit(seed, index, 3) - 0.5) * roughness * 0.2
+        0.99,
+        0.66
+          + stableUnit(seed, index, 2) * 0.26
+          + (stableUnit(seed, index, 3) - 0.5) * roughness * 0.24
       )
     );
-    const start = {
-      x: b.x + point.x + normal.x * startOffset,
-      y: b.y + point.y + normal.y * startOffset,
+    const inwardLength = Math.max(2.2, Math.min(7.5, Math.min(outerRx, outerRy) * (0.035 + stableUnit(seed, index, 4) * 0.035)));
+    const sharpInset = 0.65 + stableUnit(seed, index, 5) * 1.15;
+    const width = Math.max(0.18, b.strokeWidth * (0.34 + stableUnit(seed, index, 6) * 0.34));
+    return {
+      guide,
+      normal,
+      tangent,
+      inwardLength,
+      sharpInset,
+      halfWidth: width * 0.5,
+      end: {
+        x: guide.x + normal.x * availableLength * lengthFactor,
+        y: guide.y + normal.y * availableLength * lengthFactor,
+      },
     };
-    const end = {
-      x: start.x + normal.x * availableLength * lengthFactor,
-      y: start.y + normal.y * availableLength * lengthFactor,
-    };
-    const middle = lerpPoint(start, end, 0.62);
-    const width = Math.max(0.55, b.strokeWidth * (0.54 + stableUnit(seed, index, 4) * 0.54));
-    const halfInnerWidth = width * 0.5;
-    const halfMiddleWidth = width * (0.2 + stableUnit(seed, index, 5) * 0.11);
+  });
 
-    ctx.moveTo(start.x - tangent.x * halfInnerWidth, start.y - tangent.y * halfInnerWidth);
-    ctx.lineTo(start.x + tangent.x * halfInnerWidth, start.y + tangent.y * halfInnerWidth);
-    ctx.lineTo(middle.x + tangent.x * halfMiddleWidth, middle.y + tangent.y * halfMiddleWidth);
-    ctx.lineTo(end.x, end.y);
-    ctx.lineTo(middle.x - tangent.x * halfMiddleWidth, middle.y - tangent.y * halfMiddleWidth);
+  // The faint inner half breaks the cut-out look without drawing a real ellipse border.
+  ctx.save();
+  ctx.globalAlpha *= Math.max(0, Math.min(1, b.strokeOpacity ?? 1)) * 0.11;
+  ctx.filter = "blur(0.65px)";
+  ctx.fillStyle = b.strokeColor;
+  ctx.beginPath();
+  for (const ray of rays) {
+    const innerTip = {
+      x: ray.guide.x - ray.normal.x * ray.inwardLength,
+      y: ray.guide.y - ray.normal.y * ray.inwardLength,
+    };
+    const blurHalfWidth = Math.max(0.22, ray.halfWidth * 1.35);
+    ctx.moveTo(innerTip.x, innerTip.y);
+    ctx.lineTo(ray.guide.x + ray.tangent.x * blurHalfWidth, ray.guide.y + ray.tangent.y * blurHalfWidth);
+    ctx.lineTo(ray.guide.x - ray.tangent.x * blurHalfWidth, ray.guide.y - ray.tangent.y * blurHalfWidth);
     ctx.closePath();
   }
+  ctx.fill();
+  ctx.restore();
 
+  ctx.save();
+  ctx.globalAlpha *= Math.max(0, Math.min(1, b.strokeOpacity ?? 1)) * 0.88;
+  ctx.fillStyle = b.strokeColor;
+  ctx.beginPath();
+  for (const ray of rays) {
+    const innerTip = {
+      x: ray.guide.x - ray.normal.x * ray.sharpInset,
+      y: ray.guide.y - ray.normal.y * ray.sharpInset,
+    };
+    ctx.moveTo(innerTip.x, innerTip.y);
+    ctx.lineTo(ray.guide.x + ray.tangent.x * ray.halfWidth, ray.guide.y + ray.tangent.y * ray.halfWidth);
+    ctx.lineTo(ray.end.x, ray.end.y);
+    ctx.lineTo(ray.guide.x - ray.tangent.x * ray.halfWidth, ray.guide.y - ray.tangent.y * ray.halfWidth);
+    ctx.closePath();
+  }
   ctx.fill();
   ctx.restore();
 }
